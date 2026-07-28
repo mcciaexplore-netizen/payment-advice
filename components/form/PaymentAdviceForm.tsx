@@ -123,6 +123,7 @@ export function PaymentAdviceForm({
         return;
       }
       storeSubmissionSummary({
+        id: data.id,
         serialNo: data.serialNo,
         payeeName: values.payeeName,
         amount: values.amount,
@@ -173,6 +174,22 @@ export function PaymentAdviceForm({
                 </option>
               ))}
             </Select>
+          </Field>
+          <Field
+            label="Verified By"
+            required
+            error={errors.verifiedByName?.message}
+            help="Name of the person who will verify this payment before it's sanctioned."
+          >
+            <Input hasError={!!errors.verifiedByName} {...register("verifiedByName")} />
+          </Field>
+          <Field
+            label="Sanctioned By"
+            required
+            error={errors.sanctionedByName?.message}
+            help="Name of the person who will sanction this payment."
+          >
+            <Input hasError={!!errors.sanctionedByName} {...register("sanctionedByName")} />
           </Field>
         </div>
       </Section>

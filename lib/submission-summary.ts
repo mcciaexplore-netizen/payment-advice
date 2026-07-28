@@ -7,6 +7,7 @@
  * through sessionStorage at redirect time and read back once, client-side.
  */
 export type SubmissionSummary = {
+  id: string;
   serialNo: string;
   payeeName: string;
   amount: number;

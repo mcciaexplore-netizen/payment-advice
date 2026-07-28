@@ -10,6 +10,14 @@ function clientIp(req: NextRequest): string | null {
   return req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null;
 }
 
+// Public, unauthenticated, and deliberately NOT gated on APPROVED status —
+// this is the printable copy submitters take for physical signing, which
+// per MCCIA's process happens before Finance approval, not after. It is
+// keyed by the advice's UUID `id` rather than its (sequential, guessable)
+// serial number, so this stays safe from enumeration the same way the
+// /submitted/[serial] confirmation page's sessionStorage handoff does:
+// only someone who already has this exact link (the submitter, from their
+// own confirmation page) can reach it.
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
@@ -24,12 +32,6 @@ export async function GET(
 
   if (!advice) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
-  }
-  if (advice.status !== "APPROVED") {
-    return NextResponse.json(
-      { error: "The Payment Advice PDF is only available once approved." },
-      { status: 409 },
-    );
   }
 
   const [authority] = await db
@@ -46,9 +48,9 @@ export async function GET(
   await db.insert(auditLog).values({
     paymentAdviceId: advice.id,
     action: "PDF_GENERATED",
-    actor: "ADMIN",
+    actor: advice.submittedByName,
     ipAddress: clientIp(req),
-    details: { serialNo: advice.serialNo },
+    details: { serialNo: advice.serialNo, source: "public" },
   });
 
   return new NextResponse(new Uint8Array(buffer), {

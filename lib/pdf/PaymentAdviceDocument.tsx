@@ -26,6 +26,9 @@ export type PaymentAdvicePdfData = {
   bankIfsc: string | null;
   beneficiaryName: string | null;
   submittedByName: string;
+  recommendingAuthorityName: string;
+  verifiedByName: string;
+  sanctionedByName: string;
   submittedAt: string; // ISO timestamp
   approvedAt: string | null; // ISO timestamp
   approvedByName: string | null;
@@ -257,21 +260,19 @@ export function PaymentAdviceDocument({ data }: { data: PaymentAdvicePdfData }) 
           </View>
           <View style={styles.footerCell}>
             <Text style={styles.footerLabel}>Recommended by :</Text>
-            {data.approvedByName ? (
-              <Text style={styles.footerValue}>
-                {data.approvedByName} ({formatDMY(data.approvedAt)})
-              </Text>
-            ) : null}
+            <Text style={styles.footerValue}>{data.recommendingAuthorityName}</Text>
             <Text style={styles.footerLine}>Date :</Text>
             <Text style={styles.footerLine}>Signature :</Text>
           </View>
           <View style={styles.footerCell}>
             <Text style={styles.footerLabel}>Verified by :</Text>
+            <Text style={styles.footerValue}>{data.verifiedByName}</Text>
             <Text style={styles.footerLine}>Date :</Text>
             <Text style={styles.footerLine}>Signature :</Text>
           </View>
           <View style={[styles.footerCell, { borderRight: BORDER }]}>
             <Text style={styles.footerLabel}>Sanctioned by :</Text>
+            <Text style={styles.footerValue}>{data.sanctionedByName}</Text>
             <Text style={styles.footerLine}>Date :</Text>
             <Text style={styles.footerLine}>Signature :</Text>
           </View>

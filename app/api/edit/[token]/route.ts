@@ -199,6 +199,8 @@ export async function POST(
           submittedByEmail: values.submittedByEmail,
           submittedByDepartment: values.submittedByDepartment,
           recommendingAuthorityId: values.recommendingAuthorityId,
+          verifiedByName: values.verifiedByName,
+          sanctionedByName: values.sanctionedByName,
           status: "SUBMITTED",
           revisionCount: advice.revisionCount + 1,
           editToken: null,
@@ -241,7 +243,7 @@ export async function POST(
 
     await Promise.allSettled(oldBlobPathnamesToDelete.map((p) => del(p)));
 
-    return NextResponse.json({ serialNo: advice.serialNo });
+    return NextResponse.json({ serialNo: advice.serialNo, id: advice.id });
   } catch (err) {
     console.error("Resubmit failed after blob upload, cleaning up", err);
     await Promise.allSettled(uploadedPathnames.map((p) => del(p)));

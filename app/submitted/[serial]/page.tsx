@@ -53,15 +53,27 @@ export default function SubmittedPage() {
         </p>
       )}
 
+      {summary ? (
+        <div className="flex justify-center">
+          <a
+            href={`/api/advice/${summary.id}/pdf`}
+            className="rounded-md bg-[#0b1f3a] px-6 py-3 text-base font-medium text-white shadow-sm transition hover:bg-[#0b1f3a]/90"
+          >
+            Download Payment Advice (for signatures)
+          </a>
+        </div>
+      ) : null}
+
       <div className="rounded-md bg-[#0b1f3a]/5 px-4 py-3 text-sm text-[#0b1f3a]">
         <p className="font-medium">What happens next</p>
         <p className="mt-1">
-          The Finance &amp; Accounts team will review this submission and its
-          attachments. If anything needs correcting, they&apos;ll send it back
-          to you with remarks and a link to fix and resubmit it. Once
-          approved, the payment advice is printed, physically signed, and
-          filed — no further action is needed from you unless you&apos;re
-          contacted.
+          Download and print the Payment Advice above, then take it around
+          for the &quot;Recommended by&quot;, &quot;Verified by&quot; and
+          &quot;Sanctioned by&quot; signatures — the boxes are already
+          labelled with who should sign each one. Once signed, hand it to
+          Finance &amp; Accounts, who will review it online and either
+          approve it or send it back to you with remarks and a link to fix
+          and resubmit.
         </p>
         <p className="mt-2">
           Please note down the serial number above — quote it if you contact

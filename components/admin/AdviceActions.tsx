@@ -125,6 +125,13 @@ export function AdviceActions({
 
   return (
     <div className="flex flex-col gap-6 rounded-md border border-gray-200 p-4">
+      <a
+        href={`/api/advice/${adviceId}/pdf`}
+        className="inline-block w-fit rounded-md border border-[#0b1f3a] px-4 py-2 text-sm font-medium text-[#0b1f3a] hover:bg-[#0b1f3a]/5"
+      >
+        Preview Payment Advice PDF (pre-approval, for signing)
+      </a>
+
       <div className="flex flex-col gap-2">
         <label className="text-sm font-medium text-[#0b1f3a]">Bill passed for Rs.</label>
         <div className="flex items-center gap-2">

@@ -144,6 +144,8 @@ export default async function AdviceDetailPage({
               label="Recommending Authority"
               value={authority ? `${authority.department} — ${authority.headName}` : "—"}
             />
+            <Row label="Verified By" value={advice.verifiedByName} />
+            <Row label="Sanctioned By" value={advice.sanctionedByName} />
           </Section>
 
           <Section title="Attachments">

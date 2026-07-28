@@ -87,6 +87,11 @@ export const paymentAdvices = pgTable("payment_advices", {
   recommendingAuthorityId: uuid("recommending_authority_id")
     .references(() => recommendingAuthorities.id)
     .notNull(),
+  // Printed under "Verified by" / "Sanctioned by" on the footer signature
+  // boxes — collected upfront so the PDF is immediately downloadable and
+  // printable for physical signing, before admin approval.
+  verifiedByName: text("verified_by_name").notNull(),
+  sanctionedByName: text("sanctioned_by_name").notNull(),
 
   // Workflow
   submittedAt: timestamp("submitted_at", { withTimezone: true }).notNull(),

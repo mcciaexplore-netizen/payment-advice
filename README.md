@@ -134,8 +134,30 @@ the full reasoning):
   bank account details. The submission summary is instead handed off through
   `sessionStorage` at redirect time and read back once, client-side — reloading
   or sharing that URL shows only the serial number, not the sensitive fields.
-- **No "Download PDF" button on the public confirmation page.** The official
-  PDF replica prints an approver name and approval date that don't exist yet
-  at submission time, and its generation route is admin-authenticated and
-  gated on `APPROVED` status — so a fresh submission literally has nothing to
-  download yet.
+- **Two PDF routes, not one.** `/api/admin/advice/[id]/pdf` is the official
+  replica — admin-authenticated, gated on `APPROVED` status. It turned out
+  MCCIA's actual process needs physical signatures gathered *before* Finance
+  approval, not after (the printed form gets walked around to Recommending
+  Authority / Verifier / Sanctioner first, then reaches Finance) — so there's
+  also `/api/advice/[id]/pdf`: public, unauthenticated, available at any
+  status, linked from the `/submitted/{serial}` confirmation page. It's safe
+  from the same enumeration concern above because it's keyed by the advice's
+  random UUID `id` (never its sequential serial), which only the submitter's
+  own browser ever learns, handed off via `sessionStorage` alongside the rest
+  of the confirmation summary. Both routes render through the same
+  `lib/pdf/render.tsx` helper so the two documents can never drift apart.
+- **The footer's "Recommended by" prints the Recommending Authority chosen on
+  the form** (available immediately at submission), not the admin's
+  approver name — that's what makes the pre-approval download meaningful:
+  every signature box is already labelled with who should sign it before any
+  approval has happened. "Verified by" and "Sanctioned by" are separate
+  required fields on the submission form for the same reason (`lib/db/schema.ts`
+  → `verifiedByName` / `sanctionedByName`); the admin's own approver name
+  (`approvedByName`) is still recorded for the audit trail but no longer
+  appears on the printed form.
+- **`lib/db/index.ts` creates its Neon connection lazily**, on first real use,
+  via a `Proxy` — not at module import time. `next build` imports every route
+  module to collect its metadata without ever calling it, so the original
+  eager `throw new Error(...)` on a missing `DATABASE_URL` failed the Vercel
+  build regardless of whether the variable was actually configured for the
+  deploy; it just wasn't visible at that specific build step.

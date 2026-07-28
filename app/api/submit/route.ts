@@ -131,7 +131,7 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    await db.transaction(async (tx) => {
+    const adviceId = await db.transaction(async (tx) => {
       const [advice] = await tx
         .insert(paymentAdvices)
         .values({
@@ -165,6 +165,8 @@ export async function POST(req: NextRequest) {
           submittedByEmail: values.submittedByEmail,
           submittedByDepartment: values.submittedByDepartment,
           recommendingAuthorityId: values.recommendingAuthorityId,
+          verifiedByName: values.verifiedByName,
+          sanctionedByName: values.sanctionedByName,
           submittedAt: now,
         })
         .returning();
@@ -187,9 +189,11 @@ export async function POST(req: NextRequest) {
         ipAddress: clientIp(req),
         details: { serialNo },
       });
+
+      return advice.id;
     });
 
-    return NextResponse.json({ serialNo });
+    return NextResponse.json({ serialNo, id: adviceId });
   } catch (err) {
     console.error("Submit failed after blob upload, cleaning up", err);
     await Promise.allSettled(uploadedPathnames.map((p) => del(p)));
