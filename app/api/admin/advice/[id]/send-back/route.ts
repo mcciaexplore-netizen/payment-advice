@@ -1,0 +1,73 @@
+import { randomBytes } from "node:crypto";
+import { NextRequest, NextResponse } from "next/server";
+import { eq } from "drizzle-orm";
+import { db } from "@/lib/db";
+import { paymentAdvices, auditLog } from "@/lib/db/schema";
+import { sendBackSchema } from "@/lib/validation/payment-advice";
+
+export const runtime = "nodejs";
+
+const EDIT_TOKEN_TTL_MS = 14 * 24 * 60 * 60 * 1000; // 14 days
+
+function clientIp(req: NextRequest): string | null {
+  return req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null;
+}
+
+export async function POST(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const { id } = await params;
+
+  const [advice] = await db
+    .select({ status: paymentAdvices.status })
+    .from(paymentAdvices)
+    .where(eq(paymentAdvices.id, id))
+    .limit(1);
+  if (!advice) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+  if (advice.status === "APPROVED") {
+    return NextResponse.json(
+      { error: "An approved Payment Advice cannot be sent back." },
+      { status: 409 },
+    );
+  }
+
+  const body = await req.json().catch(() => null);
+  const parsed = sendBackSchema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: parsed.error.issues[0]?.message ?? "Remarks are required" },
+      { status: 400 },
+    );
+  }
+
+  const editToken = randomBytes(32).toString("base64url");
+  const now = new Date();
+  const editTokenExpiresAt = new Date(now.getTime() + EDIT_TOKEN_TTL_MS);
+
+  await db.transaction(async (tx) => {
+    await tx
+      .update(paymentAdvices)
+      .set({
+        status: "SENT_BACK",
+        sentBackAt: now,
+        adminRemarks: parsed.data.adminRemarks,
+        editToken,
+        editTokenExpiresAt,
+        updatedAt: now,
+      })
+      .where(eq(paymentAdvices.id, id));
+
+    await tx.insert(auditLog).values({
+      paymentAdviceId: id,
+      action: "SENT_BACK",
+      actor: "ADMIN",
+      ipAddress: clientIp(req),
+      details: { adminRemarks: parsed.data.adminRemarks },
+    });
+  });
+
+  return NextResponse.json({ editToken });
+}
