@@ -11,12 +11,30 @@ if (typeof WebSocket === "undefined") {
   neonConfig.webSocketConstructor = ws;
 }
 
-const connectionString = process.env.DATABASE_URL;
-if (!connectionString) {
-  throw new Error("DATABASE_URL environment variable is not set");
+type DrizzleDb = ReturnType<typeof drizzle<typeof schema>>;
+
+let cached: DrizzleDb | undefined;
+
+// The connection is created lazily, on first actual use, rather than at
+// module load. `next build` imports every route module to collect its
+// metadata without ever calling it — throwing here at import time (as this
+// used to) fails the build any time DATABASE_URL isn't visible at that
+// exact step, regardless of whether it's configured for the deploy itself.
+function getDb(): DrizzleDb {
+  if (cached) return cached;
+  const connectionString = process.env.DATABASE_URL;
+  if (!connectionString) {
+    throw new Error("DATABASE_URL environment variable is not set");
+  }
+  const pool = new Pool({ connectionString });
+  cached = drizzle(pool, { schema });
+  return cached;
 }
 
-const pool = new Pool({ connectionString });
+export const db: DrizzleDb = new Proxy({} as DrizzleDb, {
+  get(_target, prop, receiver) {
+    return Reflect.get(getDb(), prop, receiver);
+  },
+});
 
-export const db = drizzle(pool, { schema });
 export type Database = typeof db;
