@@ -75,10 +75,10 @@ Design system: Navy `#0B1F3A`, Forest green `#2E8B57`, Amber `#E8A33D`. Headings
 
 Status legend: 🔴 unverified / high risk · 🟡 unverified / lower risk · 🟢 verified
 
-- 🔴 **Cash-voucher-pdf routes (public + admin) must 404 for NEFT submissions.** Not yet confirmed they don't error or silently 200 on empty data instead.
-- 🟡 Confirm Excel/Tally export column order is unchanged, and Cash rows' joined `nature_of_expenditure` string (line items joined with `"; "`) reads sensibly for Finance.
-- 🟡 Confirm the admin detail view renders the itemized Cash Voucher expenditure breakdown line-by-line, not just the collapsed total — Finance needs this to reconcile against the physical bill.
-- 🟡 Confirm the 2 skipped DB integration tests (`npm test` → 13 passed, 2 skipped) are **pre-existing** skips, not new skips introduced by the Cash Voucher feature.
+- 🟢 **Cash-voucher-pdf routes (public + admin) 404 correctly for NEFT submissions.** Verified 2026-07-29 by Claude Code, two ways: (1) live end-to-end against the real dev server + real Neon DB — inserted a real NEFT `payment_advices` row, hit both `/api/advice/[id]/cash-voucher-pdf` and `/api/admin/advice/[id]/cash-voucher-pdf`, got clean `404 {"error":"Not found"}` with `Content-Type: application/json` from both, no server-side errors in the log. Also spot-checked the CASH happy path on a real row — both routes 200 with a real single-page PDF. (2) Strengthened the existing mocked test in `lib/pdf/cash-voucher-routes.test.ts` to also assert `content-type` isn't `application/pdf` and the JSON body shape, not just the status code — guards specifically against a future regression that returns 200 with empty/garbage PDF bytes instead of 404. No code fix was needed; both routes already guarded on `paymentMode !== "CASH"` before doing any rendering.
+- 🟡 Confirm Excel/Tally export column order is unchanged, and Cash rows' joined `nature_of_expenditure` string (line items joined with `"; "`) reads sensibly for Finance. *(Not in scope of the 2026-07-29 Claude Code pass — still unverified.)*
+- 🟡 Confirm the admin detail view renders the itemized Cash Voucher expenditure breakdown line-by-line, not just the collapsed total — Finance needs this to reconcile against the physical bill. *(Not in scope of the 2026-07-29 Claude Code pass — still unverified.)*
+- 🟢 **The 2 skipped DB integration tests are pre-existing, unrelated to the Cash Voucher feature.** Verified 2026-07-29 by Claude Code with git evidence, not inference: `git status --short lib/serial.test.ts` shows zero uncommitted changes to that file (Codex never touched it), and `git log --oneline -- lib/serial.test.ts` / `git blame` show the entire `describe.skipIf(!testDbUrl)` block was written in the very first commit (`a782956`, "Initial build: Phase 1 MCCIA Payment Advice app") — before the Cash Voucher feature existed in any form, committed or not (it's still fully uncommitted as of this session; see session log). They're gated behind an optional `TEST_DATABASE_URL` env var by design, so `npm test` stays green with no live DB configured — not a bug, not a regression. Left skipped, as instructed; not unskipped.
 - ⬜ **Undecided (needs human decision, not an agent decision):** should an "Expenditure Breakdown" column be added to the Excel export? Currently declined.
 - ⬜ **Undecided (needs human decision):** should a "Verified by" field exist on the Cash Voucher? Paper form didn't have it — only the Payment Advice has that 4th signature box. Currently left off.
 
@@ -95,10 +95,21 @@ Status legend: 🔴 unverified / high risk · 🟡 unverified / lower risk · �
 Append one entry per session, newest at the top. Keep entries short — this is a changelog, not a diary.
 
 ```
-2026-07-29 — Human — Context handoff. Codex shipped Cash Payment Voucher
-feature (see §3). Created this AGENT_HANDOFF.md to coordinate Claude
-Code + Codex working in parallel going forward. Next: verify §4 open
-items before further feature work.
+2026-07-29 — Claude Code — Verification pass on §4 open items. Committed
+and pushed AGENT_HANDOFF.md only (13c6140) — nothing else in the working
+tree. Verified open item #1 (cash-voucher-pdf 404 for NEFT) live against
+real dev server + real Neon DB, both routes correct; no fix needed;
+strengthened the existing mocked test in cash-voucher-routes.test.ts to
+also assert non-PDF content-type, not just status code. Verified open
+item #2 (the 2 skipped DB tests) with git evidence: pre-existing, from
+the initial commit, unrelated to Cash Voucher. Did not unskip them.
+IMPORTANT for next session (either agent): the entire Cash Payment
+Voucher feature described in §3 as "Shipped" is NOT actually committed
+to git anywhere — `git status` shows it as ~20 modified/untracked files
+still sitting in the working tree, never pushed. §3's "Shipped" wording
+is accurate for what exists on disk, not for what's in version control.
+Did not touch, stage, or commit any of it (out of scope for this
+session) — flagging so nobody assumes it's safe on a remote.
 ```
 
 ## 7. Reference: Cash Voucher field mapping (paper → app)
