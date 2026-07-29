@@ -181,8 +181,7 @@ components' actual browser interaction (no browser automation
 available this session — see §4).
 
 tsc/eslint/vitest/`next build` all clean. Committed and pushed
-everything from this session, see commit hash at top of this section
-once pushed.
+everything from this session as commit `1130818`.
 
 2026-07-29 — Claude Code — Committed Codex's Cash Payment Voucher work
 (commit b198449), on explicit human instruction, after independently
