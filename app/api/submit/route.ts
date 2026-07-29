@@ -118,7 +118,7 @@ export async function POST(req: NextRequest) {
     for (const { docType, file } of attachmentInputs) {
       const pathname = `advices/${serialNo}/${docType}-${file.name}`;
       const blob = await put(pathname, file, {
-        access: "public",
+        access: "private",
         contentType: "application/pdf",
       });
       uploadedPathnames.push(blob.pathname);

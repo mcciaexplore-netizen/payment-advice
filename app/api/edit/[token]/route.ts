@@ -151,7 +151,7 @@ export async function POST(
       for (const file of byDocType[docType]) {
         const pathname = `advices/${advice.serialNo}/${docType}-${file.name}`;
         const blob = await put(pathname, file, {
-          access: "public",
+          access: "private",
           contentType: "application/pdf",
         });
         uploadedPathnames.push(blob.pathname);
