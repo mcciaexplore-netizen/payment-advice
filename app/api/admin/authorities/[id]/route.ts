@@ -24,8 +24,7 @@ export async function PATCH(
   const [authority] = await db
     .update(recommendingAuthorities)
     .set({
-      ...(values.department !== undefined && { department: values.department }),
-      ...(values.headName !== undefined && { headName: values.headName }),
+      ...(values.authorityName !== undefined && { authorityName: values.authorityName }),
       ...(values.email !== undefined && { email: values.email ?? null }),
       ...(values.isActive !== undefined && { isActive: values.isActive }),
     })

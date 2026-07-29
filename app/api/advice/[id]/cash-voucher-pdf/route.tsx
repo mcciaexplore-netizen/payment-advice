@@ -19,18 +19,14 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   }
 
   const [authorityRows, items] = await Promise.all([
-    db.select({ department: recommendingAuthorities.department, headName: recommendingAuthorities.headName })
+    db.select({ authorityName: recommendingAuthorities.authorityName })
       .from(recommendingAuthorities)
       .where(eq(recommendingAuthorities.id, advice.recommendingAuthorityId))
       .limit(1),
     db.select().from(cashVoucherItems).where(eq(cashVoucherItems.paymentAdviceId, advice.id)).orderBy(asc(cashVoucherItems.sortOrder)),
   ]);
   const authority = authorityRows[0];
-  const buffer = await renderCashVoucherPdf(
-    advice,
-    items,
-    authority ? `${authority.department} — ${authority.headName}` : "",
-  );
+  const buffer = await renderCashVoucherPdf(advice, items, authority?.authorityName ?? "");
   await db.insert(auditLog).values({
     paymentAdviceId: advice.id,
     action: "PDF_GENERATED",

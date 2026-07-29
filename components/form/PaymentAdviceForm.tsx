@@ -6,8 +6,10 @@ import { useFieldArray, useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { format } from "date-fns";
 import { Field } from "@/components/ui/Field";
-import { Input, Select, Textarea } from "@/components/ui/Input";
+import { Input, Textarea } from "@/components/ui/Input";
 import { VendorTypeahead, VendorSearchResult } from "@/components/form/VendorTypeahead";
+import { StaffNameTypeahead, StaffSearchResult } from "@/components/form/StaffNameTypeahead";
+import { RecommendingAuthorityField } from "@/components/form/RecommendingAuthorityField";
 import { FileUploadSlot } from "@/components/form/FileUploadSlot";
 import { storeSubmissionSummary } from "@/lib/submission-summary";
 import {
@@ -21,8 +23,7 @@ import {
 
 type RecommendingAuthority = {
   id: string;
-  department: string;
-  headName: string;
+  authorityName: string;
 };
 
 const today = format(new Date(), "yyyy-MM-dd");
@@ -72,8 +73,12 @@ export function PaymentAdviceForm({
   const { fields: cashVoucherFields, append: appendCashVoucherItem, remove: removeCashVoucherItem } =
     useFieldArray({ control, name: "cashVoucherItems" });
 
+  const [matchedStaff, setMatchedStaff] = useState<StaffSearchResult | null>(null);
+
   const paymentMode = useWatch({ control, name: "paymentMode" });
   const payeeName = useWatch({ control, name: "payeeName" }) ?? "";
+  const submittedByName = useWatch({ control, name: "submittedByName" }) ?? "";
+  const recommendingAuthorityId = useWatch({ control, name: "recommendingAuthorityId" }) ?? "";
   const watchedCashVoucherItems = useWatch({ control, name: "cashVoucherItems" });
   const cashVoucherItems = useMemo(
     () => watchedCashVoucherItems ?? [],
@@ -181,8 +186,20 @@ export function PaymentAdviceForm({
 
       <Section title="1. Submitter details">
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-          <Field label="Your Name" required error={errors.submittedByName?.message}>
-            <Input hasError={!!errors.submittedByName} {...register("submittedByName")} />
+          <Field
+            label="Your Name"
+            required
+            htmlFor="submittedByName"
+            error={errors.submittedByName?.message}
+            help="Start typing — if you're in the staff list, we'll pick this up automatically."
+          >
+            <StaffNameTypeahead
+              id="submittedByName"
+              value={submittedByName}
+              onChange={(v) => setValue("submittedByName", v)}
+              onMatch={setMatchedStaff}
+              hasError={!!errors.submittedByName}
+            />
           </Field>
           <Field label="Your Email" required error={errors.submittedByEmail?.message}>
             <Input type="email" hasError={!!errors.submittedByEmail} {...register("submittedByEmail")} />
@@ -190,20 +207,21 @@ export function PaymentAdviceForm({
           <Field label="Your Department" required error={errors.submittedByDepartment?.message}>
             <Input hasError={!!errors.submittedByDepartment} {...register("submittedByDepartment")} />
           </Field>
-          <Field
-            label="Recommending Authority"
-            required
-            error={errors.recommendingAuthorityId?.message}
-          >
-            <Select hasError={!!errors.recommendingAuthorityId} {...register("recommendingAuthorityId")}>
-              <option value="">Select…</option>
-              {recommendingAuthorities.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.department} — {a.headName}
-                </option>
-              ))}
-            </Select>
-          </Field>
+          <div className="sm:col-span-2">
+            <Field
+              label="Recommending Authority"
+              required
+              error={errors.recommendingAuthorityId?.message}
+            >
+              <RecommendingAuthorityField
+                matchedStaff={matchedStaff}
+                allAuthorities={recommendingAuthorities}
+                value={recommendingAuthorityId}
+                onChange={(id) => setValue("recommendingAuthorityId", id, { shouldValidate: true })}
+                hasError={!!errors.recommendingAuthorityId}
+              />
+            </Field>
+          </div>
           <Field
             label="Verified By"
             required

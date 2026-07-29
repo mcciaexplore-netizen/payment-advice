@@ -8,6 +8,7 @@ import {
   numeric,
   integer,
   jsonb,
+  unique,
 } from "drizzle-orm/pg-core";
 
 export const vendors = pgTable("vendors", {
@@ -27,16 +28,54 @@ export const vendors = pgTable("vendors", {
   updatedAt: timestamp("updated_at", { withTimezone: true }),
 });
 
+/** The pool of actual approvers (people, or the shared "DG" entity) — not
+ * departments. Assigned per staff member via staff_authority_options, not
+ * implied by which department a submitter belongs to. */
 export const recommendingAuthorities = pgTable("recommending_authorities", {
   id: uuid("id").primaryKey().defaultRandom(),
-  department: text("department").notNull(),
-  headName: text("head_name").notNull(),
+  authorityName: text("authority_name").notNull(),
   email: text("email"),
   isActive: boolean("is_active").default(true).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true })
     .defaultNow()
     .notNull(),
 });
+
+/** The roster of people allowed to submit — matched against as the
+ * submitter types their name, to drive the Recommending Authority
+ * auto-fill. Not an enforced allowlist: an unmatched name can still submit,
+ * just without auto-fill. */
+export const staffMembers = pgTable("staff_members", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  fullName: text("full_name").notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }),
+});
+
+/** Which recommending authorities apply to which staff member, in order
+ * (sort_order 1 = first/default option, 2 = second option). A staff member
+ * with exactly one row here gets that authority pre-selected on the public
+ * form; with two, both are offered as radio options. */
+export const staffAuthorityOptions = pgTable(
+  "staff_authority_options",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    staffMemberId: uuid("staff_member_id")
+      .notNull()
+      .references(() => staffMembers.id, { onDelete: "cascade" }),
+    recommendingAuthorityId: uuid("recommending_authority_id")
+      .notNull()
+      .references(() => recommendingAuthorities.id),
+    sortOrder: integer("sort_order").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [unique().on(table.staffMemberId, table.recommendingAuthorityId)],
+);
 
 export const paymentAdvices = pgTable("payment_advices", {
   id: uuid("id").primaryKey().defaultRandom(),

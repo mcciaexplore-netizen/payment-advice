@@ -41,8 +41,7 @@ export default async function EditPage({
     db
       .select({
         id: recommendingAuthorities.id,
-        department: recommendingAuthorities.department,
-        headName: recommendingAuthorities.headName,
+        authorityName: recommendingAuthorities.authorityName,
       })
       .from(recommendingAuthorities)
       .where(eq(recommendingAuthorities.isActive, true)),

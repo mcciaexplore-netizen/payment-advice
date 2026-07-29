@@ -11,7 +11,8 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
-    "pdf:test:cash-voucher": "tsx scripts/render-cash-voucher-pdf.tsx"
+    "pdf:test:cash-voucher": "tsx scripts/render-cash-voucher-pdf.tsx",
+    "import:master-data": "tsx scripts/import-master-data.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.5.7",

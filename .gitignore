@@ -45,3 +45,11 @@ next-env.d.ts
 # scratch PDF output from scripts/render-test-pdf.tsx
 scripts/test-output.pdf
 scripts/cash-voucher-test-output.pdf
+
+# output of scripts/import-master-data.ts — may contain real staff/vendor
+# names, not meant to be committed
+import-report.md
+
+# the master data source file itself — contains real staff names, emails
+# and vendor data
+Master*FILE*AI.xlsx

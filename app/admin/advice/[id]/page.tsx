@@ -161,7 +161,7 @@ export default async function AdviceDetailPage({
             <Row label="Department" value={advice.submittedByDepartment} />
             <Row
               label="Recommending Authority"
-              value={authority ? `${authority.department} — ${authority.headName}` : "—"}
+              value={authority?.authorityName ?? "—"}
             />
             <Row label="Verified By" value={advice.verifiedByName} />
             <Row label="Sanctioned By" value={advice.sanctionedByName ?? "—"} />

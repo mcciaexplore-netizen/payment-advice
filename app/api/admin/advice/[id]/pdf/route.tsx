@@ -33,15 +33,12 @@ export async function GET(
   }
 
   const [authority] = await db
-    .select({ department: recommendingAuthorities.department, headName: recommendingAuthorities.headName })
+    .select({ authorityName: recommendingAuthorities.authorityName })
     .from(recommendingAuthorities)
     .where(eq(recommendingAuthorities.id, advice.recommendingAuthorityId))
     .limit(1);
 
-  const buffer = await renderPaymentAdvicePdf(
-    advice,
-    authority ? `${authority.department} — ${authority.headName}` : "",
-  );
+  const buffer = await renderPaymentAdvicePdf(advice, authority?.authorityName ?? "");
 
   await db.insert(auditLog).values({
     paymentAdviceId: advice.id,

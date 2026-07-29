@@ -19,8 +19,7 @@ export async function POST(req: NextRequest) {
   const [authority] = await db
     .insert(recommendingAuthorities)
     .values({
-      department: values.department,
-      headName: values.headName,
+      authorityName: values.authorityName,
       email: values.email ?? null,
       isActive: values.isActive,
     })

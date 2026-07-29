@@ -81,8 +81,7 @@ export async function GET(req: NextRequest) {
   const rows = await db
     .select({
       advice: paymentAdvices,
-      authorityDepartment: recommendingAuthorities.department,
-      authorityHeadName: recommendingAuthorities.headName,
+      authorityName: recommendingAuthorities.authorityName,
     })
     .from(paymentAdvices)
     .leftJoin(
@@ -107,7 +106,7 @@ export async function GET(req: NextRequest) {
   const dateColumnKeys = ["formDate", "submittedOn", "approvedOn", "billDate", "poDate", "deliveryChallanDate"];
   const numberColumnKeys = ["amount", "billPassedFor"];
 
-  for (const { advice, authorityDepartment, authorityHeadName } of rows) {
+  for (const { advice, authorityName } of rows) {
     const row = sheet.addRow({
       serialNo: advice.serialNo,
       financialYear: advice.financialYear,
@@ -119,10 +118,7 @@ export async function GET(req: NextRequest) {
       submittedBy: advice.submittedByName,
       submitterEmail: advice.submittedByEmail,
       department: advice.submittedByDepartment,
-      recommendingAuthority:
-        authorityDepartment && authorityHeadName
-          ? `${authorityDepartment} — ${authorityHeadName}`
-          : "",
+      recommendingAuthority: authorityName ?? "",
       payeeName: advice.payeeName,
       payeeAddress: advice.payeeAddress,
       payeeGstin: advice.payeeGstin ?? "",

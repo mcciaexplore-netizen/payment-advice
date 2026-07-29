@@ -31,11 +31,34 @@ export type VendorFormInput = z.input<typeof vendorFormSchema>;
 export type VendorFormValues = z.infer<typeof vendorFormSchema>;
 
 export const authorityFormSchema = z.object({
-  department: z.string().trim().min(1, "Department is required"),
-  headName: z.string().trim().min(1, "Head name is required"),
+  authorityName: z.string().trim().min(1, "Authority name is required"),
   email: optionalTrimmed().pipe(z.string().email("Enter a valid email").optional()),
   isActive: z.boolean().default(true),
 });
 
 export type AuthorityFormInput = z.input<typeof authorityFormSchema>;
 export type AuthorityFormValues = z.infer<typeof authorityFormSchema>;
+
+export const staffMemberFormSchema = z
+  .object({
+    fullName: z.string().trim().min(1, "Name is required"),
+    isActive: z.boolean().default(true),
+    firstAuthorityId: z.string().uuid().optional(),
+    secondAuthorityId: z.string().uuid().optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (
+      data.firstAuthorityId &&
+      data.secondAuthorityId &&
+      data.firstAuthorityId === data.secondAuthorityId
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["secondAuthorityId"],
+        message: "Second authority must be different from the first",
+      });
+    }
+  });
+
+export type StaffMemberFormInput = z.input<typeof staffMemberFormSchema>;
+export type StaffMemberFormValues = z.infer<typeof staffMemberFormSchema>;

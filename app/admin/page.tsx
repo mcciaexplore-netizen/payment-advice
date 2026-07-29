@@ -127,10 +127,10 @@ export default async function AdminListPage({
             New Vendor
           </Link>
           <Link
-            href="/admin/authorities"
+            href="/admin/staff"
             className="rounded-md bg-[#0b1f3a] px-4 py-2 text-sm font-medium text-white hover:bg-[#0b1f3a]/90"
           >
-            Manage Authorities
+            Manage Staff &amp; Authorities
           </Link>
         </div>
       </div>
