@@ -52,6 +52,20 @@ export type PaymentMode = z.infer<typeof paymentModeSchema>;
 export const statusSchema = z.enum(["SUBMITTED", "SENT_BACK", "APPROVED"]);
 export type Status = z.infer<typeof statusSchema>;
 
+export const cashVoucherItemSchema = z.object({
+  description: requiredTrimmed("Nature of expenditure is required"),
+  amount: z
+    .number()
+    .positive("Each expenditure amount must be greater than 0")
+    .multipleOf(0.01, "Each expenditure amount can have at most 2 decimal places"),
+});
+export type CashVoucherItem = z.infer<typeof cashVoucherItemSchema>;
+
+/** Sums currency using paise to avoid floating-point drift. */
+export function calculateCashVoucherTotal(items: CashVoucherItem[]): number {
+  return items.reduce((total, item) => total + Math.round(item.amount * 100), 0) / 100;
+}
+
 /**
  * Fields the submitter fills in on the public form and the /edit/[token]
  * resubmit form. Shared by the client (react-hook-form + zodResolver) and
@@ -67,7 +81,7 @@ export const paymentAdviceFormSchema = z
       .string()
       .uuid("Select a recommending authority"),
     verifiedByName: requiredTrimmed("Verifying officer's name is required"),
-    sanctionedByName: requiredTrimmed("Sanctioning officer's name is required"),
+    sanctionedByName: optionalTrimmed(),
 
     // Section 2 — payee
     vendorId: z.string().uuid().optional(),
@@ -103,7 +117,8 @@ export const paymentAdviceFormSchema = z
       .number()
       .positive("Amount must be greater than 0")
       .multipleOf(0.01, "Amount can have at most 2 decimal places"),
-    natureOfExpenditure: requiredTrimmed("Nature of expenditure is required"),
+    natureOfExpenditure: optionalTrimmed(),
+    cashVoucherItems: z.array(cashVoucherItemSchema).default([]),
 
     // Section 4 — payment mode
     paymentMode: paymentModeSchema,
@@ -126,6 +141,13 @@ export const paymentAdviceFormSchema = z
   })
   .superRefine((data, ctx) => {
     if (data.paymentMode === "NEFT") {
+      if (!data.natureOfExpenditure) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["natureOfExpenditure"],
+          message: "Nature of expenditure is required",
+        });
+      }
       if (!data.bankAccountNo) {
         ctx.addIssue({
           code: "custom",
@@ -145,6 +167,37 @@ export const paymentAdviceFormSchema = z
           code: "custom",
           path: ["beneficiaryName"],
           message: "Beneficiary Name is required for NEFT",
+        });
+      }
+    }
+    if (data.paymentMode === "CASH") {
+      if (data.cashVoucherItems.length === 0) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["cashVoucherItems"],
+          message: "Add at least one expenditure line item",
+        });
+      }
+      if (!data.sanctionedByName) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["sanctionedByName"],
+          message: "Sanctioning officer's name is required for Cash",
+        });
+      }
+      const computedTotal = calculateCashVoucherTotal(data.cashVoucherItems);
+      if (computedTotal <= 0) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["cashVoucherItems"],
+          message: "Cash voucher total must be greater than 0",
+        });
+      }
+      if (Math.round(data.amount * 100) !== Math.round(computedTotal * 100)) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["amount"],
+          message: "Cash voucher total does not match the submitted amount",
         });
       }
     }

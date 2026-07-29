@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { paymentAdvices, attachments, recommendingAuthorities } from "@/lib/db/schema";
+import { paymentAdvices, attachments, recommendingAuthorities, cashVoucherItems } from "@/lib/db/schema";
 import { PaymentAdviceForm } from "@/components/form/PaymentAdviceForm";
 import { DocType, PaymentMode } from "@/lib/validation/payment-advice";
 
@@ -37,7 +37,7 @@ export default async function EditPage({
     );
   }
 
-  const [authorities, adviceAttachments] = await Promise.all([
+  const [authorities, adviceAttachments, voucherItems] = await Promise.all([
     db
       .select({
         id: recommendingAuthorities.id,
@@ -47,6 +47,11 @@ export default async function EditPage({
       .from(recommendingAuthorities)
       .where(eq(recommendingAuthorities.isActive, true)),
     db.select().from(attachments).where(eq(attachments.paymentAdviceId, advice.id)),
+    db
+      .select()
+      .from(cashVoucherItems)
+      .where(eq(cashVoucherItems.paymentAdviceId, advice.id))
+      .orderBy(cashVoucherItems.sortOrder),
   ]);
 
   const existingAttachments: Partial<Record<DocType, string[]>> = {};
@@ -79,7 +84,7 @@ export default async function EditPage({
           submittedByDepartment: advice.submittedByDepartment,
           recommendingAuthorityId: advice.recommendingAuthorityId,
           verifiedByName: advice.verifiedByName,
-          sanctionedByName: advice.sanctionedByName,
+          sanctionedByName: advice.sanctionedByName ?? undefined,
           vendorId: advice.vendorId ?? undefined,
           payeeName: advice.payeeName,
           payeeAddress: advice.payeeAddress,
@@ -96,6 +101,10 @@ export default async function EditPage({
           deliveryChallanDate: advice.deliveryChallanDate ?? undefined,
           amount: Number(advice.amount),
           natureOfExpenditure: advice.natureOfExpenditure,
+          cashVoucherItems: voucherItems.map((item) => ({
+            description: item.description,
+            amount: Number(item.amount),
+          })),
           paymentMode: advice.paymentMode as PaymentMode,
           bankAccountNo: advice.bankAccountNo ?? undefined,
           bankIfsc: advice.bankIfsc ?? undefined,

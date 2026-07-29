@@ -44,3 +44,4 @@ next-env.d.ts
 
 # scratch PDF output from scripts/render-test-pdf.tsx
 scripts/test-output.pdf
+scripts/cash-voucher-test-output.pdf

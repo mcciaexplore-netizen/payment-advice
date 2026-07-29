@@ -5,6 +5,7 @@ import {
   paymentAdvices,
   attachments,
   auditLog,
+  cashVoucherItems,
   recommendingAuthorities,
 } from "@/lib/db/schema";
 import { StatusChip } from "@/components/admin/StatusChip";
@@ -61,7 +62,7 @@ export default async function AdviceDetailPage({
     .limit(1);
   if (!advice) notFound();
 
-  const [authority, adviceAttachments, adviceAuditLog] = await Promise.all([
+  const [authority, adviceAttachments, adviceAuditLog, voucherItems] = await Promise.all([
     advice.recommendingAuthorityId
       ? db
           .select()
@@ -76,6 +77,11 @@ export default async function AdviceDetailPage({
       .from(auditLog)
       .where(eq(auditLog.paymentAdviceId, id))
       .orderBy(desc(auditLog.createdAt)),
+    db
+      .select()
+      .from(cashVoucherItems)
+      .where(eq(cashVoucherItems.paymentAdviceId, id))
+      .orderBy(cashVoucherItems.sortOrder),
   ]);
 
   return (
@@ -126,6 +132,19 @@ export default async function AdviceDetailPage({
             <Row label="Special Remarks" value={advice.specialRemarks ?? "—"} block />
           </Section>
 
+          {advice.paymentMode === "CASH" ? (
+            <Section title="Cash Voucher Items">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                  <thead className="border-b border-gray-200 text-xs uppercase tracking-wide text-gray-500"><tr><th className="pb-2">Nature of Expenditure</th><th className="pb-2 text-right">Amount</th></tr></thead>
+                  <tbody>
+                    {voucherItems.map((item) => <tr key={item.id} className="border-b border-gray-100 last:border-0"><td className="py-2">{item.description}</td><td className="py-2 text-right">{formatAmount(item.amount)}</td></tr>)}
+                  </tbody>
+                </table>
+              </div>
+            </Section>
+          ) : null}
+
           <Section title="Payment">
             <Row label="Mode" value={advice.paymentMode} />
             {advice.paymentMode === "NEFT" ? (
@@ -145,7 +164,7 @@ export default async function AdviceDetailPage({
               value={authority ? `${authority.department} — ${authority.headName}` : "—"}
             />
             <Row label="Verified By" value={advice.verifiedByName} />
-            <Row label="Sanctioned By" value={advice.sanctionedByName} />
+            <Row label="Sanctioned By" value={advice.sanctionedByName ?? "—"} />
           </Section>
 
           <Section title="Attachments">
@@ -217,6 +236,7 @@ export default async function AdviceDetailPage({
             status={advice.status as Status}
             initialBillPassedFor={advice.billPassedFor}
             initialEditToken={advice.editToken}
+            paymentMode={advice.paymentMode as "NEFT" | "CASH"}
           />
         </div>
       </div>

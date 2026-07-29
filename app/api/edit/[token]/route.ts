@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { and, eq } from "drizzle-orm";
 import { put, del } from "@vercel/blob";
 import { db } from "@/lib/db";
-import { paymentAdvices, attachments, auditLog } from "@/lib/db/schema";
+import { paymentAdvices, attachments, auditLog, cashVoucherItems } from "@/lib/db/schema";
 import { parsePaymentAdviceFormData } from "@/lib/form-data";
 import {
   paymentAdviceFormSchema,
@@ -188,7 +188,10 @@ export async function POST(
           billNo: values.billNo,
           billDate: values.billDate,
           amount: values.amount.toFixed(2),
-          natureOfExpenditure: values.natureOfExpenditure,
+          natureOfExpenditure:
+            values.paymentMode === "CASH"
+              ? values.cashVoucherItems.map((item) => item.description).join("; ")
+              : values.natureOfExpenditure ?? "",
           enclosures: values.enclosures ?? null,
           specialRemarks: values.specialRemarks ?? null,
           paymentMode: values.paymentMode,
@@ -200,7 +203,7 @@ export async function POST(
           submittedByDepartment: values.submittedByDepartment,
           recommendingAuthorityId: values.recommendingAuthorityId,
           verifiedByName: values.verifiedByName,
-          sanctionedByName: values.sanctionedByName,
+          sanctionedByName: values.sanctionedByName ?? null,
           status: "SUBMITTED",
           revisionCount: advice.revisionCount + 1,
           editToken: null,
@@ -217,6 +220,20 @@ export async function POST(
         await tx
           .delete(attachments)
           .where(and(eq(attachments.paymentAdviceId, advice.id), eq(attachments.docType, docType)));
+      }
+
+      await tx
+        .delete(cashVoucherItems)
+        .where(eq(cashVoucherItems.paymentAdviceId, advice.id));
+      if (values.paymentMode === "CASH") {
+        await tx.insert(cashVoucherItems).values(
+          values.cashVoucherItems.map((item, sortOrder) => ({
+            paymentAdviceId: advice.id,
+            description: item.description,
+            amount: item.amount.toFixed(2),
+            sortOrder,
+          })),
+        );
       }
 
       if (newAttachmentRecords.length > 0) {

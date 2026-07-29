@@ -1,8 +1,10 @@
 import { renderToBuffer } from "@react-pdf/renderer";
-import { paymentAdvices } from "@/lib/db/schema";
+import { cashVoucherItems, paymentAdvices } from "@/lib/db/schema";
 import { PaymentAdviceDocument } from "@/lib/pdf/PaymentAdviceDocument";
+import { CashVoucherDocument } from "@/lib/pdf/CashVoucherDocument";
 
 type PaymentAdviceRow = typeof paymentAdvices.$inferSelect;
+type CashVoucherItemRow = typeof cashVoucherItems.$inferSelect;
 
 /** Shared by the admin (approval-gated) and public (pre-approval, for
  * physical signing) PDF routes so the advice-row -> PDF-data mapping only
@@ -39,7 +41,7 @@ export async function renderPaymentAdvicePdf(
         submittedByName: advice.submittedByName,
         recommendingAuthorityName,
         verifiedByName: advice.verifiedByName,
-        sanctionedByName: advice.sanctionedByName,
+        sanctionedByName: advice.sanctionedByName ?? "",
         submittedAt: advice.submittedAt.toISOString(),
         approvedAt: advice.approvedAt ? advice.approvedAt.toISOString() : null,
         approvedByName: advice.approvedByName,
@@ -50,4 +52,28 @@ export async function renderPaymentAdvicePdf(
 
 export function pdfFilename(serialNo: string): string {
   return `${serialNo.replace(/\//g, "-")}.pdf`;
+}
+
+export async function renderCashVoucherPdf(
+  advice: PaymentAdviceRow,
+  items: CashVoucherItemRow[],
+  recommendingAuthorityName: string,
+): Promise<Buffer> {
+  return renderToBuffer(
+    <CashVoucherDocument
+      data={{
+        serialNo: advice.serialNo,
+        formDate: advice.formDate,
+        payeeName: advice.payeeName,
+        items: items.map((item) => ({ description: item.description, amount: item.amount })),
+        submittedByName: advice.submittedByName,
+        recommendingAuthorityName,
+        sanctionedByName: advice.sanctionedByName,
+      }}
+    />,
+  );
+}
+
+export function cashVoucherPdfFilename(serialNo: string): string {
+  return `Cash-Voucher-${serialNo.replace(/\//g, "-")}.pdf`;
 }

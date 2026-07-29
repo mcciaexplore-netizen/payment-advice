@@ -91,7 +91,8 @@ export const paymentAdvices = pgTable("payment_advices", {
   // boxes — collected upfront so the PDF is immediately downloadable and
   // printable for physical signing, before admin approval.
   verifiedByName: text("verified_by_name").notNull(),
-  sanctionedByName: text("sanctioned_by_name").notNull(),
+  // Required only for Cash vouchers; legacy NEFT records may not have it.
+  sanctionedByName: text("sanctioned_by_name"),
 
   // Workflow
   submittedAt: timestamp("submitted_at", { withTimezone: true }).notNull(),
@@ -136,6 +137,20 @@ export const attachments = pgTable("attachments", {
   blobUrl: text("blob_url").notNull(),
   sizeBytes: integer("size_bytes").notNull(),
   uploadedAt: timestamp("uploaded_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
+
+/** Itemised Nature of Expenditure rows for Cash Payment Vouchers only. */
+export const cashVoucherItems = pgTable("cash_voucher_items", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  paymentAdviceId: uuid("payment_advice_id")
+    .notNull()
+    .references(() => paymentAdvices.id, { onDelete: "cascade" }),
+  description: text("description").notNull(),
+  amount: numeric("amount", { precision: 14, scale: 2 }).notNull(),
+  sortOrder: integer("sort_order").default(0).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
     .defaultNow()
     .notNull(),
 });

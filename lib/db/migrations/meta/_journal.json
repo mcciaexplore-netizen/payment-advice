@@ -15,6 +15,13 @@
       "when": 1785258969356,
       "tag": "0001_clammy_marvex",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1785319686798,
+      "tag": "0002_nostalgic_carnage",
+      "breakpoints": true
     }
   ]
 }

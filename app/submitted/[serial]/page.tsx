@@ -54,13 +54,21 @@ export default function SubmittedPage() {
       )}
 
       {summary ? (
-        <div className="flex justify-center">
+        <div className="flex flex-wrap justify-center gap-3">
           <a
             href={`/api/advice/${summary.id}/pdf`}
             className="rounded-md bg-[#0b1f3a] px-6 py-3 text-base font-medium text-white shadow-sm transition hover:bg-[#0b1f3a]/90"
           >
             Download Payment Advice (for signatures)
           </a>
+          {summary.paymentMode === "CASH" ? (
+            <a
+              href={`/api/advice/${summary.id}/cash-voucher-pdf`}
+              className="rounded-md border border-[#2e8b57] px-6 py-3 text-base font-medium text-[#2e8b57] shadow-sm transition hover:bg-[#2e8b57]/5"
+            >
+              Download Cash Payment Voucher
+            </a>
+          ) : null}
         </div>
       ) : null}
 

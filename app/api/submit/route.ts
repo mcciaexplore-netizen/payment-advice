@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { put, del } from "@vercel/blob";
 import { db } from "@/lib/db";
-import { paymentAdvices, attachments, auditLog } from "@/lib/db/schema";
+import { paymentAdvices, attachments, auditLog, cashVoucherItems } from "@/lib/db/schema";
 import { allocateSerialNumber } from "@/lib/serial";
 import { parsePaymentAdviceFormData } from "@/lib/form-data";
 import {
@@ -154,7 +154,10 @@ export async function POST(req: NextRequest) {
           billNo: values.billNo,
           billDate: values.billDate,
           amount: values.amount.toFixed(2),
-          natureOfExpenditure: values.natureOfExpenditure,
+          natureOfExpenditure:
+            values.paymentMode === "CASH"
+              ? values.cashVoucherItems.map((item) => item.description).join("; ")
+              : values.natureOfExpenditure ?? "",
           enclosures: values.enclosures ?? null,
           specialRemarks: values.specialRemarks ?? null,
           paymentMode: values.paymentMode,
@@ -166,7 +169,7 @@ export async function POST(req: NextRequest) {
           submittedByDepartment: values.submittedByDepartment,
           recommendingAuthorityId: values.recommendingAuthorityId,
           verifiedByName: values.verifiedByName,
-          sanctionedByName: values.sanctionedByName,
+          sanctionedByName: values.sanctionedByName ?? null,
           submittedAt: now,
         })
         .returning();
@@ -181,6 +184,17 @@ export async function POST(req: NextRequest) {
           sizeBytes: a.sizeBytes,
         })),
       );
+
+      if (values.paymentMode === "CASH") {
+        await tx.insert(cashVoucherItems).values(
+          values.cashVoucherItems.map((item, sortOrder) => ({
+            paymentAdviceId: advice.id,
+            description: item.description,
+            amount: item.amount.toFixed(2),
+            sortOrder,
+          })),
+        );
+      }
 
       await tx.insert(auditLog).values({
         paymentAdviceId: advice.id,

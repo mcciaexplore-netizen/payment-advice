@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useForm, useWatch } from "react-hook-form";
+import { useFieldArray, useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { format } from "date-fns";
 import { Field } from "@/components/ui/Field";
@@ -16,6 +16,7 @@ import {
   PaymentAdviceFormValues,
   MAX_OTHER_ATTACHMENTS,
   DocType,
+  calculateCashVoucherTotal,
 } from "@/lib/validation/payment-advice";
 
 type RecommendingAuthority = {
@@ -63,12 +64,35 @@ export function PaymentAdviceForm({
     defaultValues: {
       formDate: today,
       paymentMode: "NEFT",
+      cashVoucherItems: [],
       ...prefill,
     },
   });
 
+  const { fields: cashVoucherFields, append: appendCashVoucherItem, remove: removeCashVoucherItem } =
+    useFieldArray({ control, name: "cashVoucherItems" });
+
   const paymentMode = useWatch({ control, name: "paymentMode" });
   const payeeName = useWatch({ control, name: "payeeName" }) ?? "";
+  const watchedCashVoucherItems = useWatch({ control, name: "cashVoucherItems" });
+  const cashVoucherItems = useMemo(
+    () => watchedCashVoucherItems ?? [],
+    [watchedCashVoucherItems],
+  );
+
+  useEffect(() => {
+    if (paymentMode !== "CASH") return;
+    if (cashVoucherItems.length === 0) {
+      appendCashVoucherItem({ description: "", amount: 0 });
+      return;
+    }
+    const completeItems = cashVoucherItems.filter(
+      (item) => Number.isFinite(item?.amount) && item.amount > 0,
+    );
+    setValue("amount", calculateCashVoucherTotal(completeItems), {
+      shouldValidate: false,
+    });
+  }, [appendCashVoucherItem, cashVoucherItems, paymentMode, setValue]);
 
   function applyVendor(vendor: VendorSearchResult) {
     setValue("vendorId", vendor.id);
@@ -100,8 +124,10 @@ export function PaymentAdviceForm({
     const formData = new FormData();
     for (const [key, value] of Object.entries(values)) {
       if (value === undefined || value === null) continue;
+      if (key === "cashVoucherItems") continue;
       formData.append(key, String(value));
     }
+    formData.append("cashVoucherItems", JSON.stringify(values.cashVoucherItems));
     if (editToken) formData.append("editToken", editToken);
 
     taxInvoice.forEach((f) => formData.append("attachment_TAX_INVOICE", f));
@@ -131,7 +157,10 @@ export function PaymentAdviceForm({
         paymentMode: values.paymentMode,
         submittedByName: values.submittedByName,
         submittedByDepartment: values.submittedByDepartment,
-        natureOfExpenditure: values.natureOfExpenditure,
+        natureOfExpenditure:
+          values.paymentMode === "CASH"
+            ? values.cashVoucherItems.map((item) => item.description).join("; ")
+            : values.natureOfExpenditure ?? "",
       });
       router.push(`/submitted/${encodeURIComponent(data.serialNo)}`);
     } catch {
@@ -182,14 +211,6 @@ export function PaymentAdviceForm({
             help="Name of the person who will verify this payment before it's sanctioned."
           >
             <Input hasError={!!errors.verifiedByName} {...register("verifiedByName")} />
-          </Field>
-          <Field
-            label="Sanctioned By"
-            required
-            error={errors.sanctionedByName?.message}
-            help="Name of the person who will sanction this payment."
-          >
-            <Input hasError={!!errors.sanctionedByName} {...register("sanctionedByName")} />
           </Field>
         </div>
       </Section>
@@ -256,20 +277,78 @@ export function PaymentAdviceForm({
           <Field label="Delivery Challan Date" error={errors.deliveryChallanDate?.message}>
             <Input type="date" hasError={!!errors.deliveryChallanDate} {...register("deliveryChallanDate")} />
           </Field>
-          <Field label="Amount (Rs.)" required error={errors.amount?.message}>
-            <Input
-              type="number"
-              step="0.01"
-              min="0.01"
-              hasError={!!errors.amount}
-              {...register("amount", { valueAsNumber: true })}
-            />
-          </Field>
-          <div className="sm:col-span-2">
-            <Field label="Nature of Expenditure" required error={errors.natureOfExpenditure?.message}>
-              <Textarea rows={3} hasError={!!errors.natureOfExpenditure} {...register("natureOfExpenditure")} />
-            </Field>
-          </div>
+          {paymentMode === "NEFT" ? (
+            <>
+              <Field label="Amount (Rs.)" required error={errors.amount?.message}>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  hasError={!!errors.amount}
+                  {...register("amount", { valueAsNumber: true })}
+                />
+              </Field>
+              <div className="sm:col-span-2">
+                <Field label="Nature of Expenditure" required error={errors.natureOfExpenditure?.message}>
+                  <Textarea rows={3} hasError={!!errors.natureOfExpenditure} {...register("natureOfExpenditure")} />
+                </Field>
+              </div>
+            </>
+          ) : null}
+          {paymentMode === "CASH" ? (
+            <div className="sm:col-span-2 rounded-md border border-[#0b1f3a]/20 bg-[#0b1f3a]/[0.02] p-4">
+              <div className="mb-3 flex items-baseline justify-between gap-4">
+                <div>
+                  <p className="text-sm font-medium text-[#0b1f3a]">Nature of Expenditure <span className="text-xs text-[#b3261e]">Required</span></p>
+                  <p className="mt-1 text-xs text-gray-600">Add every Cash Voucher expenditure and its amount.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => appendCashVoucherItem({ description: "", amount: 0 })}
+                  className="rounded-md border border-[#0b1f3a] px-3 py-1.5 text-sm font-medium text-[#0b1f3a] hover:bg-[#0b1f3a]/5"
+                >
+                  Add row
+                </button>
+              </div>
+              {errors.cashVoucherItems?.message ? <p className="mb-2 text-sm font-medium text-[#b3261e]">{errors.cashVoucherItems.message}</p> : null}
+              <div className="flex flex-col gap-2">
+                {cashVoucherFields.map((field, index) => (
+                  <div key={field.id} className="grid grid-cols-[minmax(0,1fr)_9rem_auto] gap-2">
+                    <div>
+                      <Input
+                        placeholder="Expenditure description"
+                        hasError={!!errors.cashVoucherItems?.[index]?.description}
+                        {...register(`cashVoucherItems.${index}.description`)}
+                      />
+                      {errors.cashVoucherItems?.[index]?.description ? <p className="mt-1 text-xs font-medium text-[#b3261e]">{errors.cashVoucherItems[index]?.description?.message}</p> : null}
+                    </div>
+                    <div>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        min="0.01"
+                        placeholder="Amount"
+                        hasError={!!errors.cashVoucherItems?.[index]?.amount}
+                        {...register(`cashVoucherItems.${index}.amount`, { valueAsNumber: true })}
+                      />
+                      {errors.cashVoucherItems?.[index]?.amount ? <p className="mt-1 text-xs font-medium text-[#b3261e]">{errors.cashVoucherItems[index]?.amount?.message}</p> : null}
+                    </div>
+                    <button
+                      type="button"
+                      disabled={cashVoucherFields.length === 1}
+                      onClick={() => removeCashVoucherItem(index)}
+                      className="self-start rounded-md px-2 py-2 text-sm text-[#b3261e] hover:bg-[#b3261e]/5 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-4 flex justify-end border-t border-[#0b1f3a]/15 pt-3 text-base font-semibold text-[#0b1f3a]">
+                Total: ₹ {calculateCashVoucherTotal(cashVoucherItems.filter((item) => Number.isFinite(item?.amount) && item.amount > 0)).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+              </div>
+            </div>
+          ) : null}
           <Field label="Form Date" required error={errors.formDate?.message} help="Defaults to today; change if backdating.">
             <Input type="date" max={today} hasError={!!errors.formDate} {...register("formDate")} />
           </Field>
@@ -305,6 +384,18 @@ export function PaymentAdviceForm({
               </Field>
               <Field label="Beneficiary Name" required error={errors.beneficiaryName?.message}>
                 <Input hasError={!!errors.beneficiaryName} {...register("beneficiaryName")} />
+              </Field>
+            </div>
+          )}
+          {paymentMode === "CASH" && (
+            <div className="max-w-md">
+              <Field
+                label="Sanctioned By"
+                required
+                error={errors.sanctionedByName?.message}
+                help="Name of the person who will sanction this Cash payment."
+              >
+                <Input hasError={!!errors.sanctionedByName} {...register("sanctionedByName")} />
               </Field>
             </div>
           )}

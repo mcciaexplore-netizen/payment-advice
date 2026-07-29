@@ -76,6 +76,7 @@ after logging into `/admin/login`, or insert directly.
 | `npm run db:migrate` | Apply pending migrations to `DATABASE_URL` |
 | `npm run db:studio` | Open Drizzle Studio against `DATABASE_URL` |
 | `npx tsx scripts/render-test-pdf.tsx` | Renders `lib/pdf/PaymentAdviceDocument.tsx` with sample (including stress-test, 600-character) data to `scripts/test-output.pdf` — no DB or auth needed. Useful when tweaking the PDF layout. |
+| `npm run pdf:test:cash-voucher` | Renders `lib/pdf/CashVoucherDocument.tsx` with multi-line and long-description sample data to `scripts/cash-voucher-test-output.pdf`. |
 
 ## Database migrations
 

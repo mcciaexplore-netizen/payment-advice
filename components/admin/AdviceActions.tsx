@@ -9,11 +9,13 @@ export function AdviceActions({
   status,
   initialBillPassedFor,
   initialEditToken,
+  paymentMode,
 }: {
   adviceId: string;
   status: Status;
   initialBillPassedFor: string | null;
   initialEditToken: string | null;
+  paymentMode: "NEFT" | "CASH";
 }) {
   const router = useRouter();
 
@@ -119,6 +121,14 @@ export function AdviceActions({
         >
           Download Payment Advice PDF
         </a>
+        {paymentMode === "CASH" ? (
+          <a
+            href={`/api/admin/advice/${adviceId}/cash-voucher-pdf`}
+            className="inline-block w-fit rounded-md border border-[#2e8b57] px-4 py-2 text-sm font-medium text-[#2e8b57] hover:bg-[#2e8b57]/5"
+          >
+            Download Cash Payment Voucher
+          </a>
+        ) : null}
       </div>
     );
   }
@@ -131,6 +141,14 @@ export function AdviceActions({
       >
         Preview Payment Advice PDF (pre-approval, for signing)
       </a>
+      {paymentMode === "CASH" ? (
+        <a
+          href={`/api/advice/${adviceId}/cash-voucher-pdf`}
+          className="inline-block w-fit rounded-md border border-[#2e8b57] px-4 py-2 text-sm font-medium text-[#2e8b57] hover:bg-[#2e8b57]/5"
+        >
+          Preview Cash Payment Voucher (pre-approval)
+        </a>
+      ) : null}
 
       <div className="flex flex-col gap-2">
         <label className="text-sm font-medium text-[#0b1f3a]">Bill passed for Rs.</label>

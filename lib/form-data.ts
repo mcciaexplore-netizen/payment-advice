@@ -9,6 +9,15 @@ export function str(formData: FormData, key: string): string | undefined {
 
 export function parsePaymentAdviceFormData(formData: FormData) {
   const rawAmount = str(formData, "amount");
+  const rawCashVoucherItems = str(formData, "cashVoucherItems");
+  let cashVoucherItems: unknown = [];
+  if (rawCashVoucherItems) {
+    try {
+      cashVoucherItems = JSON.parse(rawCashVoucherItems);
+    } catch {
+      cashVoucherItems = undefined;
+    }
+  }
   return {
     submittedByName: str(formData, "submittedByName"),
     submittedByEmail: str(formData, "submittedByEmail"),
@@ -32,6 +41,7 @@ export function parsePaymentAdviceFormData(formData: FormData) {
     deliveryChallanDate: str(formData, "deliveryChallanDate"),
     amount: rawAmount ? Number(rawAmount) : undefined,
     natureOfExpenditure: str(formData, "natureOfExpenditure"),
+    cashVoucherItems,
     paymentMode: str(formData, "paymentMode"),
     bankAccountNo: str(formData, "bankAccountNo"),
     bankIfsc: str(formData, "bankIfsc"),
