@@ -126,12 +126,11 @@ export const paymentAdvices = pgTable("payment_advices", {
   recommendingAuthorityId: uuid("recommending_authority_id")
     .references(() => recommendingAuthorities.id)
     .notNull(),
-  // Printed under "Verified by" / "Sanctioned by" on the footer signature
-  // boxes — collected upfront so the PDF is immediately downloadable and
-  // printable for physical signing, before admin approval.
+  // Printed under "Verified by" on the footer signature box — collected
+  // upfront so the PDF is immediately downloadable and printable for
+  // physical signing, before admin approval. Not the same thing as
+  // `verifiedBy` below (Finance's admin-side verification stage).
   verifiedByName: text("verified_by_name").notNull(),
-  // Required only for Cash vouchers; legacy NEFT records may not have it.
-  sanctionedByName: text("sanctioned_by_name"),
 
   // Workflow
   submittedAt: timestamp("submitted_at", { withTimezone: true }).notNull(),
@@ -166,6 +165,25 @@ export const paymentAdvices = pgTable("payment_advices", {
   authorityTokenExpiresAt: timestamp("authority_token_expires_at", {
     withTimezone: true,
   }),
+
+  // Finance Verification + Sanctioning pipeline — runs after Authority
+  // approval, for both NEFT and Cash. All three stages happen inside the
+  // single shared Admin login (no individual accounts), so each stage
+  // records WHICH named person (from a small hardcoded list, not a
+  // CRUD-managed table — see lib/validation/payment-advice.ts) did it.
+  // Derived state, not new status values, same rationale as the authority
+  // fields above. Sanctioning is the new final gate before payment and
+  // folds into what the old free-text "Approve" action used to mean: it
+  // also sets `status` to APPROVED and dual-writes `approvedAt`/
+  // `approvedByName` so every existing reader of those two fields (Excel
+  // export, the Payment Advice PDF header, the admin-gated PDF routes)
+  // keeps working unchanged. Reset to null on every resubmission, same as
+  // the authority fields.
+  financeReceivedAt: timestamp("finance_received_at", { withTimezone: true }),
+  verifiedAt: timestamp("verified_at", { withTimezone: true }),
+  verifiedBy: text("verified_by"),
+  sanctionedAt: timestamp("sanctioned_at", { withTimezone: true }),
+  sanctionedBy: text("sanctioned_by"),
 
   createdAt: timestamp("created_at", { withTimezone: true })
     .defaultNow()

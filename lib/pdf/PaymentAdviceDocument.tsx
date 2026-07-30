@@ -28,7 +28,10 @@ export type PaymentAdvicePdfData = {
   submittedByName: string;
   recommendingAuthorityName: string;
   verifiedByName: string;
-  sanctionedByName: string;
+  // Admin-recorded once Finance sanctions this advice (see the Finance
+  // Verification + Sanctioning pipeline) — null/blank until then, same
+  // convention as every other signature line on this form.
+  sanctionedBy: string | null;
   submittedAt: string; // ISO timestamp
   approvedAt: string | null; // ISO timestamp
   approvedByName: string | null;
@@ -272,7 +275,7 @@ export function PaymentAdviceDocument({ data }: { data: PaymentAdvicePdfData }) 
           </View>
           <View style={[styles.footerCell, { borderRight: BORDER }]}>
             <Text style={styles.footerLabel}>Sanctioned by :</Text>
-            <Text style={styles.footerValue}>{data.sanctionedByName}</Text>
+            <Text style={styles.footerValue}>{data.sanctionedBy ?? ""}</Text>
             <Text style={styles.footerLine}>Date :</Text>
             <Text style={styles.footerLine}>Signature :</Text>
           </View>

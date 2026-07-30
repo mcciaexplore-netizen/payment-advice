@@ -83,7 +83,6 @@ export default async function EditPage({
           submittedByDepartment: advice.submittedByDepartment,
           recommendingAuthorityId: advice.recommendingAuthorityId,
           verifiedByName: advice.verifiedByName,
-          sanctionedByName: advice.sanctionedByName ?? undefined,
           vendorId: advice.vendorId ?? undefined,
           payeeName: advice.payeeName,
           payeeAddress: advice.payeeAddress,

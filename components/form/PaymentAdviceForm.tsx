@@ -407,18 +407,6 @@ export function PaymentAdviceForm({
               </Field>
             </div>
           )}
-          {paymentMode === "CASH" && (
-            <div className="max-w-md">
-              <Field
-                label="Sanctioned By"
-                required
-                error={errors.sanctionedByName?.message}
-                help="Name of the person who will sanction this Cash payment."
-              >
-                <Input hasError={!!errors.sanctionedByName} {...register("sanctionedByName")} />
-              </Field>
-            </div>
-          )}
         </div>
       </Section>
 

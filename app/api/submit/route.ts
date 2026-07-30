@@ -180,7 +180,6 @@ export async function POST(req: NextRequest) {
           submittedByDepartment: values.submittedByDepartment,
           recommendingAuthorityId: values.recommendingAuthorityId,
           verifiedByName: values.verifiedByName,
-          sanctionedByName: values.sanctionedByName ?? null,
           submittedAt: now,
         })
         .returning();
@@ -233,7 +232,8 @@ export async function POST(req: NextRequest) {
       amount: values.amount.toLocaleString("en-IN", { minimumFractionDigits: 2 }),
       paymentMode: values.paymentMode,
       formDate: values.formDate,
-      paymentAdvicePdfLink: `${origin}/api/advice/${adviceId}/pdf`,
+      paymentAdvicePdfLink:
+        values.paymentMode === "CASH" ? undefined : `${origin}/api/advice/${adviceId}/pdf`,
       cashVoucherPdfLink:
         values.paymentMode === "CASH"
           ? `${origin}/api/advice/${adviceId}/cash-voucher-pdf`

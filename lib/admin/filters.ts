@@ -97,13 +97,23 @@ export function buildOrderBy(sort?: string, dir?: string) {
 export const ADMIN_LIST_PAGE_SIZE = 25;
 
 /**
- * Splits the queue by Recommending Authority sign-off, layered on top of
- * the existing filters — not a replacement for them. "waiting_authority"
- * and "ready_finance" both imply status SUBMITTED (a SENT_BACK or APPROVED
- * entry belongs in neither); "all" imposes no extra condition, matching the
- * full unfiltered list this page showed before the Approval Workflow.
+ * Splits the queue by pipeline stage, layered on top of the existing
+ * filters — not a replacement for them. The first four tabs all imply
+ * status SUBMITTED (a SENT_BACK entry belongs in none of them, and once
+ * sanctioned, status flips to APPROVED so it naturally falls out of all
+ * four too); "sanctioned_ready" is the only one keyed on status APPROVED
+ * instead. "all" imposes no extra condition, matching the full unfiltered
+ * list this page showed before the Approval Workflow — kept so SENT_BACK
+ * entries stay reachable somewhere.
  */
-export const ADMIN_TABS = ["waiting_authority", "ready_finance", "all"] as const;
+export const ADMIN_TABS = [
+  "waiting_authority",
+  "awaiting_finance",
+  "received_in_process",
+  "verified_awaiting_sanction",
+  "sanctioned_ready",
+  "all",
+] as const;
 export type AdminTab = (typeof ADMIN_TABS)[number];
 
 export function isAdminTab(value: string | null | undefined): value is AdminTab {
@@ -111,14 +121,25 @@ export function isAdminTab(value: string | null | undefined): value is AdminTab 
 }
 
 export function buildTabCondition(tab: AdminTab): SQL | undefined {
+  const submitted = eq(paymentAdvices.status, "SUBMITTED");
   if (tab === "waiting_authority") {
-    return and(eq(paymentAdvices.status, "SUBMITTED"), isNull(paymentAdvices.authorityApprovedAt));
+    return and(submitted, isNull(paymentAdvices.authorityApprovedAt));
   }
-  if (tab === "ready_finance") {
+  if (tab === "awaiting_finance") {
     return and(
-      eq(paymentAdvices.status, "SUBMITTED"),
+      submitted,
       isNotNull(paymentAdvices.authorityApprovedAt),
+      isNull(paymentAdvices.financeReceivedAt),
     );
+  }
+  if (tab === "received_in_process") {
+    return and(submitted, isNotNull(paymentAdvices.financeReceivedAt), isNull(paymentAdvices.verifiedAt));
+  }
+  if (tab === "verified_awaiting_sanction") {
+    return and(submitted, isNotNull(paymentAdvices.verifiedAt), isNull(paymentAdvices.sanctionedAt));
+  }
+  if (tab === "sanctioned_ready") {
+    return eq(paymentAdvices.status, "APPROVED");
   }
   return undefined;
 }

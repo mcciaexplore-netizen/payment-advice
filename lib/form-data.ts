@@ -24,7 +24,6 @@ export function parsePaymentAdviceFormData(formData: FormData) {
     submittedByDepartment: str(formData, "submittedByDepartment"),
     recommendingAuthorityId: str(formData, "recommendingAuthorityId"),
     verifiedByName: str(formData, "verifiedByName"),
-    sanctionedByName: str(formData, "sanctionedByName"),
     vendorId: str(formData, "vendorId"),
     payeeName: str(formData, "payeeName"),
     payeeAddress: str(formData, "payeeAddress"),

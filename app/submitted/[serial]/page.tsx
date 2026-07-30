@@ -64,20 +64,21 @@ export default function SubmittedPage() {
 
       {summary ? (
         <div className="flex flex-wrap justify-center gap-3">
-          <a
-            href={`/api/advice/${summary.id}/pdf`}
-            className="rounded-md bg-[#0b1f3a] px-6 py-3 text-base font-medium text-white shadow-sm transition hover:bg-[#0b1f3a]/90"
-          >
-            Download Payment Advice (for signatures)
-          </a>
           {summary.paymentMode === "CASH" ? (
             <a
               href={`/api/advice/${summary.id}/cash-voucher-pdf`}
-              className="rounded-md border border-[#2e8b57] px-6 py-3 text-base font-medium text-[#2e8b57] shadow-sm transition hover:bg-[#2e8b57]/5"
+              className="rounded-md bg-[#0b1f3a] px-6 py-3 text-base font-medium text-white shadow-sm transition hover:bg-[#0b1f3a]/90"
             >
               Download Cash Payment Voucher
             </a>
-          ) : null}
+          ) : (
+            <a
+              href={`/api/advice/${summary.id}/pdf`}
+              className="rounded-md bg-[#0b1f3a] px-6 py-3 text-base font-medium text-white shadow-sm transition hover:bg-[#0b1f3a]/90"
+            >
+              Download Payment Advice (for signatures)
+            </a>
+          )}
         </div>
       ) : null}
 
@@ -101,15 +102,26 @@ export default function SubmittedPage() {
 
       <div className="rounded-md bg-[#0b1f3a]/5 px-4 py-3 text-sm text-[#0b1f3a]">
         <p className="font-medium">What happens next</p>
-        <p className="mt-1">
-          Download and print the Payment Advice above, then take it around
-          for the &quot;Recommended by&quot;, &quot;Verified by&quot; and
-          &quot;Sanctioned by&quot; signatures — the boxes are already
-          labelled with who should sign each one. Once signed, hand it to
-          Finance &amp; Accounts, who will review it online and either
-          approve it or send it back to you with remarks and a link to fix
-          and resubmit.
-        </p>
+        {summary?.paymentMode === "CASH" ? (
+          <p className="mt-1">
+            Download and print the Cash Payment Voucher above, then take it
+            around for the &quot;Submitted by&quot; and &quot;Recommended
+            by&quot; signatures — the boxes are already labelled with who
+            should sign each one. Once signed, hand it to Finance &amp;
+            Accounts, who will review it online and either approve it or send
+            it back to you with remarks and a link to fix and resubmit.
+          </p>
+        ) : (
+          <p className="mt-1">
+            Download and print the Payment Advice above, then take it around
+            for the &quot;Recommended by&quot;, &quot;Verified by&quot; and
+            &quot;Sanctioned by&quot; signatures — the boxes are already
+            labelled with who should sign each one. Once signed, hand it to
+            Finance &amp; Accounts, who will review it online and either
+            approve it or send it back to you with remarks and a link to fix
+            and resubmit.
+          </p>
+        )}
         <p className="mt-2">
           Please note down the serial number above — quote it if you contact
           Accounts about this payment.

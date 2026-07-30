@@ -2,13 +2,14 @@ import {
   type AuthorityApprovalEmailData,
   type SentBackEmailData,
   type SubmissionConfirmationEmailData,
+  type VerifiedEmailData,
   renderAuthorityApprovalEmail,
   renderSentBackEmail,
   renderSubmissionConfirmationEmail,
+  renderVerifiedEmail,
 } from "@/lib/email/templates";
 
 // TODO: no email provider wired up yet — see AGENT_HANDOFF.md
-// notifyAuthorityApproval() is ready but has no call site yet — wire it in once the Approval Workflow feature (see AGENT_HANDOFF.md) lands.
 function preview(kind: string, message: { subject: string; html: string }) {
   console.info(`[Email preview: ${kind}]`, message);
 }
@@ -28,5 +29,13 @@ export function notifySentBack(data: SentBackEmailData) {
 export function notifySubmissionConfirmation(data: SubmissionConfirmationEmailData) {
   const message = renderSubmissionConfirmationEmail(data);
   preview("submission confirmation", message);
+  return message;
+}
+
+// No email is sent for "Received & In Process" or "Sanctioned" transitions
+// — not requested, dashboard-only for now. See AGENT_HANDOFF.md.
+export function notifyVerified(data: VerifiedEmailData) {
+  const message = renderVerifiedEmail(data);
+  preview("verified", message);
   return message;
 }

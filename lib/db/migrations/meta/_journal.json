@@ -36,6 +36,13 @@
       "when": 1785393643704,
       "tag": "0004_giant_starjammers",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1785401840912,
+      "tag": "0005_finance_pipeline",
+      "breakpoints": true
     }
   ]
 }

@@ -35,7 +35,7 @@ async function main() {
         submittedByName: "Priya Sharma",
         recommendingAuthorityName: "Applied AI Studio — Mr. Test Head",
         verifiedByName: "Anita Deshmukh",
-        sanctionedByName: "Rajesh Kulkarni",
+        sanctionedBy: "Chintamani Shrotri",
         submittedAt: "2026-07-28T10:15:00.000Z",
         approvedAt: "2026-07-30T09:00:00.000Z",
         approvedByName: "Suresh Patil",

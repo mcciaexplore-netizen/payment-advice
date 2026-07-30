@@ -176,8 +176,30 @@ export default async function AdviceDetailPage({
               label="Recommending Authority"
               value={`${authority?.authorityName ?? "—"}${authorityStatusSuffix(advice)}`}
             />
-            <Row label="Verified By" value={advice.verifiedByName} />
-            <Row label="Sanctioned By" value={advice.sanctionedByName ?? "—"} />
+            <Row label="Verified By (on form)" value={advice.verifiedByName} />
+          </Section>
+
+          <Section title="Finance Pipeline">
+            <Row
+              label="Received & In Process"
+              value={advice.financeReceivedAt ? formatDateTime(advice.financeReceivedAt) : "Pending"}
+            />
+            <Row
+              label="Verified By"
+              value={
+                advice.verifiedAt
+                  ? `${advice.verifiedBy} · ${formatDateTime(advice.verifiedAt)}`
+                  : "Pending"
+              }
+            />
+            <Row
+              label="Sanctioned By"
+              value={
+                advice.sanctionedAt
+                  ? `${advice.sanctionedBy} · ${formatDateTime(advice.sanctionedAt)}`
+                  : "Pending"
+              }
+            />
           </Section>
 
           <Section title="Attachments">
@@ -254,6 +276,11 @@ export default async function AdviceDetailPage({
             authorityName={authority?.authorityName ?? "Recommending Authority"}
             authorityApprovedAt={advice.authorityApprovedAt?.toISOString() ?? null}
             authorityRejectedAt={advice.authorityRejectedAt?.toISOString() ?? null}
+            financeReceivedAt={advice.financeReceivedAt?.toISOString() ?? null}
+            verifiedAt={advice.verifiedAt?.toISOString() ?? null}
+            verifiedBy={advice.verifiedBy}
+            sanctionedAt={advice.sanctionedAt?.toISOString() ?? null}
+            sanctionedBy={advice.sanctionedBy}
           />
         </div>
       </div>

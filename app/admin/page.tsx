@@ -82,7 +82,7 @@ export default async function AdminListPage({
   const pageParam = Array.isArray(sp.page) ? sp.page[0] : sp.page;
   const page = Math.max(1, Number(pageParam) || 1);
 
-  const [rows, totalsRow, waitingCount, readyCount] = await Promise.all([
+  const [rows, totalsRow, waitingCount, awaitingFinanceCount, receivedCount, verifiedCount, sanctionedCount] = await Promise.all([
     db
       .select({
         id: paymentAdvices.id,
@@ -111,7 +111,19 @@ export default async function AdminListPage({
     db
       .select({ count: count() })
       .from(paymentAdvices)
-      .where(and(baseWhere, buildTabCondition("ready_finance"))),
+      .where(and(baseWhere, buildTabCondition("awaiting_finance"))),
+    db
+      .select({ count: count() })
+      .from(paymentAdvices)
+      .where(and(baseWhere, buildTabCondition("received_in_process"))),
+    db
+      .select({ count: count() })
+      .from(paymentAdvices)
+      .where(and(baseWhere, buildTabCondition("verified_awaiting_sanction"))),
+    db
+      .select({ count: count() })
+      .from(paymentAdvices)
+      .where(and(baseWhere, buildTabCondition("sanctioned_ready"))),
   ]);
 
   const totalCount = totalsRow[0]?.count ?? 0;
@@ -149,7 +161,7 @@ export default async function AdminListPage({
         </div>
       </div>
 
-      <div className="flex gap-2 border-b border-gray-200">
+      <div className="flex flex-wrap gap-2 border-b border-gray-200">
         <TabLink
           label="Waiting on Authority"
           tab="waiting_authority"
@@ -158,10 +170,31 @@ export default async function AdminListPage({
           searchParams={sp}
         />
         <TabLink
-          label="Ready for Finance"
-          tab="ready_finance"
+          label="Awaiting Finance Review"
+          tab="awaiting_finance"
           activeTab={tab}
-          count={readyCount[0]?.count ?? 0}
+          count={awaitingFinanceCount[0]?.count ?? 0}
+          searchParams={sp}
+        />
+        <TabLink
+          label="Received & In Process"
+          tab="received_in_process"
+          activeTab={tab}
+          count={receivedCount[0]?.count ?? 0}
+          searchParams={sp}
+        />
+        <TabLink
+          label="Verified — Awaiting Sanction"
+          tab="verified_awaiting_sanction"
+          activeTab={tab}
+          count={verifiedCount[0]?.count ?? 0}
+          searchParams={sp}
+        />
+        <TabLink
+          label="Sanctioned — Ready for Payment"
+          tab="sanctioned_ready"
+          activeTab={tab}
+          count={sanctionedCount[0]?.count ?? 0}
           searchParams={sp}
         />
         <TabLink label="All" tab="all" activeTab={tab} count={null} searchParams={sp} />

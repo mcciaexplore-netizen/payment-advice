@@ -9,7 +9,7 @@ export type CashVoucherPdfData = {
   items: { description: string; amount: string }[];
   submittedByName: string;
   recommendingAuthorityName: string;
-  sanctionedByName: string | null;
+  sanctionedBy: string | null;
 };
 
 const NAVY = "#0B1F3A";
@@ -112,7 +112,7 @@ export function CashVoucherDocument({ data }: { data: CashVoucherPdfData }) {
         <View style={styles.signatures} wrap={false}>
           <Signature label="Submitted by" name={data.submittedByName} />
           <Signature label="Recommended by" name={data.recommendingAuthorityName} />
-          <Signature label="Sanctioned by" name={data.sanctionedByName ?? ""} />
+          <Signature label="Sanctioned by" name={data.sanctionedBy ?? ""} />
           <Signature label="Payee's Signature" name="" />
         </View>
       </Page>

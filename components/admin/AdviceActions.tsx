@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Status } from "@/lib/validation/payment-advice";
+import { SANCTIONER_NAMES, Status, VERIFIER_NAMES } from "@/lib/validation/payment-advice";
 
 export function AdviceActions({
   adviceId,
@@ -14,6 +14,11 @@ export function AdviceActions({
   authorityName,
   authorityApprovedAt,
   authorityRejectedAt,
+  financeReceivedAt,
+  verifiedAt,
+  verifiedBy,
+  sanctionedAt,
+  sanctionedBy,
 }: {
   adviceId: string;
   status: Status;
@@ -24,6 +29,11 @@ export function AdviceActions({
   authorityName: string;
   authorityApprovedAt: string | null;
   authorityRejectedAt: string | null;
+  financeReceivedAt: string | null;
+  verifiedAt: string | null;
+  verifiedBy: string | null;
+  sanctionedAt: string | null;
+  sanctionedBy: string | null;
 }) {
   const router = useRouter();
   const [authorityLinkCopied, setAuthorityLinkCopied] = useState(false);
@@ -40,10 +50,16 @@ export function AdviceActions({
   const [savingBillPassedFor, setSavingBillPassedFor] = useState(false);
   const [billPassedForError, setBillPassedForError] = useState<string | null>(null);
 
-  const [showApprove, setShowApprove] = useState(false);
-  const [approverName, setApproverName] = useState("");
-  const [approveError, setApproveError] = useState<string | null>(null);
-  const [approving, setApproving] = useState(false);
+  const [receiving, setReceiving] = useState(false);
+  const [receiveError, setReceiveError] = useState<string | null>(null);
+
+  const [verifiedByChoice, setVerifiedByChoice] = useState("");
+  const [verifying, setVerifying] = useState(false);
+  const [verifyError, setVerifyError] = useState<string | null>(null);
+
+  const [sanctionedByChoice, setSanctionedByChoice] = useState("");
+  const [sanctioning, setSanctioning] = useState(false);
+  const [sanctionError, setSanctionError] = useState<string | null>(null);
 
   const [showSendBack, setShowSendBack] = useState(false);
   const [remarks, setRemarks] = useState("");
@@ -73,26 +89,62 @@ export function AdviceActions({
     }
   }
 
-  async function approve() {
-    setApproveError(null);
-    setApproving(true);
+  async function markReceived() {
+    setReceiveError(null);
+    setReceiving(true);
     try {
-      const res = await fetch(`/api/admin/advice/${adviceId}/approve`, {
+      const res = await fetch(`/api/admin/advice/${adviceId}/receive`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) {
+        setReceiveError(data.error ?? "Could not mark received.");
+        return;
+      }
+      router.refresh();
+    } finally {
+      setReceiving(false);
+    }
+  }
+
+  async function verify() {
+    setVerifyError(null);
+    setVerifying(true);
+    try {
+      const res = await fetch(`/api/admin/advice/${adviceId}/verify`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ verifiedBy: verifiedByChoice }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setVerifyError(data.error ?? "Could not verify.");
+        return;
+      }
+      router.refresh();
+    } finally {
+      setVerifying(false);
+    }
+  }
+
+  async function sanction() {
+    setSanctionError(null);
+    setSanctioning(true);
+    try {
+      const res = await fetch(`/api/admin/advice/${adviceId}/sanction`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          approvedByName: approverName,
+          sanctionedBy: sanctionedByChoice,
           billPassedFor: billPassedFor ? Number(billPassedFor) : undefined,
         }),
       });
       const data = await res.json();
       if (!res.ok) {
-        setApproveError(data.error ?? "Could not approve.");
+        setSanctionError(data.error ?? "Could not sanction.");
         return;
       }
       router.refresh();
     } finally {
-      setApproving(false);
+      setSanctioning(false);
     }
   }
 
@@ -132,40 +184,49 @@ export function AdviceActions({
         <p className="text-sm font-medium text-[#0b1f3a]">
           Bill passed for Rs. {initialBillPassedFor ?? "—"}
         </p>
-        <a
-          href={`/api/admin/advice/${adviceId}/pdf`}
-          className="inline-block w-fit rounded-md bg-[#0b1f3a] px-4 py-2 text-sm font-medium text-white hover:bg-[#0b1f3a]/90"
-        >
-          Download Payment Advice PDF
-        </a>
+        <p className="text-sm text-gray-600">
+          Sanctioned by {sanctionedBy ?? "—"}
+          {sanctionedAt
+            ? ` on ${new Date(sanctionedAt).toLocaleDateString("en-IN", { day: "2-digit", month: "2-digit", year: "numeric" })}`
+            : ""}
+          .
+        </p>
         {paymentMode === "CASH" ? (
           <a
             href={`/api/admin/advice/${adviceId}/cash-voucher-pdf`}
-            className="inline-block w-fit rounded-md border border-[#2e8b57] px-4 py-2 text-sm font-medium text-[#2e8b57] hover:bg-[#2e8b57]/5"
+            className="inline-block w-fit rounded-md bg-[#0b1f3a] px-4 py-2 text-sm font-medium text-white hover:bg-[#0b1f3a]/90"
           >
             Download Cash Payment Voucher
           </a>
-        ) : null}
+        ) : (
+          <a
+            href={`/api/admin/advice/${adviceId}/pdf`}
+            className="inline-block w-fit rounded-md bg-[#0b1f3a] px-4 py-2 text-sm font-medium text-white hover:bg-[#0b1f3a]/90"
+          >
+            Download Payment Advice PDF
+          </a>
+        )}
       </div>
     );
   }
 
   return (
     <div className="flex flex-col gap-6 rounded-md border border-gray-200 p-4">
-      <a
-        href={`/api/advice/${adviceId}/pdf`}
-        className="inline-block w-fit rounded-md border border-[#0b1f3a] px-4 py-2 text-sm font-medium text-[#0b1f3a] hover:bg-[#0b1f3a]/5"
-      >
-        Preview Payment Advice PDF (pre-approval, for signing)
-      </a>
       {paymentMode === "CASH" ? (
         <a
           href={`/api/advice/${adviceId}/cash-voucher-pdf`}
-          className="inline-block w-fit rounded-md border border-[#2e8b57] px-4 py-2 text-sm font-medium text-[#2e8b57] hover:bg-[#2e8b57]/5"
+          className="inline-block w-fit rounded-md border border-[#0b1f3a] px-4 py-2 text-sm font-medium text-[#0b1f3a] hover:bg-[#0b1f3a]/5"
         >
           Preview Cash Payment Voucher (pre-approval)
         </a>
-      ) : null}
+      ) : (
+        <a
+          href={`/api/advice/${adviceId}/pdf`}
+          className="inline-block w-fit rounded-md border border-[#0b1f3a] px-4 py-2 text-sm font-medium text-[#0b1f3a] hover:bg-[#0b1f3a]/5"
+        >
+          Preview Payment Advice PDF (pre-approval, for signing)
+        </a>
+      )}
 
       <div className="flex flex-col gap-2">
         <label className="text-sm font-medium text-[#0b1f3a]">Bill passed for Rs.</label>
@@ -222,7 +283,7 @@ export function AdviceActions({
         <div className="flex flex-col gap-2 rounded-md border border-[#e8a33d]/40 bg-[#e8a33d]/10 p-3 text-sm text-[#8a5a12]">
           <p>
             Waiting on <span className="font-medium">{authorityName}</span> (Recommending
-            Authority) to approve before Admin can approve.
+            Authority) to approve before Finance can proceed.
           </p>
           {authorityToken ? (
             <button
@@ -236,55 +297,108 @@ export function AdviceActions({
         </div>
       )}
 
-      <div className="flex gap-3">
-        {authorityApprovedAt ? (
+      {/* Finance Verification + Sanctioning pipeline — only one stage's
+          action is ever actionable at a time, gated in the same order the
+          server enforces (received -> verified -> sanctioned). */}
+      {authorityApprovedAt && !financeReceivedAt ? (
+        <div className="flex flex-col gap-2 rounded-md border border-[#e8a33d]/40 bg-[#e8a33d]/10 p-3 text-sm text-[#8a5a12]">
+          <p>Ready for Finance to receive this submission.</p>
+          {receiveError ? <p className="font-medium text-[#b3261e]">{receiveError}</p> : null}
           <button
             type="button"
-            onClick={() => {
-              setShowApprove((v) => !v);
-              setShowSendBack(false);
-            }}
-            className="rounded-md bg-[#2e8b57] px-4 py-2 text-sm font-medium text-white hover:bg-[#2e8b57]/90"
+            onClick={markReceived}
+            disabled={receiving}
+            className="w-fit rounded-md bg-[#0b1f3a] px-4 py-2 text-sm font-medium text-white hover:bg-[#0b1f3a]/90 disabled:opacity-50"
           >
-            Approve
+            {receiving ? "Marking…" : "Mark Received & In Process"}
           </button>
-        ) : null}
+        </div>
+      ) : null}
+
+      {financeReceivedAt && !verifiedAt ? (
+        <div className="flex flex-col gap-3 rounded-md border border-[#e8a33d]/40 bg-[#e8a33d]/10 p-4 text-sm text-[#8a5a12]">
+          <label className="font-medium text-[#0b1f3a]">
+            Verified By <span className="text-xs font-normal text-[#b3261e]">Required</span>
+          </label>
+          <select
+            value={verifiedByChoice}
+            onChange={(e) => setVerifiedByChoice(e.target.value)}
+            className="admin-filter-input"
+          >
+            <option value="">Select…</option>
+            {VERIFIER_NAMES.map((name) => (
+              <option key={name} value={name}>
+                {name}
+              </option>
+            ))}
+          </select>
+          {verifyError ? <p className="font-medium text-[#b3261e]">{verifyError}</p> : null}
+          <button
+            type="button"
+            onClick={verify}
+            disabled={verifying || !verifiedByChoice}
+            className="w-fit rounded-md bg-[#0b1f3a] px-4 py-2 text-sm font-medium text-white hover:bg-[#0b1f3a]/90 disabled:opacity-50"
+          >
+            {verifying ? "Verifying…" : "Confirm Verification"}
+          </button>
+        </div>
+      ) : null}
+
+      {verifiedAt ? (
+        <div className="rounded-md border border-[#2e8b57]/30 bg-[#2e8b57]/5 p-3 text-sm text-[#1e5c39]">
+          Verified by {verifiedBy} on{" "}
+          {new Date(verifiedAt).toLocaleDateString("en-IN", {
+            day: "2-digit",
+            month: "2-digit",
+            year: "numeric",
+          })}
+          .
+        </div>
+      ) : null}
+
+      {verifiedAt && !sanctionedAt ? (
+        <div className="flex flex-col gap-3 rounded-md border border-[#2e8b57]/30 bg-[#2e8b57]/5 p-4 text-sm">
+          <label className="font-medium text-[#0b1f3a]">
+            Sanctioned By <span className="text-xs font-normal text-[#b3261e]">Required</span>
+          </label>
+          <select
+            value={sanctionedByChoice}
+            onChange={(e) => setSanctionedByChoice(e.target.value)}
+            className="admin-filter-input"
+          >
+            <option value="">Select…</option>
+            {SANCTIONER_NAMES.map((name) => (
+              <option key={name} value={name}>
+                {name}
+              </option>
+            ))}
+          </select>
+          {!billPassedFor ? (
+            <p className="text-xs text-gray-500">
+              &quot;Bill passed for Rs.&quot; above must be saved before sanctioning.
+            </p>
+          ) : null}
+          {sanctionError ? <p className="font-medium text-[#b3261e]">{sanctionError}</p> : null}
+          <button
+            type="button"
+            onClick={sanction}
+            disabled={sanctioning || !sanctionedByChoice || !billPassedFor}
+            className="w-fit rounded-md bg-[#2e8b57] px-4 py-2 text-sm font-medium text-white hover:bg-[#2e8b57]/90 disabled:opacity-50"
+          >
+            {sanctioning ? "Sanctioning…" : "Confirm Sanction"}
+          </button>
+        </div>
+      ) : null}
+
+      <div className="flex gap-3">
         <button
           type="button"
-          onClick={() => {
-            setShowSendBack((v) => !v);
-            setShowApprove(false);
-          }}
+          onClick={() => setShowSendBack((v) => !v)}
           className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
         >
           Send Back
         </button>
       </div>
-
-      {showApprove ? (
-        <div className="flex flex-col gap-3 rounded-md border border-[#2e8b57]/30 bg-[#2e8b57]/5 p-4">
-          <label className="text-sm font-medium text-[#0b1f3a]">
-            Approving Officer&apos;s Name <span className="text-xs font-normal text-[#b3261e]">Required</span>
-          </label>
-          <input
-            type="text"
-            value={approverName}
-            onChange={(e) => setApproverName(e.target.value)}
-            className="admin-filter-input"
-          />
-          {approveError ? <p className="text-sm font-medium text-[#b3261e]">{approveError}</p> : null}
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={approve}
-              disabled={approving || !approverName.trim()}
-              className="rounded-md bg-[#2e8b57] px-4 py-2 text-sm font-medium text-white hover:bg-[#2e8b57]/90 disabled:opacity-50"
-            >
-              {approving ? "Approving…" : "Confirm Approval"}
-            </button>
-          </div>
-        </div>
-      ) : null}
 
       {showSendBack ? (
         <div className="flex flex-col gap-3 rounded-md border border-gray-300 bg-gray-50 p-4">

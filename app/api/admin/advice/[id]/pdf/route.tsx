@@ -22,7 +22,7 @@ export async function GET(
     .where(eq(paymentAdvices.id, id))
     .limit(1);
 
-  if (!advice) {
+  if (!advice || advice.paymentMode === "CASH") {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
   if (advice.status !== "APPROVED") {

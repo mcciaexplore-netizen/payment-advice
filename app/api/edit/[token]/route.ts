@@ -191,6 +191,14 @@ export async function POST(
           authorityRemarks: null,
           authorityToken,
           authorityTokenExpiresAt,
+          // Same reasoning as the authority fields above: a resubmission is
+          // materially new content, so any Finance review already done on
+          // the previous version no longer applies.
+          financeReceivedAt: null,
+          verifiedAt: null,
+          verifiedBy: null,
+          sanctionedAt: null,
+          sanctionedBy: null,
           vendorId: values.vendorId ?? null,
           payeeName: values.payeeName,
           payeeAddress: values.payeeAddress,
@@ -221,7 +229,6 @@ export async function POST(
           submittedByDepartment: values.submittedByDepartment,
           recommendingAuthorityId: values.recommendingAuthorityId,
           verifiedByName: values.verifiedByName,
-          sanctionedByName: values.sanctionedByName ?? null,
           status: "SUBMITTED",
           revisionCount: advice.revisionCount + 1,
           editToken: null,

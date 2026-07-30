@@ -19,7 +19,7 @@ async function main() {
         ],
         submittedByName: "Priya Sharma",
         recommendingAuthorityName: "Applied AI Studio — Mr. Test Head",
-        sanctionedByName: "Rajesh Kulkarni",
+        sanctionedBy: "Chintamani Shrotri",
       }}
     />,
   );

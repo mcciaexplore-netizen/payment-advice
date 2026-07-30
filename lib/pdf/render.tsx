@@ -41,7 +41,7 @@ export async function renderPaymentAdvicePdf(
         submittedByName: advice.submittedByName,
         recommendingAuthorityName,
         verifiedByName: advice.verifiedByName,
-        sanctionedByName: advice.sanctionedByName ?? "",
+        sanctionedBy: advice.sanctionedBy,
         submittedAt: advice.submittedAt.toISOString(),
         approvedAt: advice.approvedAt ? advice.approvedAt.toISOString() : null,
         approvedByName: advice.approvedByName,
@@ -68,7 +68,7 @@ export async function renderCashVoucherPdf(
         items: items.map((item) => ({ description: item.description, amount: item.amount })),
         submittedByName: advice.submittedByName,
         recommendingAuthorityName,
-        sanctionedByName: advice.sanctionedByName,
+        sanctionedBy: advice.sanctionedBy,
       }}
     />,
   );

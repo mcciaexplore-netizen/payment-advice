@@ -17,7 +17,8 @@ function clientIp(req: NextRequest): string | null {
 // serial number, so this stays safe from enumeration the same way the
 // /submitted/[serial] confirmation page's sessionStorage handoff does:
 // only someone who already has this exact link (the submitter, from their
-// own confirmation page) can reach it.
+// own confirmation page) can reach it. 404s for Cash submissions — they
+// never get a Payment Advice PDF, only the Cash Payment Voucher.
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
@@ -30,7 +31,7 @@ export async function GET(
     .where(eq(paymentAdvices.id, id))
     .limit(1);
 
-  if (!advice) {
+  if (!advice || advice.paymentMode === "CASH") {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 

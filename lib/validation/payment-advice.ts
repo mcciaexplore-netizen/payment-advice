@@ -52,6 +52,36 @@ export type PaymentMode = z.infer<typeof paymentModeSchema>;
 export const statusSchema = z.enum(["SUBMITTED", "SENT_BACK", "APPROVED"]);
 export type Status = z.infer<typeof statusSchema>;
 
+/**
+ * Finance Verification + Sanctioning pipeline (runs after Recommending
+ * Authority approval, for both NEFT and Cash). Deliberately a small
+ * hardcoded list, not a CRUD-managed table like vendors/authorities — these
+ * are two small fixed groups of named people, not something Admin adds to
+ * over time. Everyone still shares the single Admin login; the dropdown is
+ * only how each stage records WHICH of these people actually did it.
+ */
+export const VERIFIER_NAMES = [
+  "Sunil Salunke",
+  "Aabha Khatavkar",
+  "Vaidehi Marathe",
+  "Chandrashekhar Shah",
+] as const;
+export const verifierNameSchema = z.enum(VERIFIER_NAMES);
+export type VerifierName = z.infer<typeof verifierNameSchema>;
+
+export const SANCTIONER_NAMES = ["Chintamani Shrotri", "DG"] as const;
+export const sanctionerNameSchema = z.enum(SANCTIONER_NAMES);
+export type SanctionerName = z.infer<typeof sanctionerNameSchema>;
+
+export const verifySchema = z.object({
+  verifiedBy: verifierNameSchema,
+});
+
+export const sanctionSchema = z.object({
+  sanctionedBy: sanctionerNameSchema,
+  billPassedFor: z.number().positive("Bill passed for Rs. is required").optional(),
+});
+
 export const cashVoucherItemSchema = z.object({
   description: requiredTrimmed("Nature of expenditure is required"),
   amount: z
@@ -81,7 +111,6 @@ export const paymentAdviceFormSchema = z
       .string()
       .uuid("Select a recommending authority"),
     verifiedByName: requiredTrimmed("Verifying officer's name is required"),
-    sanctionedByName: optionalTrimmed(),
 
     // Section 2 — payee
     vendorId: z.string().uuid().optional(),
@@ -176,13 +205,6 @@ export const paymentAdviceFormSchema = z
           code: "custom",
           path: ["cashVoucherItems"],
           message: "Add at least one expenditure line item",
-        });
-      }
-      if (!data.sanctionedByName) {
-        ctx.addIssue({
-          code: "custom",
-          path: ["sanctionedByName"],
-          message: "Sanctioning officer's name is required for Cash",
         });
       }
       const computedTotal = calculateCashVoucherTotal(data.cashVoucherItems);
