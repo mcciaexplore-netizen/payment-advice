@@ -47,7 +47,7 @@ Design system: Navy `#0B1F3A`, Forest green `#2E8B57`, Amber `#E8A33D`. Headings
 
 ## 3. Current State (update this every session)
 
-**Last updated:** 31 July 2026, by Claude Code (Task A: audited and fixed Vendor/Staff/Authority Edit+Deactivate — see below; Task B not started, awaiting human go-ahead)
+**Last updated:** 31 July 2026, by Claude Code (Task A shipped: Vendor/Staff/Authority Edit+Deactivate, plus an authority-rename warning; Task B: Finance Pipeline audit complete, report-only, no schema changes — awaiting human's answer on Received/In-Process split before any further work there)
 
 ### Shipped — Phase 1 baseline (Claude Code)
 - Public form `/` (no login): submitter, payee (vendor typeahead), bill/reference, payment mode (NEFT/Cash), enclosures, mandatory Tax Invoice + Approval/Budget PDF attachments
@@ -191,6 +191,36 @@ The human asked for an audit of the real state of admin CRUD for all three entit
 
 **Not done, out of scope for Task A, flagged for awareness:** the admin's own "assign an authority to a staff member" dropdown (in `StaffForm`, both create and edit) still lists inactive authorities as assignable — left as-is since the acceptance criteria specifically said the **public form's** dropdowns must exclude inactive records, not admin's internal assignment UI, and an admin might legitimately want to see/reassign historical links. Not a bug relative to what was asked.
 
+### Audit (no changes shipped) — Task B: Finance Pipeline status logic vs. intended workflow (Claude Code, 2026-07-31)
+Pure audit per the human's brief — report only, no schema changes (explicitly withheld pending the human's answer to (a) below), no UI changes. Findings:
+
+**(a) Combined "Received & In Process" vs. two separate steps — ASKED THE HUMAN DIRECTLY, NOT DECIDED.** The current build has always had exactly one timestamp (`finance_received_at`) covering both; the intended workflow describes them as two distinct manual steps. This is a schema question either way (adding an `in_process_at` column is the two-step path) — flagged to the human rather than guessed. **Awaiting an answer before touching this.**
+
+**(b) Tab filter logic — exact conditions, verbatim from `lib/admin/filters.ts`'s `buildTabCondition()`:**
+- `waiting_authority`: `status = 'SUBMITTED' AND authority_approved_at IS NULL`
+- `awaiting_finance`: `status = 'SUBMITTED' AND authority_approved_at IS NOT NULL AND finance_received_at IS NULL`
+- `received_in_process`: `status = 'SUBMITTED' AND finance_received_at IS NOT NULL AND verified_at IS NULL`
+- `verified_awaiting_sanction`: `status = 'SUBMITTED' AND verified_at IS NOT NULL AND sanctioned_at IS NULL`
+- `sanctioned_ready`: `status = 'APPROVED'` (no timestamp condition needed — sanctioning is the only path that ever sets `status = 'APPROVED'`)
+- `all`: no condition, unfiltered
+
+No bug found here — every condition correctly matches its intended stage and the stages are mutually exclusive (confirmed live, not just read).
+
+**(c) API-level gating — tested live via direct `curl` calls attempting to skip steps, not just checking the UI hides buttons.** Every route rejects out-of-order transitions server-side:
+- `/receive` 409s if `authority_approved_at` is null ("Awaiting Recommending Authority approval first.")
+- `/verify` 409s if `finance_received_at` is null ("Must be marked Received & In Process before it can be verified.")
+- `/sanction` 409s if `verified_at` is null ("Must be verified before it can be sanctioned.")
+- All three also 409 on double-action (already-received / already-verified / already-sanctioned), and `/verify`/`/sanction` 400 on an invalid name outside the fixed lists.
+- Live-tested the full skip-ahead matrix on a fresh submission: tried `/receive`, `/verify`, `/sanction` all at stage 0 (pre-authority-approval) → all 409. Approved via authority, tried `/verify` and `/sanction` directly → both still 409 (correctly still blocked on `/receive` not having happened). Received, tried `/sanction` directly → still 409 (blocked on `/verify`). Verified with an invalid name → 400. Ran the full valid happy path → 200 at every step, then confirmed every step also correctly 409s a second time (double-action). **No gating bug found — nothing to fix.**
+
+**(d) Rejected/sent-back submissions — confirmed excluded from all 5 narrow tabs, only reachable via "All."** Live-tested: submitted an advice, had the authority reject it, then checked all 5 narrow tabs (0 matches each) and the "All" tab (1 match, with or without an explicit `status=SENT_BACK` filter). **Real gap, not fixed (per the brief — report only):** there is no dedicated tab, badge, or count anywhere that surfaces "N submissions are sitting sent-back, waiting on the submitter to fix and resubmit." An admin only finds them by thinking to open "All" and optionally filtering by status. It doesn't "silently disappear" (it's genuinely still there and reachable) but nothing proactively surfaces it either.
+
+**(e) `audit_log` coverage per transition — complete, confirmed both by reading every route and by inspecting a real live-tested advice's full audit trail.** Every action that currently exists in the schema writes a row: `SUBMITTED`, `AUTHORITY_APPROVED`, `SENT_BACK` (shared by both Admin's send-back and the Authority's reject — actor field distinguishes which), `FINANCE_RECEIVED`, `VERIFIED`, `SANCTIONED`, `RESUBMITTED`, `EXPORTED`. There is no separate "In Process" audit action because there is no separate "In Process" column today (see (a)) — once/if that's split, it would need its own action too. **No gap found for what currently exists.**
+
+**(f) No undo/reverse mechanism exists anywhere.** Confirmed by grep (no "undo"/"reverse"/"unverify" anywhere in the codebase) and by inspecting every place that nulls out `finance_received_at`/`verified_at`/`sanctioned_at` — the only one is `/api/edit/[token]`'s full resubmission reset, which also wipes the authority approval and forces the entire pipeline to restart from scratch. **If Admin clicks the wrong name on Verify or Sanction, there is no way to correct just that one field** short of a direct DB edit or a full resubmit-and-restart cycle (which also re-notifies the authority and submitter). Flagged as a real gap, not built — the brief was explicit this is report-only.
+
+**No logic bugs were found anywhere in (b) or (c)**, so nothing needed fixing under the "fix only what's clearly a bug" instruction — the tab filters and API gating are already fully correct and were confirmed live, not just by code review. All test data created during this audit was cleaned up afterward. `tsc` and Vitest (121 passing) re-confirmed clean; no code was changed this session, so no build/lint re-run was needed beyond that sanity check.
+
 ## 4. Open Items (verify before building on top of these)
 
 Status legend: 🔴 unverified / high risk · 🟡 unverified / lower risk · 🟢 verified
@@ -218,6 +248,9 @@ Status legend: 🔴 unverified / high risk · 🟡 unverified / lower risk · �
 - 🟡 **`lib/staff-email.ts`'s `resolveStaffEmailByName()` has no live call site** — built and unit-tested per the brief's explicit request (resolve the 6 Verifier/Sanctioner names against the staff table), but nothing in this session's scope actually emails a verifier or sanctioner, so it isn't wired into any route. Likely forward-looking infrastructure; don't assume it's dead code to be deleted without checking with the human first.
 - 🟢 **Task A (Vendor/Staff/Authority Edit + Deactivate) shipped and verified live 2026-07-31 by Claude Code** — see the "Shipped" entry above for the full audit findings (only Authority Edit was genuinely missing; staff email was never editable; a real dropdown-corruption bug was found and fixed) and the exact live verification performed against the real dev server + real Neon DB.
 - 🟡 **`countInProgressForStaffName()`'s name-match safety check is best-effort, not exact** — `payment_advices` has no FK to `staff_members` at all, so deactivating a staff member whose submitted name doesn't textually match their canonical staff record (typo, nickname, maiden/married name change) will silently report 0 in-progress submissions even if they have some. This is a schema limitation, not a bug in the check itself — flagged in code and here rather than presented as reliable. Only a `staff_member_id` FK on `payment_advices` (a bigger, unrequested schema change) would make this exact.
+- ⬜ **Task B audit (2026-07-31): "Received" and "In Process" are still one combined timestamp (`finance_received_at`), not two separate steps** — the human's own stated intended workflow describes them as distinct manual steps. Question asked directly, not decided: should this become two separate timestamps/tabs, or is the combined state fine for how Finance actually works day to day? **Blocking any schema change here until the human answers.**
+- 🟡 **Task B audit (2026-07-31): rejected/sent-back submissions have no dedicated visibility** — confirmed live they correctly vanish from all 5 pipeline tabs and are NOT lost (still reachable under "All", with or without an explicit `status=SENT_BACK` filter), but nothing proactively surfaces "N submissions are stuck waiting on the submitter to fix and resubmit" — no tab, no badge, no count. Report-only per the brief; not fixed.
+- 🟡 **Task B audit (2026-07-31): no undo/reverse mechanism exists for Received/Verified/Sanctioned** — confirmed via grep and by reading every route that touches those timestamps. The only way to undo any of them is a full resubmission via Send Back → edit token, which also wipes authority approval and restarts the entire pipeline (and re-notifies everyone) — there's no way to correct a single mis-click (e.g., wrong name on Sanction) without that full reset, short of a direct DB edit. Report-only per the brief; not fixed.
 
 ## 5. Do Not Touch Without Asking
 
@@ -250,6 +283,40 @@ Status legend: 🔴 unverified / high risk · 🟡 unverified / lower risk · �
 Append one entry per session, newest at the top. Keep entries short — this is a changelog, not a diary.
 
 ```
+2026-07-31 — Claude Code — Small follow-up to Task A: added an inline amber
+warning to the Authority edit form (edit mode only, not create) per the
+human's request — renaming an authority retroactively affects every
+historical PDF/approval page it's referenced on (recommending_authority_id
+is a live FK, per Task A's §4 finding), so the form now says so and
+recommends deactivate+create-new for an actual personnel change instead of a
+rename. tsc/ESLint clean, live-checked the warning is absent on page load
+(create mode) and present in the edit-mode code path.
+
+Then Task B per the same brief: audited the Finance Pipeline's status logic
+against the human's stated 8-step intended workflow, no code changes (report
+only, as instructed). (a) Asked directly, did not decide: should "Received"
+and "In Process" (currently one combined finance_received_at timestamp)
+become two separate steps? Blocking on the human's answer before any schema
+work. (b) Documented the exact filter condition for all 5 tabs — no bug
+found. (c) Live-tested the full skip-ahead + double-action matrix via direct
+curl calls against every one of the 3 pipeline routes (receive/verify/
+sanction) — every out-of-order transition correctly 409s server-side, not
+just UI-hidden; no gating bug found. (d) Confirmed live that a
+authority-rejected submission is excluded from all 5 tabs but not lost —
+only reachable under "All" — and flagged that nothing proactively surfaces
+it (no badge/count/dedicated tab). (e) Confirmed via a real live-tested
+advice's full audit_log trail that every current transition (submit,
+authority approve, send-back/reject, receive, verify, sanction) writes an
+audit entry with the correct actor — no gap. (f) Confirmed via grep and
+route inspection that no undo/reverse mechanism exists anywhere — the only
+reset path is a full resubmission that also wipes authority approval,
+flagged as a gap, not built. All test data (3 advices across Task A follow-
+up + Task B) cleaned up after. tsc/Vitest (121 passing) re-confirmed clean;
+no build/lint changes needed since no application code changed in the Task B
+portion. Reported back per the brief's explicit "report only" instruction on
+(d)/(e)/(f) and stopped without touching schema, pending the human's answer
+to (a).
+
 2026-07-31 — Claude Code — Task A per the human's brief: audited real state of
 Vendor/Staff/Authority admin CRUD before writing any code (human suspected
 only Create worked, contradicting a prior "CRUD built" summary). Confirmed:
