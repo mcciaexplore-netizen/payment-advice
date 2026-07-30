@@ -47,7 +47,7 @@ Design system: Navy `#0B1F3A`, Forest green `#2E8B57`, Amber `#E8A33D`. Headings
 
 ## 3. Current State (update this every session)
 
-**Last updated:** 30 July 2026, by Claude Code (Approval Workflow)
+**Last updated:** 30 July 2026, by Claude Code (fixed same-filename attachment Blob collision)
 
 ### Shipped — Phase 1 baseline (Claude Code)
 - Public form `/` (no login): submitter, payee (vendor typeahead), bill/reference, payment mode (NEFT/Cash), enclosures, mandatory Tax Invoice + Approval/Budget PDF attachments
@@ -117,7 +117,7 @@ Status legend: 🔴 unverified / high risk · 🟡 unverified / lower risk · �
 - 🟡 **`StaffNameTypeahead` and `RecommendingAuthorityField`'s interactive browser behavior (debounce, suggestion-click, exact-match-while-typing, radio auto-select) was NOT tested in an actual browser** — this session has no browser automation available. What *was* verified: `GET /api/staff/search` returns exactly the right shape/data for 4 real edge cases (1-option match, 2-option match, 0-option match, no match), full `tsc`/`eslint` pass, and a full real submission driven through `/api/submit` with a pre-resolved `recommendingAuthorityId` (i.e. the API/data layer end-to-end, not the React interaction layer). If a human or a future agent can drive an actual browser, exercising the typeahead dropdown, "Other" radio, and the free-text authority suggestions by hand would close this out.
 - 🟡 Excel export's Recommending Authority column with real populated rows — see the entry above. Not re-checked against the Approval Workflow columns either (Excel export's column list was intentionally left untouched this session — new authority columns are not exported; confirm with the human whether Finance wants them before adding).
 - 🟢 **Approval Workflow feature (Recommending Authority approve/reject gate) shipped and verified live end-to-end 2026-07-30 by Claude Code** — see the "Shipped" entry above for full detail and the exact verification steps performed against the real dev server + real Neon DB.
-- 🔴 **Pre-existing bug, not introduced this session, not fixed:** `/api/edit/[token]` resubmit 500s if a replacement attachment file has the **same filename** as the one it's replacing (deterministic Blob pathname collision, no `allowOverwrite`/`addRandomSuffix` on that route's `put()` calls). Reproducible outside the Approval Workflow entirely — any admin- or authority-triggered send-back followed by a same-filename resubmit hits it. Needs a fix (likely `addRandomSuffix: true` on that specific `put()` call) but was out of scope for this session; flagging rather than silently patching an unrelated route.
+- 🟢 **Fixed 2026-07-30 by Claude Code: same-filename attachment replacement on `/api/edit/[token]` resubmit no longer 500s.** Root cause: the Blob pathname (`advices/{serialNo}/{docType}-{fileName}`) is deterministic, and `put()` defaults to rejecting a write to a pathname that already exists — a replacement file sharing the original's filename collided with it. Fixed by adding `addRandomSuffix: true` to both `put()` calls (`app/api/edit/[token]/route.ts` and, for consistency, `app/api/submit/route.ts`, which had the same latent pattern though far less likely to trigger there since each submission gets a fresh serial number). Deliberately **not** `allowOverwrite: true` — that would let the new file's bytes land at the old row's pathname *before* the DB transaction confirms the swap, so a transaction failure after upload would leave the old attachment row silently pointing at the new (wrong) content. `addRandomSuffix` keeps the existing upload-new-distinct-path → commit DB swap → delete-old-blob-after-commit ordering completely intact; every attachment-serving route already reads `blobPathname` from the DB row rather than reconstructing it, so this was a fully isolated change. Verified: new regression test (`lib/advice/edit-resubmit-attachment-collision.test.ts`, including a sanity-check test that the same mock reproduces the original 500 without the fix) plus a live run against the real dev server + Neon DB — reject → resubmit with an identical filename → 200, and the new file fetched back correctly through `/api/admin/attachments/[id]`. Test data deleted afterward.
 - 🟡 **`AuthorityApprovalView`'s interactive browser behavior (Approve/Send Back buttons, remarks textarea, already-actioned banner) was NOT tested in an actual browser** — verified via direct API calls (`curl`) against the real dev server + real DB, and the page's server-rendered HTML was inspected, but no browser automation was available this session. The API/data layer is confirmed correct end-to-end; the React interaction layer (button state transitions, error display) is not.
 - 🟡 **Admin queue tab UI (`TabLink`, badge counts) was verified via rendered HTML inspection, not a live click-through in a browser** — confirmed the counts and `?tab=` links are correct by fetching each tab's URL directly and checking which serial numbers appear, but did not visually confirm the active-tab styling or manually click through page transitions.
 
@@ -140,6 +140,23 @@ Status legend: 🔴 unverified / high risk · 🟡 unverified / lower risk · �
 Append one entry per session, newest at the top. Keep entries short — this is a changelog, not a diary.
 
 ```
+2026-07-30 — Claude Code — Fixed the same-filename attachment Blob collision
+flagged as a 🔴 open item in the previous session. `/api/edit/[token]` and
+`/api/submit/route.ts` both built a deterministic Blob pathname from
+serialNo+docType+fileName with no overwrite/uniqueness handling; a resubmit
+replacing an attachment with a same-named file 500'd. Fixed by adding
+`addRandomSuffix: true` to both `put()` calls, not `allowOverwrite` (would
+have let new bytes land at the old pathname before the DB transaction
+confirms the swap — see §4 for the full reasoning). New regression test
+(`lib/advice/edit-resubmit-attachment-collision.test.ts`) mocks Vercel
+Blob's real collision behavior closely enough that it fails against the
+pre-fix code (verified via an included sanity-check test). Also verified
+live: real dev server + real Neon DB, reject → resubmit with an identical
+filename → 200 (previously 500), new file fetched back correctly. Test rows
+deleted after. `tsc`, ESLint, Vitest (44 passed, 2 pre-existing skipped),
+and production build all pass. Scope was exactly the reported bug — did not
+touch the Approval Workflow logic itself beyond these two `put()` calls.
+
 2026-07-30 — Claude Code — Built the Approval Workflow feature (Recommending
 Authority must approve/reject before Admin can approve), per the human's
 brief. Full scope: schema migration `0004_giant_starjammers.sql` (5 nullable

@@ -120,9 +120,13 @@ export async function POST(req: NextRequest) {
     }[] = [];
     for (const { docType, file } of attachmentInputs) {
       const pathname = `advices/${serialNo}/${docType}-${file.name}`;
+      // See app/api/edit/[token]/route.ts — same deterministic-path
+      // collision risk exists here in principle (e.g. a retried request),
+      // so the same addRandomSuffix fix applies for consistency.
       const blob = await put(pathname, file, {
         access: "private",
         contentType: "application/pdf",
+        addRandomSuffix: true,
       });
       uploadedPathnames.push(blob.pathname);
       attachmentRecords.push({

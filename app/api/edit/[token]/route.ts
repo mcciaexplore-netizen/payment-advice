@@ -152,9 +152,15 @@ export async function POST(
     for (const docType of DOC_TYPES) {
       for (const file of byDocType[docType]) {
         const pathname = `advices/${advice.serialNo}/${docType}-${file.name}`;
+        // addRandomSuffix avoids colliding with the attachment this is
+        // replacing (or any other prior upload) when the filename matches —
+        // the deterministic path alone isn't unique across resubmissions.
+        // The actual (suffixed) pathname/URL vercel returns is what's
+        // stored on the row below; nothing reconstructs this path later.
         const blob = await put(pathname, file, {
           access: "private",
           contentType: "application/pdf",
+          addRandomSuffix: true,
         });
         uploadedPathnames.push(blob.pathname);
         newAttachmentRecords.push({
