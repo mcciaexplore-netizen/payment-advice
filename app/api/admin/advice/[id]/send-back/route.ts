@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { paymentAdvices, auditLog } from "@/lib/db/schema";
+import { notifySentBack } from "@/lib/email/notify";
 import { sendBackSchema } from "@/lib/validation/payment-advice";
 
 export const runtime = "nodejs";
@@ -20,7 +21,13 @@ export async function POST(
   const { id } = await params;
 
   const [advice] = await db
-    .select({ status: paymentAdvices.status })
+    .select({
+      status: paymentAdvices.status,
+      serialNo: paymentAdvices.serialNo,
+      submittedByName: paymentAdvices.submittedByName,
+      payeeName: paymentAdvices.payeeName,
+      amount: paymentAdvices.amount,
+    })
     .from(paymentAdvices)
     .where(eq(paymentAdvices.id, id))
     .limit(1);
@@ -67,6 +74,16 @@ export async function POST(
       ipAddress: clientIp(req),
       details: { adminRemarks: parsed.data.adminRemarks },
     });
+  });
+
+  notifySentBack({
+    serialNo: advice.serialNo,
+    submittedByName: advice.submittedByName,
+    sentBackBy: "Admin",
+    remarks: parsed.data.adminRemarks,
+    payeeName: advice.payeeName,
+    amount: Number(advice.amount).toLocaleString("en-IN", { minimumFractionDigits: 2 }),
+    editLink: `${new URL(req.url).origin}/edit/${editToken}`,
   });
 
   return NextResponse.json({ editToken });

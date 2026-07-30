@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Approval Required</title>
+</head>
+<body style="margin:0; padding:0; background-color:#F4F5F7; font-family: 'Segoe UI', Arial, sans-serif;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#F4F5F7; padding:32px 16px;">
+  <tr>
+    <td align="center">
+      <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="background-color:#FFFFFF; border-radius:8px; overflow:hidden; max-width:600px; width:100%;">
+
+        <!-- Header / Letterhead -->
+        <tr>
+          <td style="background-color:#0B1F3A; padding:28px 32px;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+              <tr>
+                <td style="padding-bottom:14px;">
+                  <img src="https://mcciapune.com/media/printmedia2023/mccialogo.png" alt="MCCIA" width="56" height="56" style="display:block; width:56px; height:56px; border:0; outline:none; text-decoration:none;">
+                </td>
+              </tr>
+              <tr>
+                <td style="font-family: Georgia, 'Times New Roman', serif; color:#FFFFFF; font-size:18px; font-weight:bold; letter-spacing:0.3px;">
+                  Mahratta Chamber of Commerce, Industries &amp; Agriculture
+                </td>
+              </tr>
+              <tr>
+                <td style="color:#C9D3E0; font-size:12px; padding-top:4px;">
+                  Senapati Bapat Road, Pune 411 016
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- Amber accent bar -->
+        <tr><td style="background-color:#E8A33D; height:4px; line-height:4px; font-size:0;">&nbsp;</td></tr>
+
+        <!-- Body -->
+        <tr>
+          <td style="padding:32px;">
+            <p style="margin:0 0 4px 0; font-size:13px; color:#6B7280; text-transform:uppercase; letter-spacing:0.5px;">
+              Payment Advice Approval Request
+            </p>
+            <h1 style="margin:0 0 20px 0; font-family: Georgia, 'Times New Roman', serif; font-size:22px; color:#0B1F3A;">
+              {{serial_no}}
+            </h1>
+
+            <p style="margin:0 0 20px 0; font-size:15px; line-height:1.6; color:#1F2937;">
+              Dear {{authority_name}},<br><br>
+              You've been selected as the Recommending Authority for this payment advice, submitted by <strong>{{submitted_by_name}}</strong> on {{form_date}}. Please review the details below and approve or send it back with remarks.
+            </p>
+
+            <!-- Details table -->
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #E5E7EB; border-radius:6px; margin-bottom:24px;">
+              <tr>
+                <td style="padding:12px 16px; border-bottom:1px solid #E5E7EB; font-size:13px; color:#6B7280; width:40%;">Payee</td>
+                <td style="padding:12px 16px; border-bottom:1px solid #E5E7EB; font-size:14px; color:#111827; font-weight:600;">{{payee_name}}</td>
+              </tr>
+              <tr>
+                <td style="padding:12px 16px; border-bottom:1px solid #E5E7EB; font-size:13px; color:#6B7280;">Amount</td>
+                <td style="padding:12px 16px; border-bottom:1px solid #E5E7EB; font-size:14px; color:#2E8B57; font-weight:700;">₹ {{amount}}</td>
+              </tr>
+              <tr>
+                <td style="padding:12px 16px; border-bottom:1px solid #E5E7EB; font-size:13px; color:#6B7280;">Nature of Expenditure</td>
+                <td style="padding:12px 16px; border-bottom:1px solid #E5E7EB; font-size:14px; color:#111827;">{{nature_of_expenditure}}</td>
+              </tr>
+              <tr>
+                <td style="padding:12px 16px; border-bottom:1px solid #E5E7EB; font-size:13px; color:#6B7280;">Bill / Reference No.</td>
+                <td style="padding:12px 16px; border-bottom:1px solid #E5E7EB; font-size:14px; color:#111827;">{{bill_reference}}</td>
+              </tr>
+              <tr>
+                <td style="padding:12px 16px; font-size:13px; color:#6B7280;">Payment Mode</td>
+                <td style="padding:12px 16px; font-size:14px; color:#111827;">{{payment_mode}}</td>
+              </tr>
+            </table>
+
+            <!-- CTA -->
+            <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto 24px auto;">
+              <tr>
+                <td style="border-radius:6px; background-color:#2E8B57;">
+                  <a href="{{approval_link}}" style="display:inline-block; padding:14px 32px; font-size:15px; font-weight:600; color:#FFFFFF; text-decoration:none; border-radius:6px;">
+                    Review &amp; Approve
+                  </a>
+                </td>
+              </tr>
+            </table>
+
+            <p style="margin:0; font-size:12px; line-height:1.6; color:#9CA3AF; text-align:center;">
+              This link is unique to you and does not require a login.<br>
+              If the button doesn't work, copy this link into your browser:<br>
+              <a href="{{approval_link}}" style="color:#2E8B57; word-break:break-all;">{{approval_link}}</a>
+            </p>
+          </td>
+        </tr>
+
+        <!-- Footer -->
+        <tr>
+          <td style="background-color:#F9FAFB; padding:20px 32px; border-top:1px solid #E5E7EB;">
+            <p style="margin:0; font-size:12px; color:#9CA3AF; text-align:center;">
+              This is an automated notification from the MCCIA Payment Advice system.<br>
+              Please do not reply directly to this email.
+            </p>
+          </td>
+        </tr>
+
+      </table>
+    </td>
+  </tr>
+</table>
+</body>
+</html>

@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { put, del } from "@vercel/blob";
+import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { paymentAdvices, attachments, auditLog, cashVoucherItems } from "@/lib/db/schema";
+import { paymentAdvices, attachments, auditLog, cashVoucherItems, recommendingAuthorities } from "@/lib/db/schema";
+import { notifySubmissionConfirmation } from "@/lib/email/notify";
 import { allocateSerialNumber } from "@/lib/serial";
 import { parsePaymentAdviceFormData } from "@/lib/form-data";
 import {
@@ -205,6 +207,27 @@ export async function POST(req: NextRequest) {
       });
 
       return advice.id;
+    });
+
+    const [authority] = await db
+      .select({ authorityName: recommendingAuthorities.authorityName })
+      .from(recommendingAuthorities)
+      .where(eq(recommendingAuthorities.id, values.recommendingAuthorityId))
+      .limit(1);
+    const origin = new URL(req.url).origin;
+    notifySubmissionConfirmation({
+      serialNo,
+      authorityName: authority?.authorityName ?? "MCCIA Finance & Accounts",
+      submittedByName: values.submittedByName,
+      payeeName: values.payeeName,
+      amount: values.amount.toLocaleString("en-IN", { minimumFractionDigits: 2 }),
+      paymentMode: values.paymentMode,
+      formDate: values.formDate,
+      paymentAdvicePdfLink: `${origin}/api/advice/${adviceId}/pdf`,
+      cashVoucherPdfLink:
+        values.paymentMode === "CASH"
+          ? `${origin}/api/advice/${adviceId}/cash-voucher-pdf`
+          : undefined,
     });
 
     return NextResponse.json({ serialNo, id: adviceId });
