@@ -64,6 +64,13 @@ function AuthorityInlineForm({
       }}
       className="flex flex-wrap items-end gap-3 rounded-md border border-gray-200 bg-gray-50 p-4"
     >
+      {isEdit ? (
+        <p className="w-full text-xs leading-relaxed text-amber-700">
+          Only edit this for spelling/formatting fixes. Renaming will retroactively change the
+          name shown on all past PDFs and approval pages for this authority. If someone new has
+          taken over this role, deactivate this record and create a new one instead.
+        </p>
+      ) : null}
       <div className="flex flex-col gap-1">
         <label className="text-xs font-medium text-gray-600">Name</label>
         <input
