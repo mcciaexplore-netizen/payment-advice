@@ -24,6 +24,7 @@ export async function POST(
       id: paymentAdvices.id,
       serialNo: paymentAdvices.serialNo,
       submittedByName: paymentAdvices.submittedByName,
+      submittedByEmail: paymentAdvices.submittedByEmail,
       payeeName: paymentAdvices.payeeName,
       amount: paymentAdvices.amount,
       authorityApprovedAt: paymentAdvices.authorityApprovedAt,
@@ -67,15 +68,18 @@ export async function POST(
     authorityRejection: true,
   });
 
-  notifySentBack({
-    serialNo: advice.serialNo,
-    submittedByName: advice.submittedByName,
-    sentBackBy: authorityName,
-    remarks: parsed.data.remarks,
-    payeeName: advice.payeeName,
-    amount: Number(advice.amount).toLocaleString("en-IN", { minimumFractionDigits: 2 }),
-    editLink: `${new URL(req.url).origin}/edit/${editToken}`,
-  });
+  await notifySentBack(
+    {
+      serialNo: advice.serialNo,
+      submittedByName: advice.submittedByName,
+      sentBackBy: authorityName,
+      remarks: parsed.data.remarks,
+      payeeName: advice.payeeName,
+      amount: Number(advice.amount).toLocaleString("en-IN", { minimumFractionDigits: 2 }),
+      editLink: `${new URL(req.url).origin}/edit/${editToken}`,
+    },
+    advice.submittedByEmail,
+  );
 
   return NextResponse.json({ ok: true });
 }

@@ -62,7 +62,7 @@ export type Status = z.infer<typeof statusSchema>;
  */
 export const VERIFIER_NAMES = [
   "Sunil Salunke",
-  "Aabha Khatavkar",
+  "Abha Khatavkar",
   "Vaidehi Marathe",
   "Chandrashekhar Shah",
 ] as const;

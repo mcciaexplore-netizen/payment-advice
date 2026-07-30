@@ -22,6 +22,7 @@ const pending = {
   id: ADVICE_ID,
   serialNo: "MCCIA/2026-27/0001",
   submittedByName: "Priya Sharma",
+  submittedByEmail: "priya@example.com",
   payeeName: "Acme Supplies",
   amount: "1250.00",
   authorityApprovedAt: null,
@@ -94,6 +95,7 @@ describe("POST /api/authority-approval/[token]/reject", () => {
         remarks: "Please fix the amount",
         editLink: expect.stringContaining("/edit/new-edit-token"),
       }),
+      pending.submittedByEmail,
     );
   });
 });

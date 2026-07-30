@@ -7,6 +7,7 @@ export type StaffAuthorityOption = { id: string; authorityName: string };
 export type StaffSearchResult = {
   id: string;
   fullName: string;
+  email: string | null;
   authorityOptions: StaffAuthorityOption[];
 };
 

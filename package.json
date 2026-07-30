@@ -12,7 +12,8 @@
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
     "pdf:test:cash-voucher": "tsx scripts/render-cash-voucher-pdf.tsx",
-    "import:master-data": "tsx scripts/import-master-data.ts"
+    "import:master-data": "tsx scripts/import-master-data.ts",
+    "backfill:staff-emails": "tsx scripts/backfill-staff-authority-emails.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.5.7",
@@ -28,6 +29,7 @@
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "react-hook-form": "^7.83.0",
+    "resend": "^6.18.1",
     "ws": "^8.21.1",
     "zod": "^4.4.3"
   },

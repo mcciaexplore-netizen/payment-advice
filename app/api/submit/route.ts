@@ -218,42 +218,48 @@ export async function POST(req: NextRequest) {
     });
 
     const [authority] = await db
-      .select({ authorityName: recommendingAuthorities.authorityName })
+      .select({ authorityName: recommendingAuthorities.authorityName, email: recommendingAuthorities.email })
       .from(recommendingAuthorities)
       .where(eq(recommendingAuthorities.id, values.recommendingAuthorityId))
       .limit(1);
     const origin = new URL(req.url).origin;
     const authorityName = authority?.authorityName ?? "MCCIA Finance & Accounts";
-    notifySubmissionConfirmation({
-      serialNo,
-      authorityName,
-      submittedByName: values.submittedByName,
-      payeeName: values.payeeName,
-      amount: values.amount.toLocaleString("en-IN", { minimumFractionDigits: 2 }),
-      paymentMode: values.paymentMode,
-      formDate: values.formDate,
-      paymentAdvicePdfLink:
-        values.paymentMode === "CASH" ? undefined : `${origin}/api/advice/${adviceId}/pdf`,
-      cashVoucherPdfLink:
-        values.paymentMode === "CASH"
-          ? `${origin}/api/advice/${adviceId}/cash-voucher-pdf`
-          : undefined,
-    });
-    notifyAuthorityApproval({
-      serialNo,
-      authorityName,
-      submittedByName: values.submittedByName,
-      payeeName: values.payeeName,
-      amount: values.amount.toLocaleString("en-IN", { minimumFractionDigits: 2 }),
-      natureOfExpenditure:
-        values.paymentMode === "CASH"
-          ? values.cashVoucherItems.map((item) => item.description).join("; ")
-          : values.natureOfExpenditure ?? "",
-      billReference: values.billNo,
-      paymentMode: values.paymentMode,
-      formDate: values.formDate,
-      approvalLink: `${origin}/authority-approval/${authorityToken}`,
-    });
+    await notifySubmissionConfirmation(
+      {
+        serialNo,
+        authorityName,
+        submittedByName: values.submittedByName,
+        payeeName: values.payeeName,
+        amount: values.amount.toLocaleString("en-IN", { minimumFractionDigits: 2 }),
+        paymentMode: values.paymentMode,
+        formDate: values.formDate,
+        paymentAdvicePdfLink:
+          values.paymentMode === "CASH" ? undefined : `${origin}/api/advice/${adviceId}/pdf`,
+        cashVoucherPdfLink:
+          values.paymentMode === "CASH"
+            ? `${origin}/api/advice/${adviceId}/cash-voucher-pdf`
+            : undefined,
+      },
+      values.submittedByEmail,
+    );
+    await notifyAuthorityApproval(
+      {
+        serialNo,
+        authorityName,
+        submittedByName: values.submittedByName,
+        payeeName: values.payeeName,
+        amount: values.amount.toLocaleString("en-IN", { minimumFractionDigits: 2 }),
+        natureOfExpenditure:
+          values.paymentMode === "CASH"
+            ? values.cashVoucherItems.map((item) => item.description).join("; ")
+            : values.natureOfExpenditure ?? "",
+        billReference: values.billNo,
+        paymentMode: values.paymentMode,
+        formDate: values.formDate,
+        approvalLink: `${origin}/authority-approval/${authorityToken}`,
+      },
+      authority?.email ?? null,
+    );
 
     return NextResponse.json({ serialNo, id: adviceId, authorityToken, authorityName });
   } catch (err) {

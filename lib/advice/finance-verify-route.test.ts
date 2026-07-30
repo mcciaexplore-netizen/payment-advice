@@ -27,6 +27,7 @@ const ADVICE_ID = "11111111-1111-4111-8111-111111111111";
 const receivedNeft = {
   serialNo: "MCCIA/2026-27/0001",
   submittedByName: "Priya Sharma",
+  submittedByEmail: "priya@example.com",
   payeeName: "Acme Supplies",
   amount: "1250.00",
   formDate: "2026-07-28",
@@ -86,19 +87,29 @@ describe("POST /api/admin/advice/[id]/verify", () => {
 
   it("verifies, writes an audit entry with the verifier as actor, and emails the submitter with the NEFT document label", async () => {
     mocks.limit.mockResolvedValueOnce([receivedNeft]);
-    const res = await POST(req({ verifiedBy: "Aabha Khatavkar" }), {
+    const res = await POST(req({ verifiedBy: "Abha Khatavkar" }), {
       params: Promise.resolve({ id: ADVICE_ID }),
     });
     expect(res.status).toBe(200);
     expect(mocks.txSet).toHaveBeenCalledWith(
-      expect.objectContaining({ verifiedAt: expect.any(Date), verifiedBy: "Aabha Khatavkar" }),
+      expect.objectContaining({ verifiedAt: expect.any(Date), verifiedBy: "Abha Khatavkar" }),
     );
     expect(mocks.txValues).toHaveBeenCalledWith(
-      expect.objectContaining({ action: "VERIFIED", actor: "Aabha Khatavkar" }),
+      expect.objectContaining({ action: "VERIFIED", actor: "Abha Khatavkar" }),
     );
     expect(mocks.notifyVerified).toHaveBeenCalledWith(
-      expect.objectContaining({ verifiedBy: "Aabha Khatavkar", documentLabel: "Payment Advice" }),
+      expect.objectContaining({ verifiedBy: "Abha Khatavkar", documentLabel: "Payment Advice" }),
+      receivedNeft.submittedByEmail,
     );
+  });
+
+  it("rejects the old 'Aabha Khatavkar' misspelling — the authoritative list spells it 'Abha'", async () => {
+    mocks.limit.mockResolvedValueOnce([receivedNeft]);
+    const res = await POST(req({ verifiedBy: "Aabha Khatavkar" }), {
+      params: Promise.resolve({ id: ADVICE_ID }),
+    });
+    expect(res.status).toBe(400);
+    expect(mocks.transaction).not.toHaveBeenCalled();
   });
 
   it("uses the Cash Payment Voucher document label for a Cash advice", async () => {
@@ -106,6 +117,7 @@ describe("POST /api/admin/advice/[id]/verify", () => {
     await POST(req({ verifiedBy: "Vaidehi Marathe" }), { params: Promise.resolve({ id: ADVICE_ID }) });
     expect(mocks.notifyVerified).toHaveBeenCalledWith(
       expect.objectContaining({ documentLabel: "Cash Payment Voucher" }),
+      receivedNeft.submittedByEmail,
     );
   });
 });

@@ -286,27 +286,30 @@ export async function POST(
     await Promise.allSettled(oldBlobPathnamesToDelete.map((p) => del(p)));
 
     const [authority] = await db
-      .select({ authorityName: recommendingAuthorities.authorityName })
+      .select({ authorityName: recommendingAuthorities.authorityName, email: recommendingAuthorities.email })
       .from(recommendingAuthorities)
       .where(eq(recommendingAuthorities.id, values.recommendingAuthorityId))
       .limit(1);
     const origin = new URL(req.url).origin;
     const authorityName = authority?.authorityName ?? "MCCIA Finance & Accounts";
-    notifyAuthorityApproval({
-      serialNo: advice.serialNo,
-      authorityName,
-      submittedByName: values.submittedByName,
-      payeeName: values.payeeName,
-      amount: values.amount.toLocaleString("en-IN", { minimumFractionDigits: 2 }),
-      natureOfExpenditure:
-        values.paymentMode === "CASH"
-          ? values.cashVoucherItems.map((item) => item.description).join("; ")
-          : values.natureOfExpenditure ?? "",
-      billReference: values.billNo,
-      paymentMode: values.paymentMode,
-      formDate: values.formDate,
-      approvalLink: `${origin}/authority-approval/${authorityToken}`,
-    });
+    await notifyAuthorityApproval(
+      {
+        serialNo: advice.serialNo,
+        authorityName,
+        submittedByName: values.submittedByName,
+        payeeName: values.payeeName,
+        amount: values.amount.toLocaleString("en-IN", { minimumFractionDigits: 2 }),
+        natureOfExpenditure:
+          values.paymentMode === "CASH"
+            ? values.cashVoucherItems.map((item) => item.description).join("; ")
+            : values.natureOfExpenditure ?? "",
+        billReference: values.billNo,
+        paymentMode: values.paymentMode,
+        formDate: values.formDate,
+        approvalLink: `${origin}/authority-approval/${authorityToken}`,
+      },
+      authority?.email ?? null,
+    );
 
     return NextResponse.json({
       serialNo: advice.serialNo,

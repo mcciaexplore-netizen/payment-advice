@@ -24,6 +24,7 @@ export async function POST(
     .select({
       serialNo: paymentAdvices.serialNo,
       submittedByName: paymentAdvices.submittedByName,
+      submittedByEmail: paymentAdvices.submittedByEmail,
       payeeName: paymentAdvices.payeeName,
       amount: paymentAdvices.amount,
       formDate: paymentAdvices.formDate,
@@ -72,15 +73,18 @@ export async function POST(
     });
   });
 
-  notifyVerified({
-    serialNo: advice.serialNo,
-    submittedByName: advice.submittedByName,
-    verifiedBy: parsed.data.verifiedBy,
-    documentLabel: advice.paymentMode === "CASH" ? "Cash Payment Voucher" : "Payment Advice",
-    payeeName: advice.payeeName,
-    amount: Number(advice.amount).toLocaleString("en-IN", { minimumFractionDigits: 2 }),
-    formDate: advice.formDate,
-  });
+  await notifyVerified(
+    {
+      serialNo: advice.serialNo,
+      submittedByName: advice.submittedByName,
+      verifiedBy: parsed.data.verifiedBy,
+      documentLabel: advice.paymentMode === "CASH" ? "Cash Payment Voucher" : "Payment Advice",
+      payeeName: advice.payeeName,
+      amount: Number(advice.amount).toLocaleString("en-IN", { minimumFractionDigits: 2 }),
+      formDate: advice.formDate,
+    },
+    advice.submittedByEmail,
+  );
 
   return NextResponse.json({ ok: true, verifiedAt: now.toISOString() });
 }

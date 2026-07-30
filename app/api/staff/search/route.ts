@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
   }
 
   const staff = await db
-    .select({ id: staffMembers.id, fullName: staffMembers.fullName })
+    .select({ id: staffMembers.id, fullName: staffMembers.fullName, email: staffMembers.email })
     .from(staffMembers)
     .where(and(eq(staffMembers.isActive, true), ilike(staffMembers.fullName, `%${q}%`)))
     .limit(10);
@@ -50,6 +50,7 @@ export async function GET(req: NextRequest) {
     staff: staff.map((s) => ({
       id: s.id,
       fullName: s.fullName,
+      email: s.email,
       authorityOptions: optionsByStaffId.get(s.id) ?? [],
     })),
   });

@@ -42,6 +42,10 @@ Copy `.env.local.example` to `.env.local` and fill in real values. Never commit
 | `ADMIN_PASSWORD` | Yes | Single shared password for the Finance admin login (`/admin/login`). Pick a strong value. |
 | `AUTH_SECRET` | Yes | Secret used to sign/verify the admin session JWT (HS256). Generate with `openssl rand -base64 32`. |
 | `TEST_DATABASE_URL` | No | Only needed to run the `lib/serial.ts` integration tests (`npm test`) against a real Postgres instance. Point this at a **scratch** Neon branch or local Postgres — never at your real `DATABASE_URL` — since the tests write rows to `serial_counters`. Leave unset to skip those tests (the pure unit tests still run). |
+| `RESEND_API_KEY` | Only if `EMAIL_MODE=live` | Resend dashboard → API Keys. Unused in preview mode. |
+| `EMAIL_MODE` | No | `preview` (default if unset) — render + console.log only, no network call. `live` — actually sends via Resend. |
+| `EMAIL_FROM` | No | Sender address. Defaults to Resend's shared testing domain `onboarding@resend.dev`. Do not point this at a `mcciapune.com` address until that domain is DNS-verified in Resend. |
+| `EMAIL_TEST_OVERRIDE_RECIPIENT` | No | When `EMAIL_MODE=live`, redirects every email to this address instead of its real recipient, with the subject prefixed `[TEST — would go to: {real_recipient}] `. Leave unset for the real production behavior. |
 
 ## The MCCIA logo
 

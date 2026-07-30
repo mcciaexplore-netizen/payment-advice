@@ -2,7 +2,24 @@ import { describe, expect, it } from "vitest";
 import {
   calculateCashVoucherTotal,
   paymentAdviceFormSchema,
+  VERIFIER_NAMES,
+  verifierNameSchema,
 } from "./payment-advice";
+
+describe("VERIFIER_NAMES spelling", () => {
+  it('spells the name "Abha Khatavkar", matching the authoritative staff/email list (not the earlier "Aabha" typo)', () => {
+    expect(VERIFIER_NAMES).toContain("Abha Khatavkar");
+    expect(VERIFIER_NAMES).not.toContain("Aabha Khatavkar");
+  });
+
+  it("rejects the old misspelling as an invalid verifier", () => {
+    expect(verifierNameSchema.safeParse("Aabha Khatavkar").success).toBe(false);
+  });
+
+  it("accepts the corrected spelling", () => {
+    expect(verifierNameSchema.safeParse("Abha Khatavkar").success).toBe(true);
+  });
+});
 
 const baseCashSubmission = {
   submittedByName: "Priya Sharma",

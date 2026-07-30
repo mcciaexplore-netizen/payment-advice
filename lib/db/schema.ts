@@ -34,6 +34,10 @@ export const vendors = pgTable("vendors", {
 export const recommendingAuthorities = pgTable("recommending_authorities", {
   id: uuid("id").primaryKey().defaultRandom(),
   authorityName: text("authority_name").notNull(),
+  // Nullable — this column has existed since migration 0003 but was never
+  // populated until scripts/backfill-staff-authority-emails.ts. Drives
+  // notifyAuthorityApproval()'s recipient; null falls back to preview mode
+  // for that specific authority rather than sending live.
   email: text("email"),
   isActive: boolean("is_active").default(true).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true })
@@ -48,6 +52,12 @@ export const recommendingAuthorities = pgTable("recommending_authorities", {
 export const staffMembers = pgTable("staff_members", {
   id: uuid("id").primaryKey().defaultRandom(),
   fullName: text("full_name").notNull(),
+  // Nullable — backfilled by scripts/backfill-staff-authority-emails.ts for
+  // staff matched against MCCIA's authoritative name/email list; not every
+  // staff member has a known email. Drives the "Your Email" auto-fill on
+  // the public form and is the single source of truth for resolving any
+  // staff member's (including Verifier/Sanctioner) email by name.
+  email: text("email"),
   isActive: boolean("is_active").default(true).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true })
     .defaultNow()

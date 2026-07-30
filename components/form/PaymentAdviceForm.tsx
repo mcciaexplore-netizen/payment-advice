@@ -12,6 +12,7 @@ import { StaffNameTypeahead, StaffSearchResult } from "@/components/form/StaffNa
 import { RecommendingAuthorityField } from "@/components/form/RecommendingAuthorityField";
 import { FileUploadSlot } from "@/components/form/FileUploadSlot";
 import { storeSubmissionSummary } from "@/lib/submission-summary";
+import { resolveAutoFillEmail } from "@/lib/form/staff-email-autofill";
 import {
   paymentAdviceFormSchema,
   PaymentAdviceFormInput,
@@ -58,6 +59,7 @@ export function PaymentAdviceForm({
     register,
     handleSubmit,
     setValue,
+    getValues,
     control,
     formState: { errors },
   } = useForm<PaymentAdviceFormInput, unknown, PaymentAdviceFormValues>({
@@ -98,6 +100,16 @@ export function PaymentAdviceForm({
       shouldValidate: false,
     });
   }, [appendCashVoucherItem, cashVoucherItems, paymentMode, setValue]);
+
+  // Mirrors applyVendor's "fill only what's on file" pattern below. Only
+  // auto-fills when the field is still empty — never overwrites a value
+  // the submitter already typed, or (on /edit/[token] resubmit) an already
+  // pre-filled value from the original submission.
+  function handleStaffMatch(staff: StaffSearchResult | null) {
+    setMatchedStaff(staff);
+    const email = resolveAutoFillEmail(staff, getValues("submittedByEmail"));
+    if (email) setValue("submittedByEmail", email);
+  }
 
   function applyVendor(vendor: VendorSearchResult) {
     setValue("vendorId", vendor.id);
@@ -199,7 +211,7 @@ export function PaymentAdviceForm({
               id="submittedByName"
               value={submittedByName}
               onChange={(v) => setValue("submittedByName", v)}
-              onMatch={setMatchedStaff}
+              onMatch={handleStaffMatch}
               hasError={!!errors.submittedByName}
             />
           </Field>
