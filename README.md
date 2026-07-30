@@ -155,9 +155,11 @@ the full reasoning):
   the form** (available immediately at submission), not the admin's
   approver name — that's what makes the pre-approval download meaningful:
   every signature box is already labelled with who should sign it before any
-  approval has happened. "Verified by" and "Sanctioned by" are separate
-  required fields on the submission form for the same reason (`lib/db/schema.ts`
-  → `verifiedByName` / `sanctionedByName`); the admin's own approver name
+  approval has happened. "Verified by" and "Sanctioned by" are **not**
+  collected from the submitter — both are admin-recorded during the Finance
+  Verification + Sanctioning pipeline (`lib/db/schema.ts` → `verifiedBy` /
+  `sanctionedBy`) and stay blank on the printed form until Finance actually
+  verifies/sanctions the advice. The admin's own approver name
   (`approvedByName`) is still recorded for the audit trail but no longer
   appears on the printed form.
 - **`lib/db/index.ts` creates its Neon connection lazily**, on first real use,

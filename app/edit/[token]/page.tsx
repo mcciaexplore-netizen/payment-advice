@@ -82,7 +82,6 @@ export default async function EditPage({
           submittedByEmail: advice.submittedByEmail,
           submittedByDepartment: advice.submittedByDepartment,
           recommendingAuthorityId: advice.recommendingAuthorityId,
-          verifiedByName: advice.verifiedByName,
           vendorId: advice.vendorId ?? undefined,
           payeeName: advice.payeeName,
           payeeAddress: advice.payeeAddress,

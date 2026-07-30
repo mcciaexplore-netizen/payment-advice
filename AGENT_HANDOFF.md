@@ -47,7 +47,7 @@ Design system: Navy `#0B1F3A`, Forest green `#2E8B57`, Amber `#E8A33D`. Headings
 
 ## 3. Current State (update this every session)
 
-**Last updated:** 30 July 2026, by Claude Code (staff/authority email import + Resend live-send wiring — EMAIL_MODE still defaults to preview, live sending not yet turned on in any environment)
+**Last updated:** 30 July 2026, by Claude Code (removed the stale submitter-filled "Verified By" field from the public form)
 
 ### Shipped — Phase 1 baseline (Claude Code)
 - Public form `/` (no login): submitter, payee (vendor typeahead), bill/reference, payment mode (NEFT/Cash), enclosures, mandatory Tax Invoice + Approval/Budget PDF attachments
@@ -147,6 +147,16 @@ Combined task, Part B depends on Part A. **EMAIL_MODE still defaults to "preview
 - **Real bug found and fixed during testing, not caught by tsc/eslint:** `vi.restoreAllMocks()` in a test's `afterEach` was silently wiping the `vi.fn().mockImplementation(...)` set up for the mocked `Resend` class constructor (not just spy state, as its name suggests) — every live-mode test after the first failed with `Cannot read properties of undefined (reading 'send')`, but only when 2+ tests ran in the same file; any single test in isolation passed, which is what made this genuinely confusing to isolate. Root-caused via a from-scratch minimal repro (bisecting describe-block nesting, env-stub timing, and clearAllMocks semantics) before finding the actual cause. Fixed by dropping `restoreAllMocks()` from that `afterEach` (unnecessary — `vi.spyOn(console, ...)` is freshly re-established every test via `beforeEach` anyway) and keeping `vi.clearAllMocks()` + `vi.unstubAllEnvs()`, which don't touch mock implementations.
 - 41 new tests across 5 new test files plus 2 pre-existing route test files updated for the new function signatures/spelling. Verified live against the real dev server + real Neon DB: `/api/staff/search` returns the real backfilled email for a known staff member; a full submission in the (default, unset) preview mode still logs both email previews with zero Resend calls, confirming default behavior is genuinely unchanged. **Did not verify actual live sending** — that needs a real `RESEND_API_KEY`, which the human is providing separately; see the open item below. Also could not check Resend's dashboard for `mcciapune.com` domain verification status — no account access this session; the human needs to confirm this directly, per the brief's explicit instruction not to touch DNS/domain verification.
 
+### Shipped — Removed the stale submitter-filled "Verified By" field (Claude Code, 2026-07-30)
+The human noticed the public submission form still showed a required "Verified By" text field, even though (per earlier instruction) submitters shouldn't be the ones supplying that — Finance now records it during the Verify step of the pipeline (`verified_by`, admin-recorded, see the Finance Verification/Sanctioning pipeline entry above). This was a known-but-unaddressed gap: the Finance pipeline session had already dropped the analogous submitter-filled `sanctioned_by_name` field and repointed the PDF's "Sanctioned by" footer box at the admin-recorded `sanctioned_by`, but left `verified_by_name` (the older, pre-pipeline submitter field) untouched — flagged in that session's notes but not acted on. This session finishes that same cleanup for "Verified by," following the identical pattern.
+- Migration `0007_drop_verified_by_name.sql`: `ALTER TABLE payment_advices DROP COLUMN verified_by_name` (a clean single-column drop with no accompanying add in the same migration — `drizzle-kit generate` did not trigger the interactive rename prompt this time, so it wrote its own migration + snapshot, no hand-writing needed). **Checked the real DB before dropping**: exactly 1 row existed total (a same-day test row, payee "KHAANE PE" — not real business data), with `verified_by_name = "Sunil"`. Migration applied to the real Neon DB via `npm run db:migrate`.
+- Removed the "Verified By" `Field`/`Input` from `PaymentAdviceForm.tsx`, the Zod requirement from `paymentAdviceFormSchema`, and the read/write plumbing from `lib/form-data.ts`, `/api/submit`, `/api/edit/[token]` (both the route and the page's prefill), and `scripts/render-test-pdf.tsx`.
+- **PDF footer's "Verified by :" box now sources from the admin-recorded `verifiedBy` (Finance pipeline) instead of the removed submitter field** — renamed the `PaymentAdviceDocument` prop from `verifiedByName: string` to `verifiedBy: string | null` (mirrors `sanctionedBy`'s existing nullable pattern exactly). The box is blank on the PDF until Finance actually verifies the advice — same "blank until that stage happens" convention `sanctionedBy` already established, now consistent for both signature boxes.
+- Admin detail page: removed the now-dead "Verified By (on form)" row from the "People" section — the pipeline's own "Finance Pipeline" section (added in the earlier session) already shows the real "Verified By: {name} · {date}" / "Pending" state and was left untouched.
+- Updated 3 test files (dropped now-irrelevant `verifiedByName` fixture data from the collision regression test and the validation test) and added `lib/db/migrations/drop-verified-by-name-migration.test.ts` for the new migration, matching the convention of every prior migration.
+- Verified live against the real dev server + real Neon DB: confirmed "Verified By" no longer appears anywhere in the public form's rendered HTML; submitted a real advice through `/api/submit` with no `verifiedByName` in the payload (200, succeeded); downloaded the resulting Payment Advice PDF (200, valid single-page PDF, "Verified by" box correctly blank); loaded the admin detail page as an authenticated admin and confirmed the dead "People" row is gone while "Finance Pipeline → Verified By: Pending" still renders correctly. Test row + its 2 Blob attachments deleted afterward. `tsc`, ESLint, all 117 tests (2 pre-existing skipped), and `next build` all pass.
+- Also fixed a stale README passage (§"Design notes") that still described `verifiedByName`/`sanctionedByName` as both being required submitter-form fields — `sanctionedByName` had actually already been dropped in the earlier Finance pipeline session and this paragraph was never updated to match. Now accurately describes both as admin-recorded, Finance-pipeline fields.
+
 ## 4. Open Items (verify before building on top of these)
 
 Status legend: 🔴 unverified / high risk · 🟡 unverified / lower risk · 🟢 verified
@@ -200,6 +210,24 @@ Status legend: 🔴 unverified / high risk · 🟡 unverified / lower risk · �
 Append one entry per session, newest at the top. Keep entries short — this is a changelog, not a diary.
 
 ```
+2026-07-30 — Claude Code — Removed the submitter-filled "Verified By" field
+from the public form, per the human noticing it was still there ("submitters
+won't be putting that info"). Migration 0007 drops verified_by_name (checked
+the real DB first — only 1 row existed, same-day test data, safe to drop).
+Removed the field from the form/Zod schema/form-data parsing/submit+edit
+routes. Renamed the PDF footer's "Verified by" box from the removed
+submitter field to the admin-recorded verifiedBy (Finance pipeline) —
+mirrors sanctionedBy's existing nullable/blank-until-verified pattern
+exactly, finishing a cleanup the Finance-pipeline session had already done
+for "Sanctioned by" but flagged-and-left for "Verified by." Removed the dead
+"Verified By (on form)" row from the admin detail page. Also fixed a stale
+README paragraph that hadn't been updated when sanctioned_by_name was
+dropped earlier. Verified live: form HTML has no "Verified By" field, a real
+submission succeeds without it, the PDF downloads with a correctly-blank
+Verified-by box, admin detail page shows the dead row is gone while Finance
+Pipeline's real Verified By status still works. Test row + attachments
+cleaned up. tsc/ESLint/Vitest (117 passing)/build all clean.
+
 2026-07-30 — Claude Code — Combined task per the human's brief, Part A
 (import real staff/authority email data) then Part B (turn on real email
 sending via Resend, gated by EMAIL_MODE). Part A: caught and flagged that

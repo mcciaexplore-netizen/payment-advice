@@ -179,7 +179,6 @@ export async function POST(req: NextRequest) {
           submittedByEmail: values.submittedByEmail,
           submittedByDepartment: values.submittedByDepartment,
           recommendingAuthorityId: values.recommendingAuthorityId,
-          verifiedByName: values.verifiedByName,
           submittedAt: now,
         })
         .returning();

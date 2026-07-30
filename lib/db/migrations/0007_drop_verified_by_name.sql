@@ -1,0 +1,1 @@
+ALTER TABLE "payment_advices" DROP COLUMN "verified_by_name";

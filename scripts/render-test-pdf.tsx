@@ -34,7 +34,7 @@ async function main() {
         beneficiaryName: "Acme Test Pvt Ltd",
         submittedByName: "Priya Sharma",
         recommendingAuthorityName: "Applied AI Studio — Mr. Test Head",
-        verifiedByName: "Anita Deshmukh",
+        verifiedBy: "Anita Deshmukh",
         sanctionedBy: "Chintamani Shrotri",
         submittedAt: "2026-07-28T10:15:00.000Z",
         approvedAt: "2026-07-30T09:00:00.000Z",

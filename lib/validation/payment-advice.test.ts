@@ -26,7 +26,6 @@ const baseCashSubmission = {
   submittedByEmail: "priya@example.com",
   submittedByDepartment: "Accounts",
   recommendingAuthorityId: "11111111-1111-4111-8111-111111111111",
-  verifiedByName: "Anita Deshmukh",
   payeeName: "Acme Supplies",
   payeeAddress: "Pune",
   billNo: "INV-1",

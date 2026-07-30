@@ -110,7 +110,6 @@ export const paymentAdviceFormSchema = z
     recommendingAuthorityId: z
       .string()
       .uuid("Select a recommending authority"),
-    verifiedByName: requiredTrimmed("Verifying officer's name is required"),
 
     // Section 2 — payee
     vendorId: z.string().uuid().optional(),

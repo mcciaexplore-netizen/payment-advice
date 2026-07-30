@@ -136,11 +136,6 @@ export const paymentAdvices = pgTable("payment_advices", {
   recommendingAuthorityId: uuid("recommending_authority_id")
     .references(() => recommendingAuthorities.id)
     .notNull(),
-  // Printed under "Verified by" on the footer signature box — collected
-  // upfront so the PDF is immediately downloadable and printable for
-  // physical signing, before admin approval. Not the same thing as
-  // `verifiedBy` below (Finance's admin-side verification stage).
-  verifiedByName: text("verified_by_name").notNull(),
 
   // Workflow
   submittedAt: timestamp("submitted_at", { withTimezone: true }).notNull(),

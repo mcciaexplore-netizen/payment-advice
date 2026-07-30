@@ -228,7 +228,6 @@ export async function POST(
           submittedByEmail: values.submittedByEmail,
           submittedByDepartment: values.submittedByDepartment,
           recommendingAuthorityId: values.recommendingAuthorityId,
-          verifiedByName: values.verifiedByName,
           status: "SUBMITTED",
           revisionCount: advice.revisionCount + 1,
           editToken: null,

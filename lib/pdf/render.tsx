@@ -40,7 +40,7 @@ export async function renderPaymentAdvicePdf(
         beneficiaryName: advice.beneficiaryName,
         submittedByName: advice.submittedByName,
         recommendingAuthorityName,
-        verifiedByName: advice.verifiedByName,
+        verifiedBy: advice.verifiedBy,
         sanctionedBy: advice.sanctionedBy,
         submittedAt: advice.submittedAt.toISOString(),
         approvedAt: advice.approvedAt ? advice.approvedAt.toISOString() : null,

@@ -27,10 +27,10 @@ export type PaymentAdvicePdfData = {
   beneficiaryName: string | null;
   submittedByName: string;
   recommendingAuthorityName: string;
-  verifiedByName: string;
-  // Admin-recorded once Finance sanctions this advice (see the Finance
-  // Verification + Sanctioning pipeline) — null/blank until then, same
-  // convention as every other signature line on this form.
+  // Both admin-recorded during the Finance Verification + Sanctioning
+  // pipeline — null/blank until that stage happens, same convention as
+  // every other signature line on this form.
+  verifiedBy: string | null;
   sanctionedBy: string | null;
   submittedAt: string; // ISO timestamp
   approvedAt: string | null; // ISO timestamp
@@ -269,7 +269,7 @@ export function PaymentAdviceDocument({ data }: { data: PaymentAdvicePdfData }) 
           </View>
           <View style={styles.footerCell}>
             <Text style={styles.footerLabel}>Verified by :</Text>
-            <Text style={styles.footerValue}>{data.verifiedByName}</Text>
+            <Text style={styles.footerValue}>{data.verifiedBy ?? ""}</Text>
             <Text style={styles.footerLine}>Date :</Text>
             <Text style={styles.footerLine}>Signature :</Text>
           </View>

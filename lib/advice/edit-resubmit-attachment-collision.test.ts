@@ -115,7 +115,6 @@ function buildFormData(taxInvoiceFileName: string) {
   fd.set("submittedByEmail", "priya@example.com");
   fd.set("submittedByDepartment", "Applied AI Studio");
   fd.set("recommendingAuthorityId", AUTHORITY_ID);
-  fd.set("verifiedByName", "Verifier Name");
   fd.set("payeeName", "Acme Supplies");
   fd.set("payeeAddress", "123 Test Street, Pune");
   fd.set("billNo", "INV-101");

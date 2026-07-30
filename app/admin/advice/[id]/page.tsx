@@ -176,7 +176,6 @@ export default async function AdviceDetailPage({
               label="Recommending Authority"
               value={`${authority?.authorityName ?? "—"}${authorityStatusSuffix(advice)}`}
             />
-            <Row label="Verified By (on form)" value={advice.verifiedByName} />
           </Section>
 
           <Section title="Finance Pipeline">

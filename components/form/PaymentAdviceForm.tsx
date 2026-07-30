@@ -236,14 +236,6 @@ export function PaymentAdviceForm({
               />
             </Field>
           </div>
-          <Field
-            label="Verified By"
-            required
-            error={errors.verifiedByName?.message}
-            help="Name of the person who will verify this payment before it's sanctioned."
-          >
-            <Input hasError={!!errors.verifiedByName} {...register("verifiedByName")} />
-          </Field>
         </div>
       </Section>
 
