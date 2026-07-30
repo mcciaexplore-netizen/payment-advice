@@ -47,7 +47,7 @@ Design system: Navy `#0B1F3A`, Forest green `#2E8B57`, Amber `#E8A33D`. Headings
 
 ## 3. Current State (update this every session)
 
-**Last updated:** 30 July 2026, by Claude Code (Staff/Authority Roster + Vendor Import)
+**Last updated:** 30 July 2026, by Codex (email template preparation)
 
 ### Shipped — Phase 1 baseline (Claude Code)
 - Public form `/` (no login): submitter, payee (vendor typeahead), bill/reference, payment mode (NEFT/Cash), enclosures, mandatory Tax Invoice + Approval/Budget PDF attachments
@@ -84,7 +84,12 @@ Design system: Navy `#0B1F3A`, Forest green `#2E8B57`, Amber `#E8A33D`. Headings
   - This component also reverse-derives the correct radio/Other state from an already-set `recommendingAuthorityId` on mount, so the `/edit/[token]` resubmit flow doesn't silently overwrite a previously-chosen authority with the fresh-submission default.
 - New admin page `/admin/staff` (replaces the deleted standalone `/admin/authorities`) — one page, per the spec: Recommending Authorities list + inline "New Authority" form, and Staff Members list (shows assigned authorities) + `/admin/staff/new` and `/admin/staff/[id]` for full create/edit including authority (re)assignment (full replace on save, not a diff).
 - New routes: `GET /api/staff/search` (public), `POST /api/admin/staff`, `PATCH /api/admin/staff/[id]` (also handles the `{isActive}`-only toggle — had to use a **standalone** Zod schema for that, not `.pick()` off `staffMemberFormSchema`, since Zod rejects `.pick()`/`.omit()` on a schema with `.superRefine()` attached — this broke at runtime, not compile time, and was only caught by live-testing the toggle button, not by tsc/eslint).
-- Vendor typeahead behavior itself is unchanged — confirmed still auto-fills name-only correctly against the 660 newly imported real vendor rows.
+  - Vendor typeahead behavior itself is unchanged — confirmed still auto-fills name-only correctly against the 660 newly imported real vendor rows.
+
+### Shipped — Email template preparation (Codex, 2026-07-30)
+- Added `lib/email/templates.ts`: typed, pure HTML render functions for authority-approval, sent-back, and submission-confirmation messages. Dynamic values are HTML-escaped; the Cash Voucher download button is omitted unless a Cash PDF link is supplied.
+- Added `lib/email/notify.ts` as the single future mail-provider integration point. It currently logs labelled development previews only; it does not send email or require any email-provider SDK/configuration.
+- Wired preview-only notifications into new submission creation and the existing Admin send-back action. `notifyAuthorityApproval()` is exported and ready, but intentionally has no call site — **the Approval Workflow feature (authority token/link route, approve/reject page, `authority_approved_at`/`authority_rejected_at`/`authority_remarks` columns, admin queue split) has never been built in this repo at all.** It is not "unmerged" or sitting on another branch — see the 2026-07-30 investigation entry below for how this was confirmed.
 
 ## 4. Open Items (verify before building on top of these)
 
@@ -98,6 +103,7 @@ Status legend: 🔴 unverified / high risk · 🟡 unverified / lower risk · �
 - ⬜ **Undecided (needs human decision):** should a "Verified by" field exist on the Cash Voucher? Paper form didn't have it — only the Payment Advice has that 4th signature box. Currently left off.
 - 🟡 **`StaffNameTypeahead` and `RecommendingAuthorityField`'s interactive browser behavior (debounce, suggestion-click, exact-match-while-typing, radio auto-select) was NOT tested in an actual browser** — this session has no browser automation available. What *was* verified: `GET /api/staff/search` returns exactly the right shape/data for 4 real edge cases (1-option match, 2-option match, 0-option match, no match), full `tsc`/`eslint` pass, and a full real submission driven through `/api/submit` with a pre-resolved `recommendingAuthorityId` (i.e. the API/data layer end-to-end, not the React interaction layer). If a human or a future agent can drive an actual browser, exercising the typeahead dropdown, "Other" radio, and the free-text authority suggestions by hand would close this out.
 - 🟡 Excel export's Recommending Authority column with real populated rows — see the entry above.
+- 🟡 **Authority approval and authority send-back email previews have no call site because the Approval Workflow feature does not exist yet — it has never been built, not "unmerged" elsewhere.** `notifyAuthorityApproval()` and the shared sent-back template are ready in `lib/email/notify.ts`, but the authority token/link route, the authority approve/reject page, the `authority_approved_at`/`authority_rejected_at`/`authority_remarks` schema columns, and the admin queue split do not exist anywhere in this repo (confirmed 2026-07-30 — see session log: not in git history/branches, not in the live Neon schema, not in any source file, not sitting uncommitted locally). Do not stub call sites here. Whoever builds that feature should design and wire these email hooks as part of that work.
 
 ## 5. Do Not Touch Without Asking
 
@@ -115,6 +121,36 @@ Status legend: 🔴 unverified / high risk · 🟡 unverified / lower risk · �
 Append one entry per session, newest at the top. Keep entries short — this is a changelog, not a diary.
 
 ```
+2026-07-30 — Claude Code — Investigated the "Approval Workflow" feature
+(authority-facing approval token/link, `authority_approved_at`/
+`authority_rejected_at`/`authority_remarks` columns, authority approve/reject
+page, admin queue split into "Waiting on Authority"/"Ready for Finance") at
+the human's request, after a prior handoff note described it as "unmerged."
+Confirmed it was **never built anywhere** — not a merge/sync gap. Checked
+four ways: (1) `git log --oneline -20` and `git branch -a` — 10 commits
+total, all on `main`, no other local or remote branches, nothing dangling;
+(2) live Neon schema via `psql \d payment_advices` — no such columns exist;
+(3) full source search — no authority token route, no approve/reject page,
+no queue-split logic anywhere; (4) `git status`/`git diff` — the only
+uncommitted local work was Codex's unrelated email-template-preparation
+session, which merely *references* this feature as a documented future
+dependency, not an implementation of it. Corrected the misleading "unmerged"
+language in §3 and §4 (previously implied the code existed somewhere but
+hadn't landed) to state plainly that the feature has not been built. Docs-
+only change — no code, schema, or route touched.
+
+2026-07-30 — Codex — Added provider-free email preparation from the three
+supplied HTML designs: typed, escaped render functions in
+`lib/email/templates.ts`, plus preview-only notification wrappers in
+`lib/email/notify.ts`. Wired only the currently available call sites:
+submission confirmation and existing Admin send-back (`sentBackBy: "Admin"`).
+Authority approval is deliberately exported but uncalled because its Approval
+Workflow route has not landed; authority send-back is likewise recorded as an
+open item. No provider SDK, API key, queue, retry, or delivery tracking was
+added. Added template coverage (subjects, full substitution, HTML escaping,
+Cash button omission/inclusion). `tsc`, ESLint, Vitest (17 passed, 2
+pre-existing DB integration tests skipped), and production build all passed.
+
 2026-07-30 — Claude Code — Staff/Authority Roster + Vendor Import, per
 Staff_Authority_Vendor_Import_ClaudeCode_Prompt.md (repo root). Full
 scope: §1 schema migration, §2 staff/authority import, §3 vendor
