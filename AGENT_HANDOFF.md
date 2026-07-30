@@ -47,7 +47,7 @@ Design system: Navy `#0B1F3A`, Forest green `#2E8B57`, Amber `#E8A33D`. Headings
 
 ## 3. Current State (update this every session)
 
-**Last updated:** 30 July 2026, by Codex (email template preparation)
+**Last updated:** 30 July 2026, by Claude Code (Approval Workflow)
 
 ### Shipped — Phase 1 baseline (Claude Code)
 - Public form `/` (no login): submitter, payee (vendor typeahead), bill/reference, payment mode (NEFT/Cash), enclosures, mandatory Tax Invoice + Approval/Budget PDF attachments
@@ -89,7 +89,20 @@ Design system: Navy `#0B1F3A`, Forest green `#2E8B57`, Amber `#E8A33D`. Headings
 ### Shipped — Email template preparation (Codex, 2026-07-30)
 - Added `lib/email/templates.ts`: typed, pure HTML render functions for authority-approval, sent-back, and submission-confirmation messages. Dynamic values are HTML-escaped; the Cash Voucher download button is omitted unless a Cash PDF link is supplied.
 - Added `lib/email/notify.ts` as the single future mail-provider integration point. It currently logs labelled development previews only; it does not send email or require any email-provider SDK/configuration.
-- Wired preview-only notifications into new submission creation and the existing Admin send-back action. `notifyAuthorityApproval()` is exported and ready, but intentionally has no call site — **the Approval Workflow feature (authority token/link route, approve/reject page, `authority_approved_at`/`authority_rejected_at`/`authority_remarks` columns, admin queue split) has never been built in this repo at all.** It is not "unmerged" or sitting on another branch — see the 2026-07-30 investigation entry below for how this was confirmed.
+- Wired preview-only notifications into new submission creation and the existing Admin send-back action. `notifyAuthorityApproval()` was exported but had no call site at the time — **the Approval Workflow feature it belongs to did not exist yet; it was built later the same day, see below.**
+
+### Shipped — Approval Workflow (Claude Code, 2026-07-30)
+The Recommending Authority is no longer purely informational — the specific authority chosen on the form must now actually approve (or reject) before Admin can approve. Admin's role is now verification (confirm authority sign-off, then download/proceed), not primary approval.
+- Schema (migration `0004_giant_starjammers.sql`, all nullable, no new status enum value): `payment_advices.authority_approved_at` / `authority_rejected_at` / `authority_remarks` / `authority_token` (unique) / `authority_token_expires_at`. **"Waiting on Authority" vs "Ready for Finance" is derived from `status = 'SUBMITTED'` + `authority_approved_at` being null/set — not a new status value** (chose derived state over a new enum value to avoid a second place that can drift out of sync with `status`).
+- `authority_token` deliberately behaves differently from `edit_token`: it is generated in `lib/advice/authority-token.ts` with a **90-day TTL** (vs edit_token's 14 days — an authority link with no reminder/resend mechanism dying early would strand the whole payment) and is **not single-use/nulled after action** (unlike edit_token) — the same link stays valid so reopening it after acting shows a read-only "already approved/sent back" banner instead of "link invalid." Reissued fresh (new token, authority fields reset to null) on every resubmission via `/api/edit/[token]`, since a changed submission needs fresh authority review regardless of who sent it back.
+- New public, token-gated route `/authority-approval/[token]` (mirrors `/edit/[token]`'s structure) — read-only fields, links to Tax Invoice/Approval-Budget attachments only (`/api/authority-approval/[token]/attachments/[attachmentId]`, doc-type-restricted), Approve / Send Back with required remarks. Exact copy per the brief. Already-actioned reopens show a read-only banner instead of the form.
+- New routes `POST /api/authority-approval/[token]/approve` and `.../reject` — double-action and expiry guarded by the shared `authorityActionError()` helper. Reject reuses the **same** send-back/edit-token logic Admin's send-back uses — extracted into `lib/advice/send-back.ts` (`performSendBack()`), now called by both the admin route and the authority route, parameterized by `actor` so the audit log and the `/edit/[token]` share-box UI can show who (Admin or the named Authority) triggered a given SENT_BACK cycle.
+- `POST /api/admin/advice/[id]/approve` now 409s with "Awaiting Recommending Authority approval before Admin can approve." if `authority_approved_at` is null — enforced server-side, not just hidden in the UI. Chose to **hide** the Approve button/panel (not disable it) in `AdviceActions` while pending, replaced with an amber "waiting on {authority}" box + the copy-link action; once approved, a green "Approved by {authority} on {date}" box appears and the Approve button returns.
+- Admin queue (`/admin`) split into 3 tabs via a `tab` query param layered on top of the existing filters (`lib/admin/filters.ts`'s `buildTabCondition`): **Waiting on Authority** (default) and **Ready for Finance** both imply `status = 'SUBMITTED'`; **All** is the original unfiltered list, kept so SENT_BACK/APPROVED entries stay reachable. Tab badges show live counts.
+- "Copy link to share with {authority}" added to the admin detail view (`AdviceActions`) and the submitter's `/submitted/[serial]` confirmation screen (via `lib/submission-summary.ts` → now also carries `authorityToken`/`authorityName` through the sessionStorage handoff, same enumeration-safety pattern as the rest of that page).
+- `notifyAuthorityApproval()` now fires at submission and at every resubmission (both call sites generate the link at the same point); `notifySentBack()` now also fires on authority rejection with `sentBackBy` set to the authority's name (previously only fired for Admin's own send-back).
+- Verified live end-to-end against the real dev server + real Neon DB (not just unit tests): submit → authority link generated + email preview logged → Admin approve blocked 409 → authority approves via the link → double-open shows the read-only baned banner + 409 on re-POST → Admin approve now succeeds → separate submission → authority rejects with remarks → status flips to SENT_BACK, `authority_remarks` set, sent-back email preview logged with the authority's name → resubmit via the edit token → authority fields reset to null and a **new** `authority_token` issued + a fresh approval email logged → admin queue tab counts correctly reflect all of the above (`waiting_authority`/`ready_finance` counts move as advices change state; SENT_BACK entries drop out of both narrow tabs and stay reachable only under "All"). Test rows created for this were deleted afterward.
+- **Discovered, did not fix (pre-existing, unrelated to this feature):** `/api/edit/[token]`'s attachment re-upload uses a deterministic Blob pathname (`advices/{serialNo}/{docType}-{fileName}`) with no `allowOverwrite`/`addRandomSuffix` — resubmitting with a **same-named** replacement file 500s with "This blob already exists." Hit this by accident during live verification (used an identical test filename across submit + resubmit). Not part of this task's scope; flagged as an open item below.
 
 ## 4. Open Items (verify before building on top of these)
 
@@ -102,8 +115,11 @@ Status legend: 🔴 unverified / high risk · 🟡 unverified / lower risk · �
 - ⬜ **Undecided (needs human decision, not an agent decision):** should an "Expenditure Breakdown" column be added to the Excel export? Currently declined.
 - ⬜ **Undecided (needs human decision):** should a "Verified by" field exist on the Cash Voucher? Paper form didn't have it — only the Payment Advice has that 4th signature box. Currently left off.
 - 🟡 **`StaffNameTypeahead` and `RecommendingAuthorityField`'s interactive browser behavior (debounce, suggestion-click, exact-match-while-typing, radio auto-select) was NOT tested in an actual browser** — this session has no browser automation available. What *was* verified: `GET /api/staff/search` returns exactly the right shape/data for 4 real edge cases (1-option match, 2-option match, 0-option match, no match), full `tsc`/`eslint` pass, and a full real submission driven through `/api/submit` with a pre-resolved `recommendingAuthorityId` (i.e. the API/data layer end-to-end, not the React interaction layer). If a human or a future agent can drive an actual browser, exercising the typeahead dropdown, "Other" radio, and the free-text authority suggestions by hand would close this out.
-- 🟡 Excel export's Recommending Authority column with real populated rows — see the entry above.
-- 🟡 **Authority approval and authority send-back email previews have no call site because the Approval Workflow feature does not exist yet — it has never been built, not "unmerged" elsewhere.** `notifyAuthorityApproval()` and the shared sent-back template are ready in `lib/email/notify.ts`, but the authority token/link route, the authority approve/reject page, the `authority_approved_at`/`authority_rejected_at`/`authority_remarks` schema columns, and the admin queue split do not exist anywhere in this repo (confirmed 2026-07-30 — see session log: not in git history/branches, not in the live Neon schema, not in any source file, not sitting uncommitted locally). Do not stub call sites here. Whoever builds that feature should design and wire these email hooks as part of that work.
+- 🟡 Excel export's Recommending Authority column with real populated rows — see the entry above. Not re-checked against the Approval Workflow columns either (Excel export's column list was intentionally left untouched this session — new authority columns are not exported; confirm with the human whether Finance wants them before adding).
+- 🟢 **Approval Workflow feature (Recommending Authority approve/reject gate) shipped and verified live end-to-end 2026-07-30 by Claude Code** — see the "Shipped" entry above for full detail and the exact verification steps performed against the real dev server + real Neon DB.
+- 🔴 **Pre-existing bug, not introduced this session, not fixed:** `/api/edit/[token]` resubmit 500s if a replacement attachment file has the **same filename** as the one it's replacing (deterministic Blob pathname collision, no `allowOverwrite`/`addRandomSuffix` on that route's `put()` calls). Reproducible outside the Approval Workflow entirely — any admin- or authority-triggered send-back followed by a same-filename resubmit hits it. Needs a fix (likely `addRandomSuffix: true` on that specific `put()` call) but was out of scope for this session; flagging rather than silently patching an unrelated route.
+- 🟡 **`AuthorityApprovalView`'s interactive browser behavior (Approve/Send Back buttons, remarks textarea, already-actioned banner) was NOT tested in an actual browser** — verified via direct API calls (`curl`) against the real dev server + real DB, and the page's server-rendered HTML was inspected, but no browser automation was available this session. The API/data layer is confirmed correct end-to-end; the React interaction layer (button state transitions, error display) is not.
+- 🟡 **Admin queue tab UI (`TabLink`, badge counts) was verified via rendered HTML inspection, not a live click-through in a browser** — confirmed the counts and `?tab=` links are correct by fetching each tab's URL directly and checking which serial numbers appear, but did not visually confirm the active-tab styling or manually click through page transitions.
 
 ## 5. Do Not Touch Without Asking
 
@@ -115,12 +131,44 @@ Status legend: 🔴 unverified / high risk · 🟡 unverified / lower risk · �
 - **"Other" Recommending Authority resolution never auto-creates a `recommending_authorities` row.** Human explicitly chose "block submission, ask them to contact Admin" over auto-create, to keep the authority list curated (same philosophy as vendors: only Admin creates them). Don't add auto-create behavior here without asking first.
 - **`scripts/import-master-data.ts`'s dedupe logic** (case-insensitive staff/authority name matching, `onConflictDoUpdate` on `staff_authority_options`) — this is intentionally *additive-only*; it does not delete or resync a staff member's authority links that existed before but are absent from a later import run. Don't add delete/sync behavior without asking — that's a bigger, riskier change (could silently strip a manually-assigned authority the next time MCCIA sends an updated sheet).
 - The 51-vs-52 staff count and the "Pratik Pardeshi has zero authority options" state are both intentional, human-confirmed outcomes of real source-data quirks (an exact duplicate row, and a row with no "Recommended by" value) — not import bugs. See the 2026-07-30 session log entry before assuming either needs fixing.
+- **"Waiting on Authority" / "Ready for Finance" are derived from `authority_approved_at`, not a new status enum value** — this was a deliberate choice (see the Approval Workflow entry above) to avoid a second piece of state that can drift out of sync with `status`. Don't add a `PENDING_AUTHORITY` status value without checking every place `status` is filtered/branched on first (admin list, `StatusChip`, `/edit/[token]` validity check, etc.).
+- **`authority_token` is intentionally not single-use** (unlike `edit_token`, which is nulled after resubmit) and has a **90-day** TTL, not 14 — both differences are deliberate, not inconsistency with the edit-token pattern. See the Approval Workflow entry above for why. Don't "fix" these to match edit_token without asking.
+- **`lib/advice/send-back.ts`'s `performSendBack()` is now shared by Admin's send-back and the Authority's reject action.** Both routes depend on its exact behavior (sets `status`/`sentBackAt`/`adminRemarks`/`editToken` always; sets `authorityRejectedAt`/`authorityRemarks` only when `authorityRejection: true`). Don't fork it back into two copies or change its default (non-authority) behavior without checking both call sites.
 
 ## 6. Session Log
 
 Append one entry per session, newest at the top. Keep entries short — this is a changelog, not a diary.
 
 ```
+2026-07-30 — Claude Code — Built the Approval Workflow feature (Recommending
+Authority must approve/reject before Admin can approve), per the human's
+brief. Full scope: schema migration `0004_giant_starjammers.sql` (5 nullable
+authority_* columns on payment_advices, no new status enum value); shared
+`lib/advice/send-back.ts` extracted from Admin's existing send-back route so
+Authority reject reuses the identical edit-token flow; `lib/advice/
+authority-token.ts` (90-day TTL, not single-use — see §5); new public
+`/authority-approval/[token]` page + 3 API routes (approve/reject/attachment
+view); admin approve route gated 409 until authority_approved_at is set;
+AdviceActions relabeled (hides Approve, shows waiting/approved status +
+copy-link) rather than just disabling the button; admin queue split into
+Waiting on Authority / Ready for Finance / All tabs; copy-link added to both
+the admin detail view and the submitter's /submitted/[serial] screen;
+notifyAuthorityApproval()/notifySentBack() wired at submit, resubmit, and
+authority-reject. 10 new/updated test files, 42 tests passing (unit tests for
+the token helper, the migration SQL, tab-condition logic, and both new
+routes' double-action/expiry guards — full transactional success paths for
+submit/resubmit were verified live against the real dev server + real Neon
+DB instead of mocked, since this repo has no existing convention for mocking
+db.transaction and inventing one risked a brittle test). Full live
+verification: submit → approve blocked pre-authority → authority approves →
+double-open shows read-only banner + 409 on reuse → admin approve now
+succeeds; separate submission → authority rejects with remarks → SENT_BACK →
+resubmit → authority fields reset + fresh token issued + new approval email
+logged; queue tab counts confirmed correct throughout. Test rows deleted
+after verification. Found but did NOT fix a pre-existing, unrelated bug in
+/api/edit/[token]'s attachment re-upload (same-filename Blob collision) —
+see §4. `tsc`, ESLint, Vitest, and production build all pass.
+
 2026-07-30 — Claude Code — Investigated the "Approval Workflow" feature
 (authority-facing approval token/link, `authority_approved_at`/
 `authority_rejected_at`/`authority_remarks` columns, authority approve/reject

@@ -10,14 +10,31 @@ export function AdviceActions({
   initialBillPassedFor,
   initialEditToken,
   paymentMode,
+  authorityToken,
+  authorityName,
+  authorityApprovedAt,
+  authorityRejectedAt,
 }: {
   adviceId: string;
   status: Status;
   initialBillPassedFor: string | null;
   initialEditToken: string | null;
   paymentMode: "NEFT" | "CASH";
+  authorityToken: string | null;
+  authorityName: string;
+  authorityApprovedAt: string | null;
+  authorityRejectedAt: string | null;
 }) {
   const router = useRouter();
+  const [authorityLinkCopied, setAuthorityLinkCopied] = useState(false);
+
+  function copyAuthorityLink() {
+    if (!authorityToken) return;
+    const url = `${window.location.origin}/authority-approval/${authorityToken}`;
+    navigator.clipboard.writeText(url);
+    setAuthorityLinkCopied(true);
+    setTimeout(() => setAuthorityLinkCopied(false), 2000);
+  }
 
   const [billPassedFor, setBillPassedFor] = useState(initialBillPassedFor ?? "");
   const [savingBillPassedFor, setSavingBillPassedFor] = useState(false);
@@ -178,7 +195,8 @@ export function AdviceActions({
       {editToken ? (
         <div className="rounded-md bg-gray-50 p-3 text-sm">
           <p className="mb-2 text-gray-700">
-            This entry was sent back. Share the edit link with the submitter.
+            This entry was sent back{authorityRejectedAt ? ` by ${authorityName}` : ""}. Share
+            the edit link with the submitter.
           </p>
           <button
             type="button"
@@ -190,17 +208,47 @@ export function AdviceActions({
         </div>
       ) : null}
 
+      {authorityApprovedAt ? (
+        <div className="rounded-md border border-[#2e8b57]/30 bg-[#2e8b57]/5 p-3 text-sm text-[#1e5c39]">
+          Approved by {authorityName} on{" "}
+          {new Date(authorityApprovedAt).toLocaleDateString("en-IN", {
+            day: "2-digit",
+            month: "2-digit",
+            year: "numeric",
+          })}
+          .
+        </div>
+      ) : (
+        <div className="flex flex-col gap-2 rounded-md border border-[#e8a33d]/40 bg-[#e8a33d]/10 p-3 text-sm text-[#8a5a12]">
+          <p>
+            Waiting on <span className="font-medium">{authorityName}</span> (Recommending
+            Authority) to approve before Admin can approve.
+          </p>
+          {authorityToken ? (
+            <button
+              type="button"
+              onClick={copyAuthorityLink}
+              className="w-fit rounded-md border border-[#8a5a12]/30 px-3 py-1.5 hover:bg-[#e8a33d]/10"
+            >
+              {authorityLinkCopied ? "Copied!" : `Copy link to share with ${authorityName}`}
+            </button>
+          ) : null}
+        </div>
+      )}
+
       <div className="flex gap-3">
-        <button
-          type="button"
-          onClick={() => {
-            setShowApprove((v) => !v);
-            setShowSendBack(false);
-          }}
-          className="rounded-md bg-[#2e8b57] px-4 py-2 text-sm font-medium text-white hover:bg-[#2e8b57]/90"
-        >
-          Approve
-        </button>
+        {authorityApprovedAt ? (
+          <button
+            type="button"
+            onClick={() => {
+              setShowApprove((v) => !v);
+              setShowSendBack(false);
+            }}
+            className="rounded-md bg-[#2e8b57] px-4 py-2 text-sm font-medium text-white hover:bg-[#2e8b57]/90"
+          >
+            Approve
+          </button>
+        ) : null}
         <button
           type="button"
           onClick={() => {

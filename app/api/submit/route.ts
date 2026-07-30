@@ -3,7 +3,8 @@ import { put, del } from "@vercel/blob";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { paymentAdvices, attachments, auditLog, cashVoucherItems, recommendingAuthorities } from "@/lib/db/schema";
-import { notifySubmissionConfirmation } from "@/lib/email/notify";
+import { notifyAuthorityApproval, notifySubmissionConfirmation } from "@/lib/email/notify";
+import { generateAuthorityToken } from "@/lib/advice/authority-token";
 import { allocateSerialNumber } from "@/lib/serial";
 import { parsePaymentAdviceFormData } from "@/lib/form-data";
 import {
@@ -133,6 +134,8 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    const { token: authorityToken, expiresAt: authorityTokenExpiresAt } = generateAuthorityToken();
+
     const adviceId = await db.transaction(async (tx) => {
       const [advice] = await tx
         .insert(paymentAdvices)
@@ -140,6 +143,8 @@ export async function POST(req: NextRequest) {
           serialNo,
           financialYear,
           status: "SUBMITTED",
+          authorityToken,
+          authorityTokenExpiresAt,
           formDate: values.formDate,
           vendorId: values.vendorId ?? null,
           payeeName: values.payeeName,
@@ -215,9 +220,10 @@ export async function POST(req: NextRequest) {
       .where(eq(recommendingAuthorities.id, values.recommendingAuthorityId))
       .limit(1);
     const origin = new URL(req.url).origin;
+    const authorityName = authority?.authorityName ?? "MCCIA Finance & Accounts";
     notifySubmissionConfirmation({
       serialNo,
-      authorityName: authority?.authorityName ?? "MCCIA Finance & Accounts",
+      authorityName,
       submittedByName: values.submittedByName,
       payeeName: values.payeeName,
       amount: values.amount.toLocaleString("en-IN", { minimumFractionDigits: 2 }),
@@ -229,8 +235,23 @@ export async function POST(req: NextRequest) {
           ? `${origin}/api/advice/${adviceId}/cash-voucher-pdf`
           : undefined,
     });
+    notifyAuthorityApproval({
+      serialNo,
+      authorityName,
+      submittedByName: values.submittedByName,
+      payeeName: values.payeeName,
+      amount: values.amount.toLocaleString("en-IN", { minimumFractionDigits: 2 }),
+      natureOfExpenditure:
+        values.paymentMode === "CASH"
+          ? values.cashVoucherItems.map((item) => item.description).join("; ")
+          : values.natureOfExpenditure ?? "",
+      billReference: values.billNo,
+      paymentMode: values.paymentMode,
+      formDate: values.formDate,
+      approvalLink: `${origin}/authority-approval/${authorityToken}`,
+    });
 
-    return NextResponse.json({ serialNo, id: adviceId });
+    return NextResponse.json({ serialNo, id: adviceId, authorityToken, authorityName });
   } catch (err) {
     console.error("Submit failed after blob upload, cleaning up", err);
     await Promise.allSettled(uploadedPathnames.map((p) => del(p)));

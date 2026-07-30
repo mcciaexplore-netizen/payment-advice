@@ -1,6 +1,6 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
+import { useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import {
@@ -19,6 +19,15 @@ export default function SubmittedPage() {
     () => readSubmissionSummary(serial),
     getServerSnapshot,
   );
+  const [copied, setCopied] = useState(false);
+
+  function copyAuthorityLink() {
+    if (!summary) return;
+    const url = `${window.location.origin}/authority-approval/${summary.authorityToken}`;
+    navigator.clipboard.writeText(url);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
 
   return (
     <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-8 px-6 py-16">
@@ -69,6 +78,24 @@ export default function SubmittedPage() {
               Download Cash Payment Voucher
             </a>
           ) : null}
+        </div>
+      ) : null}
+
+      {summary ? (
+        <div className="flex justify-center">
+          <div className="flex flex-col items-center gap-2 rounded-md border border-[#e8a33d]/40 bg-[#e8a33d]/10 px-4 py-3 text-center text-sm text-[#8a5a12]">
+            <p>
+              Share this link with <span className="font-medium">{summary.authorityName}</span>{" "}
+              so they can review and approve this Payment Advice.
+            </p>
+            <button
+              type="button"
+              onClick={copyAuthorityLink}
+              className="rounded-md border border-[#8a5a12]/30 px-4 py-1.5 font-medium hover:bg-[#e8a33d]/10"
+            >
+              {copied ? "Copied!" : `Copy link to share with ${summary.authorityName}`}
+            </button>
+          </div>
         </div>
       ) : null}
 

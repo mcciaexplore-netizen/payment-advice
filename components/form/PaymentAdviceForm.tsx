@@ -166,6 +166,8 @@ export function PaymentAdviceForm({
           values.paymentMode === "CASH"
             ? values.cashVoucherItems.map((item) => item.description).join("; ")
             : values.natureOfExpenditure ?? "",
+        authorityToken: data.authorityToken,
+        authorityName: data.authorityName,
       });
       router.push(`/submitted/${encodeURIComponent(data.serialNo)}`);
     } catch {

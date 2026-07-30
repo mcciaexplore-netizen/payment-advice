@@ -17,7 +17,12 @@ export async function POST(
   const { id } = await params;
 
   const [advice] = await db
-    .select({ status: paymentAdvices.status, amount: paymentAdvices.amount, billPassedFor: paymentAdvices.billPassedFor })
+    .select({
+      status: paymentAdvices.status,
+      amount: paymentAdvices.amount,
+      billPassedFor: paymentAdvices.billPassedFor,
+      authorityApprovedAt: paymentAdvices.authorityApprovedAt,
+    })
     .from(paymentAdvices)
     .where(eq(paymentAdvices.id, id))
     .limit(1);
@@ -26,6 +31,12 @@ export async function POST(
   }
   if (advice.status === "APPROVED") {
     return NextResponse.json({ error: "Already approved." }, { status: 409 });
+  }
+  if (!advice.authorityApprovedAt) {
+    return NextResponse.json(
+      { error: "Awaiting Recommending Authority approval before Admin can approve." },
+      { status: 409 },
+    );
   }
 
   const body = await req.json().catch(() => null);

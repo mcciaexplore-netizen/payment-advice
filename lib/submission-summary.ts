@@ -16,6 +16,8 @@ export type SubmissionSummary = {
   submittedByName: string;
   submittedByDepartment: string;
   natureOfExpenditure: string;
+  authorityToken: string;
+  authorityName: string;
 };
 
 function storageKey(serialNo: string) {

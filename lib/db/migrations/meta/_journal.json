@@ -29,6 +29,13 @@
       "when": 1785348531682,
       "tag": "0003_staff_authority_roster",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1785393643704,
+      "tag": "0004_giant_starjammers",
+      "breakpoints": true
     }
   ]
 }

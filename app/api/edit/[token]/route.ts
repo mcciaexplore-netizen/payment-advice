@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { and, eq } from "drizzle-orm";
 import { put, del } from "@vercel/blob";
 import { db } from "@/lib/db";
-import { paymentAdvices, attachments, auditLog, cashVoucherItems } from "@/lib/db/schema";
+import { paymentAdvices, attachments, auditLog, cashVoucherItems, recommendingAuthorities } from "@/lib/db/schema";
+import { notifyAuthorityApproval } from "@/lib/email/notify";
+import { generateAuthorityToken } from "@/lib/advice/authority-token";
 import { parsePaymentAdviceFormData } from "@/lib/form-data";
 import {
   paymentAdviceFormSchema,
@@ -167,12 +169,22 @@ export async function POST(
 
     const now = new Date();
     const oldBlobPathnamesToDelete: string[] = [];
+    const { token: authorityToken, expiresAt: authorityTokenExpiresAt } = generateAuthorityToken();
 
     await db.transaction(async (tx) => {
       await tx
         .update(paymentAdvices)
         .set({
           formDate: values.formDate,
+          // A resubmission is a materially new submission — the Authority's
+          // prior approve/reject decision no longer applies, and a fresh
+          // token is issued so an already-actioned link can't be reused to
+          // silently reopen the old decision on the new content.
+          authorityApprovedAt: null,
+          authorityRejectedAt: null,
+          authorityRemarks: null,
+          authorityToken,
+          authorityTokenExpiresAt,
           vendorId: values.vendorId ?? null,
           payeeName: values.payeeName,
           payeeAddress: values.payeeAddress,
@@ -260,7 +272,35 @@ export async function POST(
 
     await Promise.allSettled(oldBlobPathnamesToDelete.map((p) => del(p)));
 
-    return NextResponse.json({ serialNo: advice.serialNo, id: advice.id });
+    const [authority] = await db
+      .select({ authorityName: recommendingAuthorities.authorityName })
+      .from(recommendingAuthorities)
+      .where(eq(recommendingAuthorities.id, values.recommendingAuthorityId))
+      .limit(1);
+    const origin = new URL(req.url).origin;
+    const authorityName = authority?.authorityName ?? "MCCIA Finance & Accounts";
+    notifyAuthorityApproval({
+      serialNo: advice.serialNo,
+      authorityName,
+      submittedByName: values.submittedByName,
+      payeeName: values.payeeName,
+      amount: values.amount.toLocaleString("en-IN", { minimumFractionDigits: 2 }),
+      natureOfExpenditure:
+        values.paymentMode === "CASH"
+          ? values.cashVoucherItems.map((item) => item.description).join("; ")
+          : values.natureOfExpenditure ?? "",
+      billReference: values.billNo,
+      paymentMode: values.paymentMode,
+      formDate: values.formDate,
+      approvalLink: `${origin}/authority-approval/${authorityToken}`,
+    });
+
+    return NextResponse.json({
+      serialNo: advice.serialNo,
+      id: advice.id,
+      authorityToken,
+      authorityName,
+    });
   } catch (err) {
     console.error("Resubmit failed after blob upload, cleaning up", err);
     await Promise.allSettled(uploadedPathnames.map((p) => del(p)));

@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gte, ilike, lte, or, SQL } from "drizzle-orm";
+import { and, asc, desc, eq, gte, ilike, isNotNull, isNull, lte, or, SQL } from "drizzle-orm";
 import { paymentAdvices } from "@/lib/db/schema";
 import { statusSchema, paymentModeSchema } from "@/lib/validation/payment-advice";
 
@@ -95,3 +95,30 @@ export function buildOrderBy(sort?: string, dir?: string) {
 }
 
 export const ADMIN_LIST_PAGE_SIZE = 25;
+
+/**
+ * Splits the queue by Recommending Authority sign-off, layered on top of
+ * the existing filters — not a replacement for them. "waiting_authority"
+ * and "ready_finance" both imply status SUBMITTED (a SENT_BACK or APPROVED
+ * entry belongs in neither); "all" imposes no extra condition, matching the
+ * full unfiltered list this page showed before the Approval Workflow.
+ */
+export const ADMIN_TABS = ["waiting_authority", "ready_finance", "all"] as const;
+export type AdminTab = (typeof ADMIN_TABS)[number];
+
+export function isAdminTab(value: string | null | undefined): value is AdminTab {
+  return !!value && (ADMIN_TABS as readonly string[]).includes(value);
+}
+
+export function buildTabCondition(tab: AdminTab): SQL | undefined {
+  if (tab === "waiting_authority") {
+    return and(eq(paymentAdvices.status, "SUBMITTED"), isNull(paymentAdvices.authorityApprovedAt));
+  }
+  if (tab === "ready_finance") {
+    return and(
+      eq(paymentAdvices.status, "SUBMITTED"),
+      isNotNull(paymentAdvices.authorityApprovedAt),
+    );
+  }
+  return undefined;
+}

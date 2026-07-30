@@ -219,6 +219,10 @@ export const sendBackSchema = z.object({
   adminRemarks: requiredTrimmed("Remarks are required to send an entry back"),
 });
 
+export const authorityRejectSchema = z.object({
+  remarks: requiredTrimmed("Remarks are required to send this back to the submitter"),
+});
+
 export const approveSchema = z.object({
   approvedByName: requiredTrimmed("Approving officer's name is required"),
   billPassedFor: z.number().positive("Bill passed for Rs. is required"),

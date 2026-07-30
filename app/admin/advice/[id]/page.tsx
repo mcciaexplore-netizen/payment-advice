@@ -48,6 +48,19 @@ function formatBytes(bytes: number) {
   return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
 }
 
+function authorityStatusSuffix(advice: {
+  authorityApprovedAt: Date | null;
+  authorityRejectedAt: Date | null;
+}) {
+  if (advice.authorityApprovedAt) {
+    return ` · Approved ${formatDateTime(advice.authorityApprovedAt)}`;
+  }
+  if (advice.authorityRejectedAt) {
+    return ` · Sent back ${formatDateTime(advice.authorityRejectedAt)}`;
+  }
+  return " · Awaiting approval";
+}
+
 export default async function AdviceDetailPage({
   params,
 }: {
@@ -161,7 +174,7 @@ export default async function AdviceDetailPage({
             <Row label="Department" value={advice.submittedByDepartment} />
             <Row
               label="Recommending Authority"
-              value={authority?.authorityName ?? "—"}
+              value={`${authority?.authorityName ?? "—"}${authorityStatusSuffix(advice)}`}
             />
             <Row label="Verified By" value={advice.verifiedByName} />
             <Row label="Sanctioned By" value={advice.sanctionedByName ?? "—"} />
@@ -237,6 +250,10 @@ export default async function AdviceDetailPage({
             initialBillPassedFor={advice.billPassedFor}
             initialEditToken={advice.editToken}
             paymentMode={advice.paymentMode as "NEFT" | "CASH"}
+            authorityToken={advice.authorityToken}
+            authorityName={authority?.authorityName ?? "Recommending Authority"}
+            authorityApprovedAt={advice.authorityApprovedAt?.toISOString() ?? null}
+            authorityRejectedAt={advice.authorityRejectedAt?.toISOString() ?? null}
           />
         </div>
       </div>

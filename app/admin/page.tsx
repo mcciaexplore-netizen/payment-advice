@@ -1,12 +1,15 @@
 import Link from "next/link";
-import { count, sum } from "drizzle-orm";
+import { and, count, sum } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { paymentAdvices } from "@/lib/db/schema";
 import { StatusChip } from "@/components/admin/StatusChip";
 import {
   ADMIN_LIST_PAGE_SIZE,
+  AdminTab,
   buildAdviceWhere,
   buildOrderBy,
+  buildTabCondition,
+  isAdminTab,
   parseAdviceFilterParams,
   searchParamsRecordToURLSearchParams,
   SortColumn,
@@ -68,7 +71,10 @@ export default async function AdminListPage({
 }) {
   const sp = await searchParams;
   const filterParams = parseAdviceFilterParams(searchParamsRecordToURLSearchParams(sp));
-  const where = buildAdviceWhere(filterParams);
+  const tabParam = Array.isArray(sp.tab) ? sp.tab[0] : sp.tab;
+  const tab: AdminTab = isAdminTab(tabParam) ? tabParam : "waiting_authority";
+  const baseWhere = buildAdviceWhere(filterParams);
+  const where = and(baseWhere, buildTabCondition(tab));
   const sort = Array.isArray(sp.sort) ? sp.sort[0] : sp.sort;
   const dir = Array.isArray(sp.dir) ? sp.dir[0] : sp.dir;
   const orderBy = buildOrderBy(sort, dir);
@@ -76,7 +82,7 @@ export default async function AdminListPage({
   const pageParam = Array.isArray(sp.page) ? sp.page[0] : sp.page;
   const page = Math.max(1, Number(pageParam) || 1);
 
-  const [rows, totalsRow] = await Promise.all([
+  const [rows, totalsRow, waitingCount, readyCount] = await Promise.all([
     db
       .select({
         id: paymentAdvices.id,
@@ -98,6 +104,14 @@ export default async function AdminListPage({
       .select({ count: count(), sum: sum(paymentAdvices.amount) })
       .from(paymentAdvices)
       .where(where),
+    db
+      .select({ count: count() })
+      .from(paymentAdvices)
+      .where(and(baseWhere, buildTabCondition("waiting_authority"))),
+    db
+      .select({ count: count() })
+      .from(paymentAdvices)
+      .where(and(baseWhere, buildTabCondition("ready_finance"))),
   ]);
 
   const totalCount = totalsRow[0]?.count ?? 0;
@@ -135,18 +149,39 @@ export default async function AdminListPage({
         </div>
       </div>
 
+      <div className="flex gap-2 border-b border-gray-200">
+        <TabLink
+          label="Waiting on Authority"
+          tab="waiting_authority"
+          activeTab={tab}
+          count={waitingCount[0]?.count ?? 0}
+          searchParams={sp}
+        />
+        <TabLink
+          label="Ready for Finance"
+          tab="ready_finance"
+          activeTab={tab}
+          count={readyCount[0]?.count ?? 0}
+          searchParams={sp}
+        />
+        <TabLink label="All" tab="all" activeTab={tab} count={null} searchParams={sp} />
+      </div>
+
       <form
         method="get"
         className="grid grid-cols-2 gap-4 rounded-md border border-gray-200 p-4 sm:grid-cols-4 lg:grid-cols-7"
       >
-        <FilterField label="Status">
-          <select name="status" defaultValue={filterParams.status ?? ""} className="admin-filter-input">
-            <option value="">All</option>
-            <option value="SUBMITTED">Submitted</option>
-            <option value="SENT_BACK">Sent Back</option>
-            <option value="APPROVED">Approved</option>
-          </select>
-        </FilterField>
+        <input type="hidden" name="tab" value={tab} />
+        {tab === "all" ? (
+          <FilterField label="Status">
+            <select name="status" defaultValue={filterParams.status ?? ""} className="admin-filter-input">
+              <option value="">All</option>
+              <option value="SUBMITTED">Submitted</option>
+              <option value="SENT_BACK">Sent Back</option>
+              <option value="APPROVED">Approved</option>
+            </select>
+          </FilterField>
+        ) : null}
         <FilterField label="From (Form Date)">
           <input type="date" name="dateFrom" defaultValue={filterParams.dateFrom ?? ""} className="admin-filter-input" />
         </FilterField>
@@ -258,5 +293,34 @@ function FilterField({ label, children }: { label: string; children: React.React
       {label}
       {children}
     </label>
+  );
+}
+
+function TabLink({
+  label,
+  tab,
+  activeTab,
+  count,
+  searchParams,
+}: {
+  label: string;
+  tab: AdminTab;
+  activeTab: AdminTab;
+  count: number | null;
+  searchParams: SearchParamsRecord;
+}) {
+  const isActive = tab === activeTab;
+  return (
+    <Link
+      href={queryString(searchParams, { tab, page: undefined })}
+      className={`-mb-px border-b-2 px-4 py-2.5 text-sm font-medium ${
+        isActive
+          ? "border-[#0b1f3a] text-[#0b1f3a]"
+          : "border-transparent text-gray-500 hover:text-[#0b1f3a]"
+      }`}
+    >
+      {label}
+      {count !== null ? ` (${count})` : ""}
+    </Link>
   );
 }

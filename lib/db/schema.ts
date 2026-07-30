@@ -145,6 +145,28 @@ export const paymentAdvices = pgTable("payment_advices", {
   }),
   revisionCount: integer("revision_count").default(0).notNull(),
 
+  // Recommending Authority approval — the specific authority chosen on the
+  // form must approve before Admin can. Derived state, not a status enum
+  // value: "waiting on authority" = status SUBMITTED && authorityApprovedAt
+  // null; "ready for Finance" = status SUBMITTED && authorityApprovedAt set.
+  // Reset to null (and authorityToken reissued) on every resubmission, since
+  // a changed submission needs fresh authority review regardless of who
+  // sent it back.
+  authorityApprovedAt: timestamp("authority_approved_at", {
+    withTimezone: true,
+  }),
+  authorityRejectedAt: timestamp("authority_rejected_at", {
+    withTimezone: true,
+  }),
+  authorityRemarks: text("authority_remarks"),
+  // Unlike editToken, this is NOT single-use/nulled after action — the
+  // authority-approval page stays reachable at the same link afterward to
+  // show the read-only "already approved/sent back" banner.
+  authorityToken: text("authority_token").unique(),
+  authorityTokenExpiresAt: timestamp("authority_token_expires_at", {
+    withTimezone: true,
+  }),
+
   createdAt: timestamp("created_at", { withTimezone: true })
     .defaultNow()
     .notNull(),
