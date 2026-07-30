@@ -47,7 +47,7 @@ Design system: Navy `#0B1F3A`, Forest green `#2E8B57`, Amber `#E8A33D`. Headings
 
 ## 3. Current State (update this every session)
 
-**Last updated:** 31 July 2026, by Claude Code (Task A shipped: Vendor/Staff/Authority Edit+Deactivate, plus an authority-rename warning; Task B: Finance Pipeline audit complete, report-only, no schema changes — awaiting human's answer on Received/In-Process split before any further work there)
+**Last updated:** 31 July 2026, by Claude Code (shipped the two narrow fixes from Task B's audit: a "Sent Back" tab, and a name-only correction path for Verifier/Sanctioner — still awaiting the human's answer on the Received/In-Process split before any further Finance Pipeline work)
 
 ### Shipped — Phase 1 baseline (Claude Code)
 - Public form `/` (no login): submitter, payee (vendor typeahead), bill/reference, payment mode (NEFT/Cash), enclosures, mandatory Tax Invoice + Approval/Budget PDF attachments
@@ -221,6 +221,24 @@ No bug found here — every condition correctly matches its intended stage and t
 
 **No logic bugs were found anywhere in (b) or (c)**, so nothing needed fixing under the "fix only what's clearly a bug" instruction — the tab filters and API gating are already fully correct and were confirmed live, not just by code review. All test data created during this audit was cleaned up afterward. `tsc` and Vitest (121 passing) re-confirmed clean; no code was changed this session, so no build/lint re-run was needed beyond that sanity check.
 
+### Shipped — Two narrow fixes from Task B's audit (Claude Code, 2026-07-31)
+Explicitly scoped: fix only the two specific gaps Task B flagged, don't touch tab filter logic, API gating, or the (a) combined Received/In-Process timestamp question (still unanswered, still blocking any schema work there).
+
+**Fix 1 — "Sent Back" tab, making an already-correct state visible (no behavior change):**
+- `lib/admin/filters.ts`: added `"sent_back"` to `ADMIN_TABS`, and `buildTabCondition("sent_back")` → `eq(status, 'SENT_BACK')`. The existing 5 tabs' conditions are byte-for-byte unchanged — confirmed with a live before/after count check against the real dev DB (`waiting_authority=1, awaiting_finance=0, received_in_process=0, verified_awaiting_sanction=0, sanctioned_ready=0` both before and after adding a rejected submission; only `sent_back` moved, from 0 to 1).
+- `app/admin/page.tsx`: added the 6th `TabLink` with a live count query (same `Promise.all` pattern as the other 5), and a **Remarks column shown only when `tab === "sent_back"`** — sources from `admin_remarks` (not `authority_remarks`), since `performSendBack()` always sets `admin_remarks` regardless of whether Admin or the Authority triggered the send-back, while `authority_remarks` is only set for authority rejections specifically. Truncated with `title=` for hover-to-see-full-text, per the brief's "in the row or on hover."
+- New test: `lib/admin/filters.test.ts` gained a regression guard that `sent_back` keys on `SENT_BACK` specifically, not `SUBMITTED`/`APPROVED`.
+
+**Fix 2 — Narrow name-only correction for Verifier/Sanctioner (explicitly NOT general undo):**
+- Confirmed before starting, per the brief's request: `VERIFIER_NAMES`/`SANCTIONER_NAMES` in `lib/validation/payment-advice.ts` are unchanged — still the same hardcoded 4-person/2-person lists documented in earlier sessions. The correction picker reuses them directly.
+- New `PATCH` handlers added to the **existing** `verify`/`sanction` route files (not new route paths) — `POST` still performs the original action, `PATCH` now corrects just the name:
+  - `PATCH /api/admin/advice/[id]/verify`: 404 if the advice doesn't exist, 409 if not yet verified ("nothing to correct"), 400 for a name outside the 4-person list, 409 if the submitted name is already what's recorded (a no-op isn't a correction), otherwise updates `verified_by` only — **`verified_at` is never touched** — and writes an audit_log row `VERIFIER_NAME_CORRECTED` (actor `"ADMIN"`, `details: {oldVerifiedBy, newVerifiedBy}`). Does **not** call `notifyVerified()` again.
+  - `PATCH /api/admin/advice/[id]/sanction`: same shape, updates `sanctioned_by`. **Also updates `approved_by_name` in the same write** — flagging this explicitly since it's technically a second column: `approved_by_name` is a deliberate dual-write mirror of `sanctioned_by` from the original Sanction action (see the Finance Pipeline session's entry above), and it's what the Excel export's "Approved By" column and would otherwise keep printing the old, wrong name even after the "correction." Treated this as the same underlying fact (who sanctioned it), not "another field" in the sense the brief meant to protect (`sanctioned_at`/`status`/`bill_passed_for`, none of which are touched). Writes `SANCTIONER_NAME_CORRECTED` with `{oldSanctionedBy, newSanctionedBy}`.
+  - New validation schemas `verifierNameCorrectionSchema`/`sanctionerNameCorrectionSchema` (narrower than `verifySchema`/`sanctionSchema` — no `billPassedFor`, since a name correction must never touch it).
+- New `components/admin/NameCorrectionAction.tsx` (client): a small "Correct name" text-button that expands into the same fixed-list `<select>` + Save/Cancel, calls the new `PATCH` endpoint, `router.refresh()`s on success. Wired into `app/admin/advice/[id]/page.tsx`'s "Finance Pipeline" section, replacing the plain-text `Row` for "Verified By"/"Sanctioned By" with custom markup that renders the action **only when there's a name to correct** (`verifiedAt`/`sanctionedAt` set). **"Received & In Process" was left as a plain `Row`, unchanged** — no name is ever attached to that step, so there's nothing to correct there, per the brief.
+- New tests: extended `lib/advice/finance-verify-route.test.ts` and `lib/advice/finance-sanction-route.test.ts` with `PATCH` describe blocks (404/409-not-yet-actioned/400-invalid-name/409-no-op-same-name/success-with-correct-audit-and-untouched-timestamp cases each).
+- **Verified live** against the real dev server + real Neon DB: ran a real advice through approve → receive → verify with a deliberately wrong name ("Vaidehi Marathe") → confirmed `PATCH .../verify` 409s on re-submitting the same name, 400s on an invalid name, 200s on the real correction ("Sunil Salunke") → confirmed via direct SQL that `verified_at` was byte-for-byte unchanged while `verified_by` updated, and the audit_log shows a clean `VERIFIER_NAME_CORRECTED` row with both names → sanctioned the same advice, corrected the sanctioner name too → confirmed `sanctioned_by` AND `approved_by_name` both updated, `sanctioned_at`/`status` untouched → confirmed the exported Excel file's shared strings contain the corrected name → confirmed on the rendered admin detail page HTML that exactly two "Correct name" controls exist (next to Verified By and Sanctioned By) and none near Received & In Process. All test data cleaned up after; DB back to its pre-session single baseline row. `tsc`, ESLint, Vitest (132 passing, 2 pre-existing skipped), and `next build` all clean.
+
 ## 4. Open Items (verify before building on top of these)
 
 Status legend: 🔴 unverified / high risk · 🟡 unverified / lower risk · 🟢 verified
@@ -249,8 +267,8 @@ Status legend: 🔴 unverified / high risk · 🟡 unverified / lower risk · �
 - 🟢 **Task A (Vendor/Staff/Authority Edit + Deactivate) shipped and verified live 2026-07-31 by Claude Code** — see the "Shipped" entry above for the full audit findings (only Authority Edit was genuinely missing; staff email was never editable; a real dropdown-corruption bug was found and fixed) and the exact live verification performed against the real dev server + real Neon DB.
 - 🟡 **`countInProgressForStaffName()`'s name-match safety check is best-effort, not exact** — `payment_advices` has no FK to `staff_members` at all, so deactivating a staff member whose submitted name doesn't textually match their canonical staff record (typo, nickname, maiden/married name change) will silently report 0 in-progress submissions even if they have some. This is a schema limitation, not a bug in the check itself — flagged in code and here rather than presented as reliable. Only a `staff_member_id` FK on `payment_advices` (a bigger, unrequested schema change) would make this exact.
 - ⬜ **Task B audit (2026-07-31): "Received" and "In Process" are still one combined timestamp (`finance_received_at`), not two separate steps** — the human's own stated intended workflow describes them as distinct manual steps. Question asked directly, not decided: should this become two separate timestamps/tabs, or is the combined state fine for how Finance actually works day to day? **Blocking any schema change here until the human answers.**
-- 🟡 **Task B audit (2026-07-31): rejected/sent-back submissions have no dedicated visibility** — confirmed live they correctly vanish from all 5 pipeline tabs and are NOT lost (still reachable under "All", with or without an explicit `status=SENT_BACK` filter), but nothing proactively surfaces "N submissions are stuck waiting on the submitter to fix and resubmit" — no tab, no badge, no count. Report-only per the brief; not fixed.
-- 🟡 **Task B audit (2026-07-31): no undo/reverse mechanism exists for Received/Verified/Sanctioned** — confirmed via grep and by reading every route that touches those timestamps. The only way to undo any of them is a full resubmission via Send Back → edit token, which also wipes authority approval and restarts the entire pipeline (and re-notifies everyone) — there's no way to correct a single mis-click (e.g., wrong name on Sanction) without that full reset, short of a direct DB edit. Report-only per the brief; not fixed.
+- 🟢 **Rejected/sent-back visibility gap — fixed 2026-07-31.** A "Sent Back" tab now exists with a live count and a Remarks column; see the "Shipped" entry above. Verified live: a rejected submission correctly appears there with its remarks, and the existing 5 tabs' counts were confirmed unchanged by a live before/after check.
+- 🟡 **General undo/reverse still does not exist — deliberately, per the brief.** What was built instead is a *narrow* name-only correction for Verifier/Sanctioner (see the "Shipped" entry above) — it does not cover correcting a wrong Received timestamp, un-verifying, un-sanctioning, or any other field. If Admin needs to undo something beyond a wrong name on Verify/Sanction, the only path is still the full Send Back → resubmit cycle (wipes authority approval, restarts the pipeline, re-notifies everyone). Not built further; report-only for anything beyond the two narrow fixes shipped this session.
 
 ## 5. Do Not Touch Without Asking
 
@@ -277,12 +295,47 @@ Status legend: 🔴 unverified / high risk · 🟡 unverified / lower risk · �
 - **Recommending Authorities are managed inline on `/admin/staff` (`components/admin/AuthoritiesSection.tsx`), not a standalone `/admin/authorities/[id]` page** — this is a deliberate continuation of the earlier Staff/Authority Roster session's "one page" consolidation. Don't reintroduce a separate authorities page without checking; extend `AuthoritiesSection`'s inline create/edit form instead.
 - **The deactivation safety check (staff + authorities, `lib/advice/deactivation-safety.ts`) is NOT a hard block — it's a warn-then-confirm gate.** `PATCH` returns 409 with `{error, inProgressCount}` when deactivating something with in-progress dependents and no `force: true` in the body; the UI shows `window.confirm()` and retries with `force: true` if the admin agrees. Don't change this to a hard block (the human explicitly wants "confirm and continue if they choose," not "cannot deactivate") and don't remove the `force` escape hatch.
 - **`countInProgressForStaffName()` matches by name, not FK** (`payment_advices` has no `staff_member_id` column) — it is a best-effort approximation, not a reliable reference check. Don't present its result as exact, and don't "fix" it by adding fuzzy matching without asking — the human may want a real FK instead, which is a bigger schema change.
+- **The Verifier/Sanctioner "Correct name" action is a narrow name-only fix, not undo/reverse — don't extend it into general undo without asking.** It exists as `PATCH` on the same `verify`/`sanction` route files that already have `POST` (not new route paths) — keep that pattern if extending it. `PATCH .../sanction` deliberately also updates `approved_by_name` alongside `sanctioned_by` (flagged in the Shipped entry above) since it's a dual-write mirror of the same fact; `PATCH .../verify` has no equivalent second field to sync. Neither PATCH ever touches `verified_at`/`sanctioned_at`/`status`/`bill_passed_for` — don't add that without asking, it would turn a name fix into an undo.
+- **The "Sent Back" tab's Remarks column reads `admin_remarks`, not `authority_remarks`.** `admin_remarks` is always set by `performSendBack()` regardless of who triggered it (Admin or the Authority); `authority_remarks` is only set for authority rejections specifically and would be blank for Admin-initiated send-backs. Don't switch the column to `authority_remarks` — it would silently go blank for half the rows.
 
 ## 6. Session Log
 
 Append one entry per session, newest at the top. Keep entries short — this is a changelog, not a diary.
 
 ```
+2026-07-31 — Claude Code — Shipped the two narrow fixes Task B's audit
+flagged, explicitly not touching tab filter logic/API gating/the (a) Received-
+vs-In-Process question (still awaiting the human's answer). Fix 1: added a
+6th admin tab "Sent Back" (buildTabCondition keys on status=SENT_BACK, added
+alongside the existing 5, none of which changed) with a live count and a
+Remarks column (sources admin_remarks, which is always set regardless of who
+sent it back, not authority_remarks which is only set for authority
+rejections). Fix 2: narrow name-only correction for Verifier/Sanctioner —
+confirmed VERIFIER_NAMES/SANCTIONER_NAMES unchanged before starting, per the
+human's explicit ask. New PATCH handlers on the existing verify/sanction
+route files (not new paths): correct just verified_by or sanctioned_by,
+never touch verified_at/sanctioned_at, write a VERIFIER_NAME_CORRECTED/
+SANCTIONER_NAME_CORRECTED audit_log entry with old+new name. Flagged one
+judgment call: PATCH .../sanction also updates approved_by_name alongside
+sanctioned_by, since that field is a dual-write mirror from the original
+Sanction action and is what Excel's "Approved By" column actually reads —
+leaving it stale would make the correction not show up on the real document.
+New UI: NameCorrectionAction.tsx, a small button-that-expands-to-a-select,
+wired into the admin detail page next to Verified By/Sanctioned By only
+(confirmed live via the rendered HTML: exactly 2 "Correct name" controls,
+none near Received & In Process). New/extended tests: filters.test.ts
+(sent_back regression guard), both finance-verify/sanction-route.test.ts
+files gained PATCH describe blocks. Full live verification against the real
+dev server + real Neon DB: before/after tab-count check proved the existing
+5 tabs are byte-for-byte unchanged; rejected a real submission and confirmed
+it surfaces correctly in Sent Back with remarks; ran a real advice through
+verify-with-wrong-name → corrected it → confirmed via direct SQL that
+verified_at didn't move a millisecond while verified_by did, and the audit
+trail shows both names; same for sanction, plus confirmed the corrected name
+actually reached the Excel export's shared strings. All test data cleaned up
+after — DB back to its single pre-session baseline row. tsc/ESLint/Vitest
+(132 passing, 2 pre-existing skipped)/next build all clean.
+
 2026-07-31 — Claude Code — Small follow-up to Task A: added an inline amber
 warning to the Authority edit form (edit mode only, not create) per the
 human's request — renaming an authority retroactively affects every

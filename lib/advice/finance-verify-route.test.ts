@@ -20,7 +20,7 @@ const mocks = vi.hoisted(() => {
 vi.mock("@/lib/db", () => ({ db: { select: mocks.select, transaction: mocks.transaction } }));
 vi.mock("@/lib/email/notify", () => ({ notifyVerified: mocks.notifyVerified }));
 
-import { POST } from "../../app/api/admin/advice/[id]/verify/route";
+import { POST, PATCH } from "../../app/api/admin/advice/[id]/verify/route";
 
 const ADVICE_ID = "11111111-1111-4111-8111-111111111111";
 
@@ -119,5 +119,78 @@ describe("POST /api/admin/advice/[id]/verify", () => {
       expect.objectContaining({ documentLabel: "Cash Payment Voucher" }),
       receivedNeft.submittedByEmail,
     );
+  });
+});
+
+const verifiedRow = { verifiedAt: new Date(), verifiedBy: "Sunil Salunke" };
+
+function patchReq(body: unknown) {
+  return new NextRequest(`http://localhost/api/admin/advice/${ADVICE_ID}/verify`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+describe("PATCH /api/admin/advice/[id]/verify — name correction only", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("404s when the advice doesn't exist", async () => {
+    mocks.limit.mockResolvedValueOnce([]);
+    const res = await PATCH(patchReq({ verifiedBy: "Vaidehi Marathe" }), {
+      params: Promise.resolve({ id: ADVICE_ID }),
+    });
+    expect(res.status).toBe(404);
+    expect(mocks.transaction).not.toHaveBeenCalled();
+  });
+
+  it("409s when not yet verified — nothing to correct", async () => {
+    mocks.limit.mockResolvedValueOnce([{ verifiedAt: null, verifiedBy: null }]);
+    const res = await PATCH(patchReq({ verifiedBy: "Vaidehi Marathe" }), {
+      params: Promise.resolve({ id: ADVICE_ID }),
+    });
+    expect(res.status).toBe(409);
+    expect(mocks.transaction).not.toHaveBeenCalled();
+  });
+
+  it("400s for a name outside the fixed 4-person list", async () => {
+    mocks.limit.mockResolvedValueOnce([verifiedRow]);
+    const res = await PATCH(patchReq({ verifiedBy: "Someone Else" }), {
+      params: Promise.resolve({ id: ADVICE_ID }),
+    });
+    expect(res.status).toBe(400);
+    expect(mocks.transaction).not.toHaveBeenCalled();
+  });
+
+  it("409s when the submitted name is already the recorded one — a no-op, not a correction", async () => {
+    mocks.limit.mockResolvedValueOnce([verifiedRow]);
+    const res = await PATCH(patchReq({ verifiedBy: "Sunil Salunke" }), {
+      params: Promise.resolve({ id: ADVICE_ID }),
+    });
+    expect(res.status).toBe(409);
+    expect(mocks.transaction).not.toHaveBeenCalled();
+  });
+
+  it("corrects verifiedBy only, leaves verifiedAt untouched, logs old+new name, and does not re-notify", async () => {
+    mocks.limit.mockResolvedValueOnce([verifiedRow]);
+    const res = await PATCH(patchReq({ verifiedBy: "Vaidehi Marathe" }), {
+      params: Promise.resolve({ id: ADVICE_ID }),
+    });
+    expect(res.status).toBe(200);
+    const setArg = (mocks.txSet.mock.calls as unknown as [Record<string, unknown>][])[0][0];
+    expect(setArg).toEqual(
+      expect.objectContaining({ verifiedBy: "Vaidehi Marathe", updatedAt: expect.any(Date) }),
+    );
+    expect(setArg.verifiedAt).toBeUndefined();
+    expect(mocks.txValues).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "VERIFIER_NAME_CORRECTED",
+        actor: "ADMIN",
+        details: { oldVerifiedBy: "Sunil Salunke", newVerifiedBy: "Vaidehi Marathe" },
+      }),
+    );
+    expect(mocks.notifyVerified).not.toHaveBeenCalled();
   });
 });

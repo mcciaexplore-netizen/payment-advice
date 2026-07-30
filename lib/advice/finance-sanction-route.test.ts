@@ -18,7 +18,7 @@ const mocks = vi.hoisted(() => {
 
 vi.mock("@/lib/db", () => ({ db: { select: mocks.select, transaction: mocks.transaction } }));
 
-import { POST } from "../../app/api/admin/advice/[id]/sanction/route";
+import { POST, PATCH } from "../../app/api/admin/advice/[id]/sanction/route";
 
 const ADVICE_ID = "11111111-1111-4111-8111-111111111111";
 
@@ -134,5 +134,79 @@ describe("POST /api/admin/advice/[id]/sanction", () => {
     });
     expect(res.status).toBe(200);
     expect(mocks.txSet).toHaveBeenCalledWith(expect.objectContaining({ billPassedFor: "1200.00" }));
+  });
+});
+
+const sanctioned = { sanctionedAt: new Date(), sanctionedBy: "Chintamani Shrotri" };
+
+function patchReq(body: unknown) {
+  return new NextRequest(`http://localhost/api/admin/advice/${ADVICE_ID}/sanction`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+describe("PATCH /api/admin/advice/[id]/sanction — name correction only", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("404s when the advice doesn't exist", async () => {
+    mocks.limit.mockResolvedValueOnce([]);
+    const res = await PATCH(patchReq({ sanctionedBy: "DG" }), {
+      params: Promise.resolve({ id: ADVICE_ID }),
+    });
+    expect(res.status).toBe(404);
+    expect(mocks.transaction).not.toHaveBeenCalled();
+  });
+
+  it("409s when not yet sanctioned — nothing to correct", async () => {
+    mocks.limit.mockResolvedValueOnce([{ sanctionedAt: null, sanctionedBy: null }]);
+    const res = await PATCH(patchReq({ sanctionedBy: "DG" }), {
+      params: Promise.resolve({ id: ADVICE_ID }),
+    });
+    expect(res.status).toBe(409);
+    expect(mocks.transaction).not.toHaveBeenCalled();
+  });
+
+  it("400s for a name outside the fixed 2-person list", async () => {
+    mocks.limit.mockResolvedValueOnce([sanctioned]);
+    const res = await PATCH(patchReq({ sanctionedBy: "Someone Else" }), {
+      params: Promise.resolve({ id: ADVICE_ID }),
+    });
+    expect(res.status).toBe(400);
+    expect(mocks.transaction).not.toHaveBeenCalled();
+  });
+
+  it("409s when the submitted name is already the recorded one — a no-op, not a correction", async () => {
+    mocks.limit.mockResolvedValueOnce([sanctioned]);
+    const res = await PATCH(patchReq({ sanctionedBy: "Chintamani Shrotri" }), {
+      params: Promise.resolve({ id: ADVICE_ID }),
+    });
+    expect(res.status).toBe(409);
+    expect(mocks.transaction).not.toHaveBeenCalled();
+  });
+
+  it("corrects sanctionedBy AND the mirrored approvedByName, leaves sanctionedAt/status/billPassedFor untouched, and logs old+new name", async () => {
+    mocks.limit.mockResolvedValueOnce([sanctioned]);
+    const res = await PATCH(patchReq({ sanctionedBy: "DG" }), {
+      params: Promise.resolve({ id: ADVICE_ID }),
+    });
+    expect(res.status).toBe(200);
+    const setArg = (mocks.txSet.mock.calls as unknown as [Record<string, unknown>][])[0][0];
+    expect(setArg).toEqual(
+      expect.objectContaining({ sanctionedBy: "DG", approvedByName: "DG", updatedAt: expect.any(Date) }),
+    );
+    expect(setArg.sanctionedAt).toBeUndefined();
+    expect(setArg.status).toBeUndefined();
+    expect(setArg.billPassedFor).toBeUndefined();
+    expect(mocks.txValues).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "SANCTIONER_NAME_CORRECTED",
+        actor: "ADMIN",
+        details: { oldSanctionedBy: "Chintamani Shrotri", newSanctionedBy: "DG" },
+      }),
+    );
   });
 });

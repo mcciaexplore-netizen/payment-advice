@@ -82,6 +82,17 @@ export const sanctionSchema = z.object({
   billPassedFor: z.number().positive("Bill passed for Rs. is required").optional(),
 });
 
+/** Body for correcting an already-recorded Verifier/Sanctioner name — never
+ * touches verifiedAt/sanctionedAt or (for sanction) billPassedFor, so these
+ * are deliberately narrower than verifySchema/sanctionSchema, not reused
+ * from them. */
+export const verifierNameCorrectionSchema = z.object({
+  verifiedBy: verifierNameSchema,
+});
+export const sanctionerNameCorrectionSchema = z.object({
+  sanctionedBy: sanctionerNameSchema,
+});
+
 export const cashVoucherItemSchema = z.object({
   description: requiredTrimmed("Nature of expenditure is required"),
   amount: z

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { paymentAdvices, auditLog } from "@/lib/db/schema";
-import { billPassedForSchema, sanctionSchema } from "@/lib/validation/payment-advice";
+import { billPassedForSchema, sanctionSchema, sanctionerNameCorrectionSchema } from "@/lib/validation/payment-advice";
 
 export const runtime = "nodejs";
 
@@ -109,4 +109,73 @@ export async function POST(
   });
 
   return NextResponse.json({ ok: true });
+}
+
+/**
+ * Narrow correction path (not general undo/reverse): fixes ONLY
+ * `sanctioned_by` when the wrong name was picked from the 2-person list.
+ * `sanctioned_at`/`billPassedFor`/`status` are deliberately left untouched.
+ *
+ * Also corrects `approved_by_name` alongside `sanctioned_by` — flagging this
+ * explicitly since it's a second column: the original Sanction action
+ * dual-writes `approved_by_name = sanctionedBy` specifically so the Payment
+ * Advice PDF header and Excel export (which both still read `approved_by_name`,
+ * not `sanctioned_by`) show the correct name. Leaving `approved_by_name`
+ * stale after a correction would mean the wrong name keeps printing on the
+ * actual document even though the "corrected" pipeline field is right —
+ * treating it as the same underlying fact (who sanctioned it), not "another
+ * field," per AGENT_HANDOFF.md's documented dual-write reasoning.
+ */
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const { id } = await params;
+
+  const [advice] = await db
+    .select({ sanctionedAt: paymentAdvices.sanctionedAt, sanctionedBy: paymentAdvices.sanctionedBy })
+    .from(paymentAdvices)
+    .where(eq(paymentAdvices.id, id))
+    .limit(1);
+  if (!advice) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+  if (!advice.sanctionedAt) {
+    return NextResponse.json(
+      { error: "Not yet sanctioned — nothing to correct." },
+      { status: 409 },
+    );
+  }
+
+  const body = await req.json().catch(() => null);
+  const parsed = sanctionerNameCorrectionSchema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: parsed.error.issues[0]?.message ?? "Invalid data" },
+      { status: 400 },
+    );
+  }
+
+  const oldSanctionedBy = advice.sanctionedBy;
+  const newSanctionedBy = parsed.data.sanctionedBy;
+  if (oldSanctionedBy === newSanctionedBy) {
+    return NextResponse.json({ error: "That's already the recorded name." }, { status: 409 });
+  }
+
+  await db.transaction(async (tx) => {
+    await tx
+      .update(paymentAdvices)
+      .set({ sanctionedBy: newSanctionedBy, approvedByName: newSanctionedBy, updatedAt: new Date() })
+      .where(eq(paymentAdvices.id, id));
+
+    await tx.insert(auditLog).values({
+      paymentAdviceId: id,
+      action: "SANCTIONER_NAME_CORRECTED",
+      actor: "ADMIN",
+      ipAddress: clientIp(req),
+      details: { oldSanctionedBy, newSanctionedBy },
+    });
+  });
+
+  return NextResponse.json({ ok: true, sanctionedBy: newSanctionedBy });
 }

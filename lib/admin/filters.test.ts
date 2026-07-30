@@ -67,4 +67,10 @@ describe("buildTabCondition", () => {
       expect(extractBoundParams(buildTabCondition(tab))).toContain("SUBMITTED");
     }
   });
+
+  it("keys 'sent_back' on status SENT_BACK, not SUBMITTED or APPROVED", () => {
+    expect(extractBoundParams(buildTabCondition("sent_back"))).toContain("SENT_BACK");
+    expect(extractBoundParams(buildTabCondition("sent_back"))).not.toContain("SUBMITTED");
+    expect(extractBoundParams(buildTabCondition("sent_back"))).not.toContain("APPROVED");
+  });
 });

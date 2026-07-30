@@ -10,7 +10,8 @@ import {
 } from "@/lib/db/schema";
 import { StatusChip } from "@/components/admin/StatusChip";
 import { AdviceActions } from "@/components/admin/AdviceActions";
-import { Status } from "@/lib/validation/payment-advice";
+import { NameCorrectionAction } from "@/components/admin/NameCorrectionAction";
+import { Status, VERIFIER_NAMES, SANCTIONER_NAMES } from "@/lib/validation/payment-advice";
 
 export const dynamic = "force-dynamic";
 
@@ -183,22 +184,42 @@ export default async function AdviceDetailPage({
               label="Received & In Process"
               value={advice.financeReceivedAt ? formatDateTime(advice.financeReceivedAt) : "Pending"}
             />
-            <Row
-              label="Verified By"
-              value={
-                advice.verifiedAt
-                  ? `${advice.verifiedBy} · ${formatDateTime(advice.verifiedAt)}`
-                  : "Pending"
-              }
-            />
-            <Row
-              label="Sanctioned By"
-              value={
-                advice.sanctionedAt
-                  ? `${advice.sanctionedBy} · ${formatDateTime(advice.sanctionedAt)}`
-                  : "Pending"
-              }
-            />
+            <div className="flex items-baseline gap-2 text-sm">
+              <span className="min-w-[200px] text-xs font-medium uppercase tracking-wide text-gray-500">
+                Verified By
+              </span>
+              {advice.verifiedAt && advice.verifiedBy ? (
+                <span className="flex items-center gap-3 text-sm text-[#171717]">
+                  {advice.verifiedBy} · {formatDateTime(advice.verifiedAt)}
+                  <NameCorrectionAction
+                    adviceId={advice.id}
+                    kind="verify"
+                    currentName={advice.verifiedBy}
+                    options={VERIFIER_NAMES}
+                  />
+                </span>
+              ) : (
+                <span className="text-sm text-[#171717]">Pending</span>
+              )}
+            </div>
+            <div className="flex items-baseline gap-2 text-sm">
+              <span className="min-w-[200px] text-xs font-medium uppercase tracking-wide text-gray-500">
+                Sanctioned By
+              </span>
+              {advice.sanctionedAt && advice.sanctionedBy ? (
+                <span className="flex items-center gap-3 text-sm text-[#171717]">
+                  {advice.sanctionedBy} · {formatDateTime(advice.sanctionedAt)}
+                  <NameCorrectionAction
+                    adviceId={advice.id}
+                    kind="sanction"
+                    currentName={advice.sanctionedBy}
+                    options={SANCTIONER_NAMES}
+                  />
+                </span>
+              ) : (
+                <span className="text-sm text-[#171717]">Pending</span>
+              )}
+            </div>
           </Section>
 
           <Section title="Attachments">

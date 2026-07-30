@@ -82,7 +82,16 @@ export default async function AdminListPage({
   const pageParam = Array.isArray(sp.page) ? sp.page[0] : sp.page;
   const page = Math.max(1, Number(pageParam) || 1);
 
-  const [rows, totalsRow, waitingCount, awaitingFinanceCount, receivedCount, verifiedCount, sanctionedCount] = await Promise.all([
+  const [
+    rows,
+    totalsRow,
+    waitingCount,
+    awaitingFinanceCount,
+    receivedCount,
+    verifiedCount,
+    sanctionedCount,
+    sentBackCount,
+  ] = await Promise.all([
     db
       .select({
         id: paymentAdvices.id,
@@ -94,6 +103,7 @@ export default async function AdminListPage({
         submittedByName: paymentAdvices.submittedByName,
         submittedByDepartment: paymentAdvices.submittedByDepartment,
         status: paymentAdvices.status,
+        adminRemarks: paymentAdvices.adminRemarks,
       })
       .from(paymentAdvices)
       .where(where)
@@ -124,6 +134,10 @@ export default async function AdminListPage({
       .select({ count: count() })
       .from(paymentAdvices)
       .where(and(baseWhere, buildTabCondition("sanctioned_ready"))),
+    db
+      .select({ count: count() })
+      .from(paymentAdvices)
+      .where(and(baseWhere, buildTabCondition("sent_back"))),
   ]);
 
   const totalCount = totalsRow[0]?.count ?? 0;
@@ -197,6 +211,13 @@ export default async function AdminListPage({
           count={sanctionedCount[0]?.count ?? 0}
           searchParams={sp}
         />
+        <TabLink
+          label="Sent Back"
+          tab="sent_back"
+          activeTab={tab}
+          count={sentBackCount[0]?.count ?? 0}
+          searchParams={sp}
+        />
         <TabLink label="All" tab="all" activeTab={tab} count={null} searchParams={sp} />
       </div>
 
@@ -262,13 +283,14 @@ export default async function AdminListPage({
               <th className="px-4 py-3"><SortHeader label="Submitted By" column="submittedByName" searchParams={sp} currentSort={sort} currentDir={dir} /></th>
               <th className="px-4 py-3"><SortHeader label="Department" column="submittedByDepartment" searchParams={sp} currentSort={sort} currentDir={dir} /></th>
               <th className="px-4 py-3"><SortHeader label="Status" column="status" searchParams={sp} currentSort={sort} currentDir={dir} /></th>
+              {tab === "sent_back" ? <th className="px-4 py-3">Remarks</th> : null}
               <th className="px-4 py-3">Actions</th>
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={9} className="px-4 py-8 text-center text-gray-500">
+                <td colSpan={tab === "sent_back" ? 10 : 9} className="px-4 py-8 text-center text-gray-500">
                   No submissions match these filters.
                 </td>
               </tr>
@@ -283,6 +305,11 @@ export default async function AdminListPage({
                   <td className="px-4 py-3">{row.submittedByName}</td>
                   <td className="px-4 py-3">{row.submittedByDepartment}</td>
                   <td className="whitespace-nowrap px-4 py-3"><StatusChip status={row.status as Status} /></td>
+                  {tab === "sent_back" ? (
+                    <td className="max-w-[240px] truncate px-4 py-3" title={row.adminRemarks ?? ""}>
+                      {row.adminRemarks ?? "—"}
+                    </td>
+                  ) : null}
                   <td className="whitespace-nowrap px-4 py-3">
                     <Link href={`/admin/advice/${row.id}`} className="font-medium text-[#0b1f3a] hover:underline">
                       View

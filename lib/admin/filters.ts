@@ -102,9 +102,11 @@ export const ADMIN_LIST_PAGE_SIZE = 25;
  * status SUBMITTED (a SENT_BACK entry belongs in none of them, and once
  * sanctioned, status flips to APPROVED so it naturally falls out of all
  * four too); "sanctioned_ready" is the only one keyed on status APPROVED
- * instead. "all" imposes no extra condition, matching the full unfiltered
- * list this page showed before the Approval Workflow — kept so SENT_BACK
- * entries stay reachable somewhere.
+ * instead. "sent_back" makes SENT_BACK entries proactively visible (they
+ * were previously only reachable via "all" + a manual status filter — see
+ * AGENT_HANDOFF.md's Task B audit). "all" imposes no extra condition,
+ * matching the full unfiltered list this page showed before the Approval
+ * Workflow.
  */
 export const ADMIN_TABS = [
   "waiting_authority",
@@ -112,6 +114,7 @@ export const ADMIN_TABS = [
   "received_in_process",
   "verified_awaiting_sanction",
   "sanctioned_ready",
+  "sent_back",
   "all",
 ] as const;
 export type AdminTab = (typeof ADMIN_TABS)[number];
@@ -140,6 +143,9 @@ export function buildTabCondition(tab: AdminTab): SQL | undefined {
   }
   if (tab === "sanctioned_ready") {
     return eq(paymentAdvices.status, "APPROVED");
+  }
+  if (tab === "sent_back") {
+    return eq(paymentAdvices.status, "SENT_BACK");
   }
   return undefined;
 }

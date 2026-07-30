@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { paymentAdvices, auditLog } from "@/lib/db/schema";
 import { notifyVerified } from "@/lib/email/notify";
-import { verifySchema } from "@/lib/validation/payment-advice";
+import { verifySchema, verifierNameCorrectionSchema } from "@/lib/validation/payment-advice";
 
 export const runtime = "nodejs";
 
@@ -87,4 +87,66 @@ export async function POST(
   );
 
   return NextResponse.json({ ok: true, verifiedAt: now.toISOString() });
+}
+
+/**
+ * Narrow correction path (not general undo/reverse): fixes ONLY `verified_by`
+ * when the wrong name was picked from the 4-person list. `verified_at` is
+ * deliberately left untouched — it already correctly captured when
+ * verification happened, regardless of which name got recorded. Does not
+ * re-fire `notifyVerified()`; the submitter was already correctly notified
+ * that their advice was verified at the time it actually was.
+ */
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const { id } = await params;
+
+  const [advice] = await db
+    .select({ verifiedAt: paymentAdvices.verifiedAt, verifiedBy: paymentAdvices.verifiedBy })
+    .from(paymentAdvices)
+    .where(eq(paymentAdvices.id, id))
+    .limit(1);
+  if (!advice) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+  if (!advice.verifiedAt) {
+    return NextResponse.json(
+      { error: "Not yet verified — nothing to correct." },
+      { status: 409 },
+    );
+  }
+
+  const body = await req.json().catch(() => null);
+  const parsed = verifierNameCorrectionSchema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: parsed.error.issues[0]?.message ?? "Invalid data" },
+      { status: 400 },
+    );
+  }
+
+  const oldVerifiedBy = advice.verifiedBy;
+  const newVerifiedBy = parsed.data.verifiedBy;
+  if (oldVerifiedBy === newVerifiedBy) {
+    return NextResponse.json({ error: "That's already the recorded name." }, { status: 409 });
+  }
+
+  await db.transaction(async (tx) => {
+    await tx
+      .update(paymentAdvices)
+      .set({ verifiedBy: newVerifiedBy, updatedAt: new Date() })
+      .where(eq(paymentAdvices.id, id));
+
+    await tx.insert(auditLog).values({
+      paymentAdviceId: id,
+      action: "VERIFIER_NAME_CORRECTED",
+      actor: "ADMIN",
+      ipAddress: clientIp(req),
+      details: { oldVerifiedBy, newVerifiedBy },
+    });
+  });
+
+  return NextResponse.json({ ok: true, verifiedBy: newVerifiedBy });
 }
