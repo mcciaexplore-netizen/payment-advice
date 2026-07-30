@@ -39,6 +39,7 @@ export default async function EditStaffPage({
         allAuthorities={authorities}
         initialValues={{
           fullName: staff.fullName,
+          email: staff.email ?? undefined,
           isActive: staff.isActive,
           firstAuthorityId: first?.recommendingAuthorityId,
           secondAuthorityId: second?.recommendingAuthorityId,

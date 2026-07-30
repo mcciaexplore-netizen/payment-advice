@@ -42,17 +42,28 @@ export function StaffForm({
 
   const firstAuthorityId = useWatch({ control, name: "firstAuthorityId" });
 
-  async function onSubmit(values: StaffMemberFormValues) {
+  async function onSubmit(values: StaffMemberFormValues, force = false) {
     setSubmitError(null);
     setSubmitting(true);
     try {
       const res = await fetch(staffId ? `/api/admin/staff/${staffId}` : "/api/admin/staff", {
         method: staffId ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(values),
+        body: JSON.stringify(force ? { ...values, force } : values),
       });
       const data = await res.json();
       if (!res.ok) {
+        // Deactivating someone with in-progress submissions 409s with a
+        // warning rather than silently blocking or silently allowing it —
+        // offer the same confirm-and-retry-with-force escape hatch the row
+        // toggle button uses.
+        if (res.status === 409 && data.inProgressCount !== undefined) {
+          setSubmitting(false);
+          if (window.confirm(`${data.error}\n\nDeactivate anyway?`)) {
+            await onSubmit(values, true);
+          }
+          return;
+        }
         setSubmitError(data.error ?? "Something went wrong.");
         return;
       }
@@ -66,7 +77,7 @@ export function StaffForm({
   }
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-6" noValidate>
+    <form onSubmit={handleSubmit((values) => onSubmit(values))} className="flex flex-col gap-6" noValidate>
       {submitError ? (
         <div className="rounded-md border border-[#b3261e]/30 bg-[#b3261e]/5 px-4 py-3 text-sm font-medium text-[#b3261e]">
           {submitError}
@@ -75,6 +86,14 @@ export function StaffForm({
 
       <Field label="Full Name" required error={errors.fullName?.message}>
         <Input hasError={!!errors.fullName} {...register("fullName")} />
+      </Field>
+
+      <Field
+        label="E-mail"
+        error={errors.email?.message}
+        help="Drives the public form's 'Your Email' auto-fill and notification delivery."
+      >
+        <Input type="email" hasError={!!errors.email} {...register("email")} />
       </Field>
 
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">

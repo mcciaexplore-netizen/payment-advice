@@ -42,6 +42,7 @@ export type AuthorityFormValues = z.infer<typeof authorityFormSchema>;
 export const staffMemberFormSchema = z
   .object({
     fullName: z.string().trim().min(1, "Name is required"),
+    email: optionalTrimmed().pipe(z.string().email("Enter a valid email").optional()),
     isActive: z.boolean().default(true),
     firstAuthorityId: z.string().uuid().optional(),
     secondAuthorityId: z.string().uuid().optional(),

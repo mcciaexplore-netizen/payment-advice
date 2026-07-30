@@ -47,7 +47,7 @@ Design system: Navy `#0B1F3A`, Forest green `#2E8B57`, Amber `#E8A33D`. Headings
 
 ## 3. Current State (update this every session)
 
-**Last updated:** 30 July 2026, by Claude Code (fixed the squished email logo aspect ratio; discovered Resend's sandbox-domain recipient restriction)
+**Last updated:** 31 July 2026, by Claude Code (Task A: audited and fixed Vendor/Staff/Authority Edit+Deactivate — see below; Task B not started, awaiting human go-ahead)
 
 ### Shipped — Phase 1 baseline (Claude Code)
 - Public form `/` (no login): submitter, payee (vendor typeahead), bill/reference, payment mode (NEFT/Cash), enclosures, mandatory Tax Invoice + Approval/Budget PDF attachments
@@ -163,6 +163,34 @@ The human added a dedicated "AI Studio" test recommending authority (`aistudio@m
 - **Discovered a real Resend platform restriction while testing direct (non-override) delivery to `aistudio@mcciapune.com`**: Resend's shared `onboarding@resend.dev` sending domain will only deliver to the Resend account owner's own verified address — every other recipient gets a 403 (`"You can only send testing emails to your own email address..."`). Tested by briefly unsetting `EMAIL_TEST_OVERRIDE_RECIPIENT` for exactly one submission (immediately restored after); the existing error-handling in `notify.ts` caught and logged the 403 cleanly with no crash, so this required no code fix — but it's a significant fact for the human: **no one except the Resend account owner can receive a real email from this app until `mcciapune.com` (or another owned domain) is verified in Resend and `EMAIL_FROM` is switched to it.** See the updated open item below.
 - Test rows from both the AI Studio submission and the direct-delivery test cleaned up afterward. `tsc`, Vitest (117 passing), unaffected by this change (no test asserts logo pixel dimensions).
 
+### Shipped — Task A: Vendor/Staff/Authority Edit + Deactivate audit and fix (Claude Code, 2026-07-31)
+The human asked for an audit of the real state of admin CRUD for all three entities (a prior summary had claimed "CRUD" was built; the human suspected only Create actually worked) before any fixing. Findings, then fixes — full detail:
+
+**Audit findings (state before this session):**
+- **Vendors**: Edit fully worked (`VendorForm` reused for create/edit, `PATCH /api/admin/vendors/[id]`, all fields). Deactivate/Reactivate worked (`VendorActiveToggle`). No hard-delete route existed. This one was already correct.
+- **Staff members**: Edit UI existed (`StaffForm` + `/admin/staff/[id]`) but **only for `fullName` and authority assignments — `email` was never a field on the form or in `staffMemberFormSchema`, on create OR edit**, even though `staff_members.email` has existed since migration 0006 and drives the "Your Email" auto-fill. The only way email ever got populated was the one-off `backfill-staff-authority-emails.ts` script — Admin had no way to set or correct it. Deactivate/Reactivate worked (`StaffActiveToggle`). No hard-delete route.
+- **Recommending Authorities**: **Edit did not exist in the UI at all** — confirming the human's suspicion. Only `NewAuthorityInlineForm` (create) and `AuthorityActiveToggle` (isActive-only) existed on `/admin/staff`. The PATCH API route (`/api/admin/authorities/[id]`) already technically supported editing `authorityName`/`email` (accepting a partial body), but nothing in the UI ever called it with anything but `{isActive}`. No hard-delete route.
+- **Safety check before deactivation (Task A §3)**: did not exist for any entity — all three toggles fired an unconditional PATCH with zero check for in-progress dependents.
+- **Real bug found during the audit, not asked for but directly relevant to §2's acceptance criteria**: `GET /api/staff/search`'s authority-options join (`staff_authority_options` → `recommending_authorities`) had **no filter on `recommendingAuthorities.isActive`** — a staff member linked to a since-deactivated authority would still offer it as a selectable radio option on the public form for a brand-new submission. Fixed (added `eq(recommendingAuthorities.isActive, true)` to the join's `where`). Verified live: a staff member linked to a freshly-deactivated authority now returns `authorityOptions: []` from the search endpoint.
+
+**§4 — snapshot vs. live-FK, per field (report only, per the human's explicit instruction not to change this):**
+- `submitted_by_name`: **snapshot**. Plain `text` column copied at submission time. `payment_advices` has **no FK to `staff_members` at all** — not even a nullable one. Editing or deactivating a staff member's record has zero effect on any historical submission's displayed name.
+- `recommending_authority_id`: **live FK**. Every PDF route, the admin detail page, and the authority-approval page all do a fresh `SELECT authority_name FROM recommending_authorities WHERE id = ...` at render/view time — confirmed by reading `app/api/advice/[id]/pdf/route.tsx` directly. **Renaming an authority retroactively changes what's printed on every PDF for every advice that references it, including ones already submitted/approved, if ever re-downloaded or re-viewed.** This is real and not something this session changed — flagging per instruction, not fixing.
+- Vendor fields (`payeeName`, `payeeAddress`, `payeeEmail`, `payeeContactPerson`, `payeeContactPhone`, `payeeGstin`, `payeeUdyamNumber`): **snapshot**. `vendorId` is stored as an FK but only used for typeahead re-fill convenience; the actual displayed/printed values are separate plain-text columns copied at submission time. Editing a vendor later does not affect historical records.
+
+**Fixes shipped:**
+1. **Staff email**: added `email` to `staffMemberFormSchema`, `StaffForm` (new Field, matches `VendorForm`'s style), `POST/PATCH /api/admin/staff[/[id]]`, and the edit page's `initialValues`. Now fully editable, same as vendors/authorities.
+2. **Authority Edit UI**: new `components/admin/AuthoritiesSection.tsx` (client component) replaces the old create-only `NewAuthorityInlineForm` + static table split — one component now manages Create AND Edit through the same inline form (an "Edit" button per row pre-fills it in place, `PATCH` instead of `POST`), keeping the deliberate "authorities live inline on `/admin/staff`, no standalone page" design from the earlier Staff/Authority Roster session. `NewAuthorityInlineForm.tsx` deleted (fully superseded, zero remaining references).
+3. **Safety check on deactivation** (staff + authorities only, per the brief — not vendors): new `lib/advice/deactivation-safety.ts` — `countInProgressForAuthority(id)` (reliable, via the `recommending_authority_id` FK) and `countInProgressForStaffName(fullName)` (best-effort case-insensitive/trimmed name match against `submitted_by_name` — **explicitly documented as unreliable, not exact, because staff has no FK on `payment_advices` at all**; flagged in the code comment and here rather than presented as airtight). "In progress" = `status = 'SUBMITTED'` (covers every pre-final pipeline stage); `SENT_BACK` and `APPROVED` (always sanctioned, since sanctioning is the only path that sets it) both count as closed-out, matching the human's own framing exactly ("not yet Sanctioned, rejected/closed out").
+   - Both `PATCH /api/admin/staff/[id]` (both its toggle-only and full-edit-form code paths) and `PATCH /api/admin/authorities/[id]` now return **409** with `{error, inProgressCount}` when asked to set `isActive: false` on an entity with ≥1 in-progress dependent, unless the body also carries `force: true`.
+   - `StaffActiveToggle`, `AuthorityActiveToggle`, `StaffForm`'s full submit, and the new `AuthoritiesSection`'s inline form all catch the 409, show `window.confirm()` with the exact warning message, and retry with `force: true` only if the admin confirms — "warn, then let them proceed if they choose," per the brief. No existing confirm/modal pattern existed anywhere in this repo to reuse; `window.confirm()` was the simplest fit for a plain admin toggle button, consistent with the rest of this app's lightweight admin UI.
+4. Deactivated staff/authorities already correctly disappeared from the top-level active lists (`/`, `/edit/[token]`'s `recommendingAuthorities` query, `/api/staff/search`'s own `staffMembers.isActive` filter) — those were already right; only the nested authority-options join (fix #-in-audit-above) was wrong.
+5. Reactivate already worked for both (same toggle, no safety check needed going active→active is a no-op path, active-false→true never checked).
+
+**Verified live** against the real dev server + real Neon DB (not just unit tests, consistent with this repo's established convention for anything touching `db.transaction`/multi-shape queries that would need brittle mocking): created a test authority → edited its name+email (200) → submitted a real advice against it → attempted deactivate without force (409, count=1) → deactivate with force (200) → confirmed the PDF and admin detail page still correctly show the (now inactive) authority's name on that historical advice → confirmed it's gone from the public form's active list. Created a test staff member linked to that now-inactive authority → confirmed `/api/staff/search` returns `authorityOptions: []` for them (the bug fix). Edited the staff member's name to exactly match the test advice's `submittedByName` → attempted deactivate via both the toggle-only body shape and the full-edit-form body shape, both correctly 409'd with count=1, both succeeded with `force: true`, reactivate worked with no check. Vendor edit re-confirmed still works (was already correct). All test rows/blobs cleaned up after. New tests: `lib/advice/deactivation-safety.test.ts` (4 tests, unit-level for the two count functions — the route-level 409/force logic was verified live rather than mocked, for the same reason cited above). `tsc`, ESLint, Vitest (121 passing, 2 pre-existing skipped), and `next build` all clean.
+
+**Not done, out of scope for Task A, flagged for awareness:** the admin's own "assign an authority to a staff member" dropdown (in `StaffForm`, both create and edit) still lists inactive authorities as assignable — left as-is since the acceptance criteria specifically said the **public form's** dropdowns must exclude inactive records, not admin's internal assignment UI, and an admin might legitimately want to see/reassign historical links. Not a bug relative to what was asked.
+
 ## 4. Open Items (verify before building on top of these)
 
 Status legend: 🔴 unverified / high risk · 🟡 unverified / lower risk · 🟢 verified
@@ -188,6 +216,8 @@ Status legend: 🔴 unverified / high risk · 🟡 unverified / lower risk · �
 - 🟡 **Recommending Authority "S H Kopardekar" has no email on file and doesn't match any name in the authoritative list** (distinct from "SUDHANWA KOPARDEKAR," which does match) — will fall back to preview mode for `notifyAuthorityApproval` indefinitely until the human either gets their real email or confirms this is meant to be the same person as an existing matched entry (possibly a data-entry variant, not a genuinely different person — not confirmed either way this session, flagging rather than guessing).
 - ⬜ **Resend `mcciapune.com` domain verification status is unknown** — no Resend account/dashboard access this session. Per the brief's explicit instruction, did not touch DNS or attempt domain verification; `EMAIL_FROM` is left at the shared `onboarding@resend.dev` testing domain. The human needs to confirm domain status directly in the Resend dashboard before ever pointing `EMAIL_FROM` at a `mcciapune.com` address. **Now confirmed higher-priority than originally scoped** — see the entry above: until this is done, the app cannot deliver live email to anyone but the Resend account owner, full stop, not just a "nicer to have real domain" cosmetic concern.
 - 🟡 **`lib/staff-email.ts`'s `resolveStaffEmailByName()` has no live call site** — built and unit-tested per the brief's explicit request (resolve the 6 Verifier/Sanctioner names against the staff table), but nothing in this session's scope actually emails a verifier or sanctioner, so it isn't wired into any route. Likely forward-looking infrastructure; don't assume it's dead code to be deleted without checking with the human first.
+- 🟢 **Task A (Vendor/Staff/Authority Edit + Deactivate) shipped and verified live 2026-07-31 by Claude Code** — see the "Shipped" entry above for the full audit findings (only Authority Edit was genuinely missing; staff email was never editable; a real dropdown-corruption bug was found and fixed) and the exact live verification performed against the real dev server + real Neon DB.
+- 🟡 **`countInProgressForStaffName()`'s name-match safety check is best-effort, not exact** — `payment_advices` has no FK to `staff_members` at all, so deactivating a staff member whose submitted name doesn't textually match their canonical staff record (typo, nickname, maiden/married name change) will silently report 0 in-progress submissions even if they have some. This is a schema limitation, not a bug in the check itself — flagged in code and here rather than presented as reliable. Only a `staff_member_id` FK on `payment_advices` (a bigger, unrequested schema change) would make this exact.
 
 ## 5. Do Not Touch Without Asking
 
@@ -211,12 +241,59 @@ Status legend: 🔴 unverified / high risk · 🟡 unverified / lower risk · �
 - **`notifyAuthorityApproval()`'s `to` parameter is `string | null`, not `string` like the other three notify functions** — deliberately, since ~2/13 recommending authorities have no email on file and must silently fall back to preview (never throw, never block the calling route) rather than erroring. Don't change its signature to require a non-null email.
 - **`lib/staff-authority-emails.ts`'s `NAME_EMAIL_LIST` is the single authoritative source for staff/authority emails** — `scripts/backfill-staff-authority-emails.ts` and `lib/staff-email.ts` both import from it rather than duplicating the list or the name-normalization logic. If MCCIA sends an updated email list, edit this one file and re-run the backfill script; don't hand-edit DB rows or create a second list.
 - **Never assume the `vi.mock`/`vi.fn().mockImplementation()` pattern for mocking a class constructor is broken across a whole test file just because one test fails and the same test passes in isolation — check `afterEach`/`beforeEach` for `vi.restoreAllMocks()` first.** It silently strips `mockImplementation` from plain `vi.fn()`s (not just spy state, despite the name), which only manifests as failures once 2+ tests share the mock. Cost real time to root-cause in this session (see the session log entry below) — don't rediscover it the hard way again.
+- **Recommending Authorities are managed inline on `/admin/staff` (`components/admin/AuthoritiesSection.tsx`), not a standalone `/admin/authorities/[id]` page** — this is a deliberate continuation of the earlier Staff/Authority Roster session's "one page" consolidation. Don't reintroduce a separate authorities page without checking; extend `AuthoritiesSection`'s inline create/edit form instead.
+- **The deactivation safety check (staff + authorities, `lib/advice/deactivation-safety.ts`) is NOT a hard block — it's a warn-then-confirm gate.** `PATCH` returns 409 with `{error, inProgressCount}` when deactivating something with in-progress dependents and no `force: true` in the body; the UI shows `window.confirm()` and retries with `force: true` if the admin agrees. Don't change this to a hard block (the human explicitly wants "confirm and continue if they choose," not "cannot deactivate") and don't remove the `force` escape hatch.
+- **`countInProgressForStaffName()` matches by name, not FK** (`payment_advices` has no `staff_member_id` column) — it is a best-effort approximation, not a reliable reference check. Don't present its result as exact, and don't "fix" it by adding fuzzy matching without asking — the human may want a real FK instead, which is a bigger schema change.
 
 ## 6. Session Log
 
 Append one entry per session, newest at the top. Keep entries short — this is a changelog, not a diary.
 
 ```
+2026-07-31 — Claude Code — Task A per the human's brief: audited real state of
+Vendor/Staff/Authority admin CRUD before writing any code (human suspected
+only Create worked, contradicting a prior "CRUD built" summary). Confirmed:
+Vendors already fully correct. Staff Edit existed but never had an email
+field (create or edit) despite the column existing since migration 0006.
+Authority Edit did NOT exist anywhere in the UI — only Create + an
+isActive-only toggle — confirming the human's suspicion. Fixed all three:
+added email to staffMemberFormSchema/StaffForm/staff routes; built
+AuthoritiesSection.tsx (inline create+edit, replacing the create-only
+NewAuthorityInlineForm, keeping the deliberate "inline on /admin/staff, no
+standalone page" design) with full authorityName/email edit wired to the PATCH
+route that already silently supported it. Built the §3 safety check
+(lib/advice/deactivation-safety.ts): reliable FK-based count for authorities,
+best-effort name-match for staff (flagged as approximate — no FK exists);
+both PATCH routes 409 with {error, inProgressCount} unless {force:true},
+UI catches it with window.confirm()+retry. Found and fixed a real bug while
+auditing §2's dropdown-disappearance requirement: /api/staff/search's
+authority-options join never filtered recommendingAuthorities.isActive, so a
+deactivated authority still offered itself as a selectable option for a
+staff member's NEW submission — fixed with one added eq() clause. §4 audit
+(report only, no changes): submitted_by_name and vendor payee fields are
+snapshotted plain text at submission time; recommending_authority_id is a
+live FK — every PDF/admin-detail/authority-approval view re-joins to
+recommending_authorities at render time, so renaming an authority
+retroactively changes what historical PDFs show if re-downloaded. New test
+file lib/advice/deactivation-safety.test.ts (4 tests, unit-level for the two
+count functions); route-level 409/force behavior verified live instead of
+mocked, same rationale as prior sessions for db.transaction-heavy routes.
+Full live verification against the real dev server + real Neon DB: created
+test authority → edited name+email → submitted a real advice against it →
+deactivate blocked 409 (count=1) → forced through (200) → confirmed the
+historical PDF and admin detail page still show the deactivated authority's
+name correctly → confirmed it's gone from the public form. Created a linked
+test staff member → confirmed the search-endpoint bug fix (authorityOptions:
+[] for the now-inactive authority) → renamed the staff member to match the
+test advice's submittedByName exactly → confirmed both the toggle-only and
+full-edit-form PATCH paths 409 correctly, force succeeds, reactivate has no
+check. Vendor edit re-confirmed still correct. All test data cleaned up
+after. tsc/ESLint/Vitest (121 passing, 2 pre-existing skipped)/next build all
+clean. Per the human's explicit instruction, STOPPED here and reported back
+rather than starting Task B (Finance Pipeline status-logic audit) — Task B
+depends on the human's answer to one schema question (combine vs. split
+Received/In-Process) before any code can be written for it.
+
 2026-07-30 — Claude Code — Human added a test recommending authority "AI
 Studio" (aistudio@mcciapune.com) and asked for live-send testing against it;
 reported the received email's MCCIA logo looked squished. Root-caused:

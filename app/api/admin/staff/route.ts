@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
   const staff = await db.transaction(async (tx) => {
     const [created] = await tx
       .insert(staffMembers)
-      .values({ fullName: values.fullName, isActive: values.isActive })
+      .values({ fullName: values.fullName, email: values.email ?? null, isActive: values.isActive })
       .returning();
 
     const options: { staffMemberId: string; recommendingAuthorityId: string; sortOrder: number }[] = [];

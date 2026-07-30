@@ -13,14 +13,22 @@ export function AuthorityActiveToggle({
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
 
-  async function toggle() {
+  async function toggle(force = false) {
     setSubmitting(true);
     try {
-      await fetch(`/api/admin/authorities/${authorityId}`, {
+      const res = await fetch(`/api/admin/authorities/${authorityId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ isActive: !isActive }),
+        body: JSON.stringify({ isActive: !isActive, force }),
       });
+      if (res.status === 409) {
+        const data = await res.json().catch(() => null);
+        setSubmitting(false);
+        if (data?.error && window.confirm(`${data.error}\n\nDeactivate anyway?`)) {
+          await toggle(true);
+        }
+        return;
+      }
       router.refresh();
     } finally {
       setSubmitting(false);
@@ -30,7 +38,7 @@ export function AuthorityActiveToggle({
   return (
     <button
       type="button"
-      onClick={toggle}
+      onClick={() => toggle()}
       disabled={submitting}
       className="font-medium text-gray-600 hover:underline disabled:opacity-50"
     >

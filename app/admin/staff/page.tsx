@@ -2,9 +2,8 @@ import Link from "next/link";
 import { asc, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { staffMembers, recommendingAuthorities, staffAuthorityOptions } from "@/lib/db/schema";
-import { AuthorityActiveToggle } from "@/components/admin/AuthorityActiveToggle";
 import { StaffActiveToggle } from "@/components/admin/StaffActiveToggle";
-import { NewAuthorityInlineForm } from "@/components/admin/NewAuthorityInlineForm";
+import { AuthoritiesSection } from "@/components/admin/AuthoritiesSection";
 
 export const dynamic = "force-dynamic";
 
@@ -47,39 +46,7 @@ export default async function StaffPage() {
         <div className="flex items-center justify-between">
           <h2 className="font-heading text-xl text-[#0b1f3a]">Recommending Authorities</h2>
         </div>
-        <NewAuthorityInlineForm />
-        <div className="overflow-x-auto rounded-md border border-gray-200">
-          <table className="w-full min-w-[500px] text-left text-sm">
-            <thead className="border-b border-gray-200 bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
-              <tr>
-                <th className="px-4 py-3">Name</th>
-                <th className="px-4 py-3">E-mail</th>
-                <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {authorities.length === 0 ? (
-                <tr>
-                  <td colSpan={4} className="px-4 py-8 text-center text-gray-500">
-                    No recommending authorities yet.
-                  </td>
-                </tr>
-              ) : (
-                authorities.map((a) => (
-                  <tr key={a.id} className="border-b border-gray-100 last:border-0 hover:bg-gray-50">
-                    <td className="px-4 py-3 font-medium text-[#0b1f3a]">{a.authorityName}</td>
-                    <td className="px-4 py-3">{a.email ?? "—"}</td>
-                    <td className="px-4 py-3">{a.isActive ? "Active" : "Inactive"}</td>
-                    <td className="whitespace-nowrap px-4 py-3">
-                      <AuthorityActiveToggle authorityId={a.id} isActive={a.isActive} />
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+        <AuthoritiesSection authorities={authorities} />
       </section>
 
       <section className="flex flex-col gap-4">

@@ -36,7 +36,11 @@ export async function GET(req: NextRequest) {
       recommendingAuthorities,
       eq(staffAuthorityOptions.recommendingAuthorityId, recommendingAuthorities.id),
     )
-    .where(inArray(staffAuthorityOptions.staffMemberId, staffIds))
+    // A deactivated authority must not surface as a selectable option for
+    // new submissions, even if a staff member is still linked to it.
+    .where(
+      and(inArray(staffAuthorityOptions.staffMemberId, staffIds), eq(recommendingAuthorities.isActive, true)),
+    )
     .orderBy(asc(staffAuthorityOptions.sortOrder));
 
   const optionsByStaffId = new Map<string, { id: string; authorityName: string }[]>();
