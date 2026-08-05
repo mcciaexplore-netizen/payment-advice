@@ -3,7 +3,9 @@ import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { paymentAdvices, auditLog } from "@/lib/db/schema";
 import { notifyVerified } from "@/lib/email/notify";
-import { verifySchema, verifierNameCorrectionSchema } from "@/lib/validation/payment-advice";
+import { PaymentMode, verifierNameCorrectionSchema } from "@/lib/validation/payment-advice";
+import { displayNoFor, documentLabelFor } from "@/lib/advice/document-identity";
+import { getAdminSession } from "@/lib/admin-session";
 
 export const runtime = "nodejs";
 
@@ -11,18 +13,26 @@ function clientIp(req: NextRequest): string | null {
   return req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null;
 }
 
-/** Step 2: Finance verifies, picking their name from the fixed 4-person
- * list. Notifies the submitter — see AGENT_HANDOFF.md for why Received and
- * Sanctioned deliberately do not send an email. */
+/** Step 2: Finance verifies. `verified_by` is auto-attributed from the
+ * logged-in Admin's session (real per-person login, admin_users) — no
+ * picker, no request body needed. Notifies the submitter — see
+ * AGENT_HANDOFF.md for why Received deliberately does not send an email,
+ * and for why Sanctioned no longer exists as an active step at all. */
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
 
+  const session = await getAdminSession();
+  if (!session) {
+    return NextResponse.json({ error: "Not signed in." }, { status: 401 });
+  }
+
   const [advice] = await db
     .select({
       serialNo: paymentAdvices.serialNo,
+      cashVoucherNo: paymentAdvices.cashVoucherNo,
       submittedByName: paymentAdvices.submittedByName,
       submittedByEmail: paymentAdvices.submittedByEmail,
       payeeName: paymentAdvices.payeeName,
@@ -48,37 +58,29 @@ export async function POST(
     return NextResponse.json({ error: "Already verified." }, { status: 409 });
   }
 
-  const body = await req.json().catch(() => null);
-  const parsed = verifySchema.safeParse(body);
-  if (!parsed.success) {
-    return NextResponse.json(
-      { error: parsed.error.issues[0]?.message ?? "Invalid data" },
-      { status: 400 },
-    );
-  }
-
+  const verifiedBy = session.fullName;
   const now = new Date();
   await db.transaction(async (tx) => {
     await tx
       .update(paymentAdvices)
-      .set({ verifiedAt: now, verifiedBy: parsed.data.verifiedBy, updatedAt: now })
+      .set({ verifiedAt: now, verifiedBy, updatedAt: now })
       .where(eq(paymentAdvices.id, id));
 
     await tx.insert(auditLog).values({
       paymentAdviceId: id,
       action: "VERIFIED",
-      actor: parsed.data.verifiedBy,
+      actor: verifiedBy,
       ipAddress: clientIp(req),
-      details: { verifiedBy: parsed.data.verifiedBy },
+      details: { verifiedBy },
     });
   });
 
   await notifyVerified(
     {
-      serialNo: advice.serialNo,
+      displayNo: displayNoFor(advice.paymentMode as PaymentMode, advice.serialNo, advice.cashVoucherNo),
       submittedByName: advice.submittedByName,
-      verifiedBy: parsed.data.verifiedBy,
-      documentLabel: advice.paymentMode === "CASH" ? "Cash Payment Voucher" : "Payment Advice",
+      verifiedBy,
+      documentLabel: documentLabelFor(advice.paymentMode as PaymentMode),
       payeeName: advice.payeeName,
       amount: Number(advice.amount).toLocaleString("en-IN", { minimumFractionDigits: 2 }),
       formDate: advice.formDate,

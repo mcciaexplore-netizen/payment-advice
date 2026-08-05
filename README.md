@@ -39,13 +39,18 @@ Copy `.env.local.example` to `.env.local` and fill in real values. Never commit
 |---|---|---|
 | `DATABASE_URL` | Yes | Neon Postgres connection string (pooled connection recommended). Neon dashboard → Connection Details. Must support real transactions (the app uses `@neondatabase/serverless`'s WebSocket `Pool`, not the stateless HTTP driver) — this only works against a real Neon (or Neon Local) endpoint, not a plain local Postgres. |
 | `BLOB_READ_WRITE_TOKEN` | Yes | Vercel Blob read/write token. Vercel dashboard → Storage → your Blob store → `.env.local` tab. |
-| `ADMIN_PASSWORD` | Yes | Single shared password for the Finance admin login (`/admin/login`). Pick a strong value. |
 | `AUTH_SECRET` | Yes | Secret used to sign/verify the admin session JWT (HS256). Generate with `openssl rand -base64 32`. |
 | `TEST_DATABASE_URL` | No | Only needed to run the `lib/serial.ts` integration tests (`npm test`) against a real Postgres instance. Point this at a **scratch** Neon branch or local Postgres — never at your real `DATABASE_URL` — since the tests write rows to `serial_counters`. Leave unset to skip those tests (the pure unit tests still run). |
-| `RESEND_API_KEY` | Only if `EMAIL_MODE=live` | Resend dashboard → API Keys. Unused in preview mode. |
-| `EMAIL_MODE` | No | `preview` (default if unset) — render + console.log only, no network call. `live` — actually sends via Resend. |
-| `EMAIL_FROM` | No | Sender address. Defaults to Resend's shared testing domain `onboarding@resend.dev`. Do not point this at a `mcciapune.com` address until that domain is DNS-verified in Resend. |
-| `EMAIL_TEST_OVERRIDE_RECIPIENT` | No | When `EMAIL_MODE=live`, redirects every email to this address instead of its real recipient, with the subject prefixed `[TEST — would go to: {real_recipient}] `. Leave unset for the real production behavior. |
+| `EMAIL_MODE` | No | `preview` (default if unset) — render + console.log only, no network call. `live` — actually sends via whichever provider `EMAIL_PROVIDER` selects. |
+| `EMAIL_PROVIDER` | No | `gmail` (default if unset) or `resend`. Gmail SMTP is the current interim live provider pending `mcciapune.com` DNS verification in Resend — see `AGENT_HANDOFF.md`. |
+| `GMAIL_USER` / `GMAIL_APP_PASSWORD` | Only if `EMAIL_PROVIDER=gmail` (the default) and `EMAIL_MODE=live` | `GMAIL_USER` is also used as the "from" address (Gmail SMTP requires it to match the authenticated account). `GMAIL_APP_PASSWORD` is a 16-character App Password from [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords) (requires 2-Step Verification), not the account's normal password. |
+| `RESEND_API_KEY` | Only if `EMAIL_PROVIDER=resend` and `EMAIL_MODE=live` | Resend dashboard → API Keys. |
+| `EMAIL_FROM` | No | Only used when `EMAIL_PROVIDER=resend`. Sender address. Defaults to Resend's shared testing domain `onboarding@resend.dev`. Do not point this at a `mcciapune.com` address until that domain is DNS-verified in Resend. |
+| `EMAIL_TEST_OVERRIDE_RECIPIENT` | No | When `EMAIL_MODE=live`, redirects every email to this address instead of its real recipient, with the subject prefixed `[TEST — would go to: {real_recipient}] `. Leave unset for the real production behavior. Applies to both email providers identically. |
+
+Real per-person Admin logins (email + bcrypt password, `admin_users` table,
+seeded via `npm run seed:admin-users`) replaced the old single shared
+`ADMIN_PASSWORD` — there is no shared-password env var anymore.
 
 ## The MCCIA logo
 
@@ -104,7 +109,7 @@ Never hand-edit an already-applied migration file; add a new one instead.
    this populates `BLOB_READ_WRITE_TOKEN` automatically when linked, or copy
    it manually into your env vars.
 3. **Env vars**: in Vercel → Project → Settings → Environment Variables, set
-   `DATABASE_URL`, `BLOB_READ_WRITE_TOKEN`, `ADMIN_PASSWORD`, `AUTH_SECRET`
+   `DATABASE_URL`, `BLOB_READ_WRITE_TOKEN`, `AUTH_SECRET`
    for Production (and Preview if you want preview deploys to work against a
    real or scratch DB). Do not set `TEST_DATABASE_URL` in Vercel — it's a
    local-only testing convenience.
@@ -114,9 +119,10 @@ Never hand-edit an already-applied migration file; add a new one instead.
    overrides are needed (`next build` / `next start` are Vercel's defaults).
    All PDF/Blob route handlers already force the Node.js runtime, so no
    Edge-related configuration is required.
-6. After the first deploy, log into `/admin/login` with `ADMIN_PASSWORD` and
-   add at least one Recommending Authority via `/admin/authorities` so the
-   public form is usable.
+6. After the first deploy, run `npm run seed:admin-users` against production
+   `DATABASE_URL` to create the real per-person Admin logins, then log into
+   `/admin/login` with one of them and add at least one Recommending
+   Authority via `/admin/staff` so the public form is usable.
 
 ## Notes on design decisions
 

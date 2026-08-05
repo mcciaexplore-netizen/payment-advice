@@ -9,6 +9,7 @@
 export type SubmissionSummary = {
   id: string;
   serialNo: string;
+  cashVoucherNo: string | null;
   payeeName: string;
   amount: number;
   billNo: string;

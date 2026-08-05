@@ -4,7 +4,8 @@ import { db } from "@/lib/db";
 import { paymentAdvices } from "@/lib/db/schema";
 import { notifySentBack } from "@/lib/email/notify";
 import { performSendBack } from "@/lib/advice/send-back";
-import { sendBackSchema } from "@/lib/validation/payment-advice";
+import { displayNoFor, documentLabelFor } from "@/lib/advice/document-identity";
+import { PaymentMode, sendBackSchema } from "@/lib/validation/payment-advice";
 
 export const runtime = "nodejs";
 
@@ -22,6 +23,8 @@ export async function POST(
     .select({
       status: paymentAdvices.status,
       serialNo: paymentAdvices.serialNo,
+      cashVoucherNo: paymentAdvices.cashVoucherNo,
+      paymentMode: paymentAdvices.paymentMode,
       submittedByName: paymentAdvices.submittedByName,
       submittedByEmail: paymentAdvices.submittedByEmail,
       payeeName: paymentAdvices.payeeName,
@@ -35,7 +38,7 @@ export async function POST(
   }
   if (advice.status === "APPROVED") {
     return NextResponse.json(
-      { error: "An approved Payment Advice cannot be sent back." },
+      { error: `An approved ${documentLabelFor(advice.paymentMode as PaymentMode)} cannot be sent back.` },
       { status: 409 },
     );
   }
@@ -58,7 +61,8 @@ export async function POST(
 
   await notifySentBack(
     {
-      serialNo: advice.serialNo,
+      displayNo: displayNoFor(advice.paymentMode as PaymentMode, advice.serialNo, advice.cashVoucherNo),
+      documentLabel: documentLabelFor(advice.paymentMode as PaymentMode),
       submittedByName: advice.submittedByName,
       sentBackBy: "Admin",
       remarks: parsed.data.adminRemarks,

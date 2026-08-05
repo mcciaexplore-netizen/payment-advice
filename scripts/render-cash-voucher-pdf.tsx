@@ -9,7 +9,7 @@ async function main() {
   const buffer = await renderToBuffer(
     <CashVoucherDocument
       data={{
-        serialNo: "MCCIA/2026-27/0001",
+        cashVoucherNo: "CASH/MCCIA/2026-27/0001",
         formDate: "2026-07-28",
         payeeName: "Acme Test Pvt Ltd",
         items: [
@@ -18,7 +18,9 @@ async function main() {
           { description: "Local conveyance", amount: "350.00" },
         ],
         submittedByName: "Priya Sharma",
+        submittedAt: "2026-07-28T10:15:00.000Z",
         recommendingAuthorityName: "Applied AI Studio — Mr. Test Head",
+        authorityApprovedAt: "2026-07-29T14:00:00.000Z",
         sanctionedBy: "Chintamani Shrotri",
       }}
     />,

@@ -4,8 +4,9 @@ import { db } from "@/lib/db";
 import { paymentAdvices, recommendingAuthorities } from "@/lib/db/schema";
 import { authorityActionError } from "@/lib/advice/authority-token";
 import { performSendBack } from "@/lib/advice/send-back";
+import { displayNoFor, documentLabelFor } from "@/lib/advice/document-identity";
 import { notifySentBack } from "@/lib/email/notify";
-import { authorityRejectSchema } from "@/lib/validation/payment-advice";
+import { authorityRejectSchema, PaymentMode } from "@/lib/validation/payment-advice";
 
 export const runtime = "nodejs";
 
@@ -23,6 +24,8 @@ export async function POST(
     .select({
       id: paymentAdvices.id,
       serialNo: paymentAdvices.serialNo,
+      cashVoucherNo: paymentAdvices.cashVoucherNo,
+      paymentMode: paymentAdvices.paymentMode,
       submittedByName: paymentAdvices.submittedByName,
       submittedByEmail: paymentAdvices.submittedByEmail,
       payeeName: paymentAdvices.payeeName,
@@ -70,7 +73,8 @@ export async function POST(
 
   await notifySentBack(
     {
-      serialNo: advice.serialNo,
+      displayNo: displayNoFor(advice.paymentMode as PaymentMode, advice.serialNo, advice.cashVoucherNo),
+      documentLabel: documentLabelFor(advice.paymentMode as PaymentMode),
       submittedByName: advice.submittedByName,
       sentBackBy: authorityName,
       remarks: parsed.data.remarks,

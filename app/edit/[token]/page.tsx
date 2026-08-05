@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { paymentAdvices, attachments, recommendingAuthorities, cashVoucherItems } from "@/lib/db/schema";
 import { PaymentAdviceForm } from "@/components/form/PaymentAdviceForm";
 import { DocType, PaymentMode } from "@/lib/validation/payment-advice";
+import { displayNoFor, documentLabelFor } from "@/lib/advice/document-identity";
 
 export const dynamic = "force-dynamic";
 
@@ -62,9 +63,12 @@ export default async function EditPage({
   return (
     <main className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-8 px-6 py-10">
       <header className="border-b border-gray-200 pb-6">
-        <p className="text-xs font-medium tracking-wide text-gray-500">{advice.serialNo}</p>
+        <p className="text-xs font-medium tracking-wide text-gray-500">
+          {displayNoFor(advice.paymentMode as PaymentMode, advice.serialNo, advice.cashVoucherNo)}
+          {advice.paymentMode === "CASH" ? ` (Internal Ref. ${advice.serialNo})` : ""}
+        </p>
         <h1 className="font-heading text-3xl text-[#0b1f3a]">
-          Correct and Resubmit Payment Advice
+          Correct and Resubmit {documentLabelFor(advice.paymentMode as PaymentMode)}
         </h1>
       </header>
 

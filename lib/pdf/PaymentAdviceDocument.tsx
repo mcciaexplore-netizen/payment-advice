@@ -1,6 +1,7 @@
 import { Document, Page, View, Text, Image, StyleSheet } from "@react-pdf/renderer";
 import fs from "node:fs";
 import path from "node:path";
+import { Stamp } from "@/lib/pdf/Stamp";
 
 export type PaymentAdvicePdfData = {
   serialNo: string;
@@ -31,8 +32,12 @@ export type PaymentAdvicePdfData = {
   // pipeline — null/blank until that stage happens, same convention as
   // every other signature line on this form.
   verifiedBy: string | null;
+  verifiedAt: string | null; // ISO timestamp — drives the Verified stamp's date
   sanctionedBy: string | null;
   submittedAt: string; // ISO timestamp
+  // ISO timestamp — drives the Recommended-by (Approved) stamp; null until
+  // the Recommending Authority actually approves.
+  authorityApprovedAt: string | null;
   approvedAt: string | null; // ISO timestamp
   approvedByName: string | null;
 };
@@ -82,7 +87,8 @@ const styles = StyleSheet.create({
     borderRight: BORDER,
     borderBottom: BORDER,
     padding: 6,
-    minHeight: 62,
+    minHeight: 80,
+    position: "relative",
   },
   footerLabel: { fontFamily: "Helvetica-Bold", fontSize: 8 },
   footerLine: { fontSize: 8, marginTop: 16 },
@@ -260,19 +266,43 @@ export function PaymentAdviceDocument({ data }: { data: PaymentAdvicePdfData }) 
             <Text style={styles.footerValue}>{data.submittedByName}</Text>
             <Text style={styles.footerLine}>Date :</Text>
             <Text style={styles.footerLine}>Signature :</Text>
+            <Stamp
+              label="SUBMITTED"
+              name={data.submittedByName}
+              date={formatDMY(data.submittedAt)}
+              color="navy"
+            />
           </View>
           <View style={styles.footerCell}>
             <Text style={styles.footerLabel}>Recommended by :</Text>
             <Text style={styles.footerValue}>{data.recommendingAuthorityName}</Text>
             <Text style={styles.footerLine}>Date :</Text>
             <Text style={styles.footerLine}>Signature :</Text>
+            {data.authorityApprovedAt ? (
+              <Stamp
+                label="APPROVED"
+                name={data.recommendingAuthorityName}
+                date={formatDMY(data.authorityApprovedAt)}
+                color="green"
+              />
+            ) : null}
           </View>
           <View style={styles.footerCell}>
             <Text style={styles.footerLabel}>Verified by :</Text>
             <Text style={styles.footerValue}>{data.verifiedBy ?? ""}</Text>
             <Text style={styles.footerLine}>Date :</Text>
             <Text style={styles.footerLine}>Signature :</Text>
+            {data.verifiedAt && data.verifiedBy ? (
+              <Stamp
+                label="VERIFIED"
+                name={data.verifiedBy}
+                date={formatDMY(data.verifiedAt)}
+                color="amber"
+              />
+            ) : null}
           </View>
+          {/* Sanctioned by: never stamped, per spec — stays a physical
+              wet-ink box for Chintamani, untouched by the stamp feature. */}
           <View style={[styles.footerCell, { borderRight: BORDER }]}>
             <Text style={styles.footerLabel}>Sanctioned by :</Text>
             <Text style={styles.footerValue}>{data.sanctionedBy ?? ""}</Text>

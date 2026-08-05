@@ -52,18 +52,19 @@ describe("buildTabCondition", () => {
     expect(unique.size).toBe(conditions.length);
   });
 
-  it("keys 'sanctioned_ready' on status APPROVED, not status SUBMITTED", () => {
-    // The other four stage tabs all imply status SUBMITTED; once sanctioned,
-    // status flips to APPROVED, so this one has to filter on a different
-    // status value — a regression guard against it silently becoming
-    // "status SUBMITTED && sanctionedAt set" (which would always be empty,
-    // since sanctioning always flips status to APPROVED in the same write).
-    expect(extractBoundParams(buildTabCondition("sanctioned_ready"))).toContain("APPROVED");
-    expect(extractBoundParams(buildTabCondition("sanctioned_ready"))).not.toContain("SUBMITTED");
+  it("keys 'payment_done' on status APPROVED, not status SUBMITTED", () => {
+    // The other four stage tabs all imply status SUBMITTED; once Payment
+    // Done fires, status flips to APPROVED, so this one has to filter on a
+    // different status value — a regression guard against it silently
+    // becoming "status SUBMITTED && paymentDoneAt set" (which would always
+    // be empty, since Payment Done always flips status to APPROVED in the
+    // same write).
+    expect(extractBoundParams(buildTabCondition("payment_done"))).toContain("APPROVED");
+    expect(extractBoundParams(buildTabCondition("payment_done"))).not.toContain("SUBMITTED");
   });
 
   it("keys the other four stage tabs on status SUBMITTED", () => {
-    for (const tab of ["waiting_authority", "awaiting_finance", "received_in_process", "verified_awaiting_sanction"] as const) {
+    for (const tab of ["waiting_authority", "awaiting_finance", "received_in_process", "verified_ready_payment"] as const) {
       expect(extractBoundParams(buildTabCondition(tab))).toContain("SUBMITTED");
     }
   });

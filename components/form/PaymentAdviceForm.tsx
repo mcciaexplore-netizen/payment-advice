@@ -168,6 +168,7 @@ export function PaymentAdviceForm({
       storeSubmissionSummary({
         id: data.id,
         serialNo: data.serialNo,
+        cashVoucherNo: data.cashVoucherNo ?? null,
         payeeName: values.payeeName,
         amount: values.amount,
         billNo: values.billNo,

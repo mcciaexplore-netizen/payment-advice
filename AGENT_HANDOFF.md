@@ -47,7 +47,7 @@ Design system: Navy `#0B1F3A`, Forest green `#2E8B57`, Amber `#E8A33D`. Headings
 
 ## 3. Current State (update this every session)
 
-**Last updated:** 31 July 2026, by Claude Code (full live-send verification of all 4 notification emails against the human's real inbox via EMAIL_MODE=live + override — all 5 tests passed; no code changed this session, pure verification — see below)
+**Last updated:** 5 August 2026, by Claude Code (live email now sends via Gmail SMTP, not Resend — interim provider switch pending `mcciapune.com` DNS verification; all 5 notification emails re-verified live through the new transport; Resend kept fully intact and selectable via `EMAIL_PROVIDER=resend` for later — see below)
 
 ### Shipped — Phase 1 baseline (Claude Code)
 - Public form `/` (no login): submitter, payee (vendor typeahead), bill/reference, payment mode (NEFT/Cash), enclosures, mandatory Tax Invoice + Approval/Budget PDF attachments
@@ -64,7 +64,7 @@ Design system: Navy `#0B1F3A`, Forest green `#2E8B57`, Amber `#E8A33D`. Headings
 - "Nature of Expenditure" is now a repeatable line-item list (description + amount) for Cash mode, with a live auto-summed Total
 - New table `cash_voucher_items` (FK to `payment_advices`), populated only when `payment_mode = 'CASH'`
 - Migration `0002_nostalgic_carnage.sql` applied
-- Voucher "No." reuses the Payment Advice `serial_no` — no separate numbering series
+- ~~Voucher "No." reuses the Payment Advice `serial_no` — no separate numbering series~~ **Superseded 2026-08-01** — the Cash Voucher now has its own independent series (`cash_voucher_no`, format `CASH/MCCIA/<FY>/NNNN`); see the "Shipped — Kopardekar authority merge, Cash Voucher numbering series, admin tab UI restyle" entry further down for the current behavior.
 - Line-item total becomes `payment_advices.amount` — single source of truth for both PDFs
 - `sanctioned_by_name` now filled by the **submitter at submission time** (new field) — not by Admin at approval
 - Routes: `/api/advice/[id]/cash-voucher-pdf` (public, UUID-keyed) and `/api/admin/advice/[id]/cash-voucher-pdf` (admin)
@@ -265,6 +265,155 @@ All 4 test submissions + their attachments/Blob files deleted afterward; DB conf
 - **Confidence on flipping `EMAIL_MODE=live` without the override**: the send/redirect/fallback/error-handling logic itself is now thoroughly verified from every angle in this session and is not a concern. What's *not* yet tested, because it can't be until the domain is verified, is real-world delivery through `mcciapune.com` as the `from` address — different SPF/DKIM/reputation situation than the shared testing domain entirely. Recommend keeping the override on for the first real send or two after `EMAIL_FROM` changes to a `mcciapune.com` address, purely to catch anything specific to that domain (typo in the address, DNS record issue, etc.) before it reaches real staff/authorities/submitters — not because anything found today suggests a code problem.
 - `EMAIL_MODE`/`EMAIL_TEST_OVERRIDE_RECIPIENT` were left exactly as the human set them in `.env.local` (local-only, gitignored) — nothing committed changed either.
 
+### Shipped — Kopardekar authority merge, Cash Voucher numbering series, admin tab UI restyle (Claude Code, 2026-08-01)
+Three independent fixes, done and verified in order.
+
+**Fix 1 — Merged the duplicate "S H Kopardekar" / "SUDHANWA KOPARDEKAR" authority.** Confirmed the human's real-world knowledge that these are the same person recorded twice (flagged as an open item in the previous session). "S H Kopardekar" had **0** `payment_advices` references and **1** `staff_authority_options` reference (Abhishek Awate → S H Kopardekar); no unique-constraint collision existed for reassigning that one row (Abhishek Awate had no other authority option). Reassigned it to SUDHANWA KOPARDEKAR's id, verified zero references remained (a `DO $$ ... RAISE EXCEPTION` guard inside the same transaction would have aborted the whole thing if any reference had survived the reassignment), then hard-deleted the "S H Kopardekar" row — all inside one `BEGIN...COMMIT`. **"S H Kopardekar" no longer exists as a row; don't recreate it.** Verified live: `staff_authority_options` now correctly shows Abhishek Awate → SUDHANWA KOPARDEKAR, and a real test Cash submission through that staff member's authority correctly printed "SUDHANWA KOPARDEKAR" as Recommended By.
+
+**Fix 2 — Cash Voucher gets its own numbering series, independent of the main serial number.** Previously the Cash Voucher PDF printed the same `serial_no` as the Payment Advice PDF (e.g. `MCCIA/2026-27/0029`) — no separate series. Now Cash-mode submissions additionally get `CASH/MCCIA/<FY>/NNNN`.
+- Schema (migration `0008_cash_voucher_series.sql`, `drizzle-kit generate`d then hand-corrected for statement order — the auto-generated file added the composite PK constraint *before* the `series` column existed and needed the constraint name filled in manually):
+  - `payment_advices.cash_voucher_no` — new nullable `text` column. `serial_no` is completely unchanged and still gets allocated for **every** submission regardless of mode — it stays the DB/audit-log/Excel identifier, exactly as before. Do not repoint any of those readers at `cash_voucher_no`.
+  - `serial_counters` gains a `series` column (`'PAYMENT_ADVICE'` default, or `'CASH_VOUCHER'`) and its primary key changed from `(financial_year)` alone to `(financial_year, series)` — one row per (FY, series) pair, not a second table. Chose this over a parallel table because it's the same shape (one gapless counter row) with one more discriminator column, and reuses the exact same `SELECT ... FOR UPDATE` transactional pattern with zero new locking logic.
+  - Migration also **backfilled the 2 pre-existing real CASH submissions** (`MCCIA/2026-27/0012`, `MCCIA/2026-27/0033`, both still `SUBMITTED`, predating this feature) with `CASH/MCCIA/2026-27/0001` and `.../0002` respectively, in `submitted_at` order, via a `DO $$` block in the same migration — so no historical Cash submission is left with a null Cash Voucher number.
+- `lib/serial.ts`: `allocateNumber()` is now the shared gapless primitive (locks by `(financial_year, series)` instead of `financial_year` alone); `allocateSerialNumber()` (unchanged signature/behavior) and the new `allocateCashVoucherNumber()` both call it. **One allocation mechanism serving two series, not two mechanisms** — per the brief's explicit instruction.
+- `/api/submit`: both numbers allocated in the **same transaction** — `allocateCashVoucherNumber()` is called (only when `payment_mode === 'CASH'`) inside the same `db.transaction()` callback as `allocateSerialNumber()`, using the just-allocated `financialYear` so both numbers always land in the same FY.
+- `/api/edit/[token]` (resubmit): handles the edge case of a resubmission **changing** payment mode. If it flips to CASH and never had a `cash_voucher_no` (was NEFT before, or predates this feature), one is allocated now, same mechanism, using the advice's existing `financial_year` (not recalculated). If it flips away from CASH, `cash_voucher_no` is cleared to null. Not explicitly asked for in the brief, but the form schema does allow changing `paymentMode` on resubmit, so this was needed to keep the column meaningful in that case.
+- `CashVoucherDocument.tsx`'s `data.serialNo` prop renamed to `data.cashVoucherNo` — the "No." field on the printed PDF now shows the Cash Voucher number, not the main serial. `cashVoucherPdfFilename()` similarly now takes the Cash Voucher number. Admin detail page (`app/admin/advice/[id]/page.tsx`) gained two new labeled rows, shown only for Cash-mode submissions: "Advice No." (`serial_no`) and "Cash Voucher No." (`cash_voucher_no`) — both visible together so Admin can see both numbers at once.
+- **Deliberately not added to the Excel export** (`serial_no` stays the only identifier column there), per the brief's explicit instruction — flagging as a question for the human rather than adding it: **should `cash_voucher_no` be a new Excel column for Cash rows?** Mirrors the already-declined "Expenditure Breakdown" column open item.
+- New tests in `lib/serial.test.ts`: pure `formatCashVoucherNo()` formatting, plus 4 new `TEST_DATABASE_URL`-gated integration tests (skipped in this environment — `TEST_DATABASE_URL` is present but empty, same as every prior session) covering: first Cash Voucher number of a new FY, the Cash Voucher series staying independent of the main series advancing within the same FY, the 31 Mar → 1 Apr FY boundary resetting the Cash Voucher series independently, and that calling `allocateSerialNumber()` alone (what happens for a NEFT submission) never creates or touches a `CASH_VOUCHER` counter row.
+- **Verified live** against the real dev server + real Neon DB: submitted a real Cash-mode advice through the actual `/api/submit` endpoint (not a direct DB write) — got `serial_no = MCCIA/2026-27/0034` and `cash_voucher_no = CASH/MCCIA/2026-27/0003` (continuing correctly after the 2 backfilled rows), confirmed both independently in `serial_counters` (`PAYMENT_ADVICE` at 34, `CASH_VOUCHER` at 3) and by downloading and reading the actual rendered Cash Voucher PDF — it prints `CASH/MCCIA/2026-27/0003` in the "No." field. Test row + Blob attachments deleted afterward.
+
+**Fix 3 — Admin tab bar restyled from underline to boxed/pill.** Purely cosmetic, per the brief — no filter/gating logic touched. `TabLink` in `app/admin/page.tsx`: every tab (active and inactive) now renders as `rounded-md border px-4 py-2`, matching the visual weight of the existing "Export to Excel"/"New Vendor" buttons. Active: `border-[#0b1f3a] bg-[#0b1f3a] text-white` (filled navy). Inactive: `border-gray-300 bg-white text-gray-600`, with `hover:border-[#0b1f3a] hover:text-[#0b1f3a]`. Removed the container's `border-b border-gray-200` (the underline-strip styling is gone, replaced by the pills themselves). Count badges (`" (N)"`) untouched. **Verified via the real rendered admin HTML** (authenticated session, direct fetch — no browser automation tool exists in this environment): confirmed the active tab's class string includes `bg-[#0b1f3a] text-white` and an inactive tab's includes `border-gray-300 bg-white text-gray-600`, both exactly as intended. Not visually screenshotted — flagging per this repo's established convention for anything needing an actual browser.
+
+`tsc --noEmit`, ESLint, the full Vitest suite (134 passing, 6 pre-existing skipped — 4 more than before, from the new Cash Voucher series integration tests, which stay skipped since `TEST_DATABASE_URL` is empty in this environment), and `next build` all clean after all three fixes.
+
+### Shipped — Real per-person logins, retired Sanction, Payment Done flow, digital PDF stamps (Claude Code, 2026-08-01)
+Large brief (`Dual_Login_Retire_Sanction_Stamps_Prompt.md`, kept in the repo root — not deleted, it's the source-of-truth for the decisions below). One blocking confirmation required before starting Part C and obtained from the human before any code was written: **dual-write `payment_done_at`/`payment_done_by` into the legacy `approved_at`/`approved_by_name` fields, same as Sanction used to** — confirmed after grepping every real reader of those two fields (exactly 2: Excel's "Approved On"/"Approved By" columns, and the Payment Advice PDF's "Approved on :" line) and reporting that back before the human said yes.
+
+**Part A — Real per-person Admin logins, replacing the shared `ADMIN_PASSWORD`:**
+- New table `admin_users` (migration `0009_admin_users_and_payment_done.sql`, `drizzle-kit generate`d cleanly this time — no hand-editing needed): `id`, `full_name`, `email` (unique), `password_hash` (bcrypt), `role` (`'PAYMENT_ADVICE' | 'CASH_VOUCHER' | 'ALL'`, plain `text` like every other enum-by-convention column in this schema, not a DB enum), `is_active`, `created_at`, `last_login_at`. Same migration also adds `payment_advices.payment_done_at`/`payment_done_by` (Part C).
+- Added `bcryptjs` (pure-JS, no native bindings — deliberately not `bcrypt`, to avoid any Vercel serverless native-module bundling risk).
+- **Split `lib/auth.ts` into three files, preserving the file's own documented Edge/Node boundary** (it's imported by `proxy.ts`, which runs on the Edge runtime, and must stay free of Node-only APIs):
+  - `lib/auth.ts` (unchanged boundary, Edge-safe): now signs/verifies a JWT carrying `{adminUserId, fullName, adminRole}` instead of the old `{role: "admin"}` marker. `decodeAdminSessionToken()` validates the payload shape strictly, so a token signed under the old shared-password format is treated as no session — a clean cutover, not a hybrid compatibility path. `verifyAdminPassword()` deleted entirely, per the brief's explicit "remove the old shared-password env var and its check path entirely — don't leave it as a fallback."
+  - `lib/admin-users.ts` (new, Node-only): `hashPassword`/`verifyPassword` (bcryptjs), `findActiveAdminUserByEmail`, `recordAdminLogin`.
+  - `lib/admin-session.ts` (new, Node-only): `getAdminSession()` — reads the cookie via `next/headers` and decodes it via `lib/auth.ts`'s Edge-safe decoder. Used by every Server Component/Route Handler that needs to know who's logged in (the admin list page, the detail page, the layout, the Verify/Payment-Done routes).
+- `POST /api/admin/login` now takes `{email, password}`. Timing-safe against email enumeration: runs `bcrypt.compare()` against a fixed dummy hash even when no user matches the email, so a nonexistent-email response takes the same shape of time as a wrong-password one; both return the identical generic `"Incorrect email or password."` message. Records `last_login_at` on success. Existing per-IP rate limiting (5 attempts/15min, best-effort/per-instance) kept unchanged.
+- `app/admin/login/page.tsx`: email + password fields (was password-only).
+- `app/admin/layout.tsx`: shows `"{fullName} · {role label}"` next to Log Out when a session exists — as a side effect, this also fixes a small pre-existing bug where the nav bar (with a pointless "Log out" button) rendered on the login page itself, since it's now conditional on a real session existing.
+- **Access model — deliberately NOT strict siloing, exactly per the human's explicit decision**: `app/admin/page.tsx` defaults the `paymentMode` filter based on the logged-in user's role (`PAYMENT_ADVICE` → `NEFT`, `CASH_VOUCHER` → `CASH`, `ALL` → no default) **only when the URL never mentioned `paymentMode` at all** (a fresh landing) — an explicit `paymentMode=""` ("All" selected) is left alone and never re-defaulted. This is the load-bearing distinction that makes it a *default*, not a wall: `sp.paymentMode === undefined` (key absent) vs `=== ""` (present, explicitly cleared) are different signals from `URLSearchParams`, and the existing `<select name="paymentMode">` always submits the field (even empty), so this falls out naturally with no new tracking state. **No backend query-level blocking was added anywhere** — any signed-in user can still view/filter to everything.
+- **`ALL`-role summary dashboard**: `app/admin/page.tsx` renders 6 small cards (count + ₹ total, linking to that tab) above the queue table, only when `session.adminRole === "ALL"`. Reuses the exact same 6 per-tab count queries that already power the tab badges (extended to also `sum()`, not just `count()`) rather than firing a second set of queries — the dashboard and the tab badges can never silently disagree with each other. **One deliberate deviation from the brief's literal wording**: the brief's Part A lists 7 dashboard stages including both "Verified" and "Ready for Payment" as if separate; Part C (written later in the same brief) makes clear these are the exact same derived condition (`verified_at` set). Built 6 cards matching Part D's final, authoritative tab list instead of duplicating one number under two labels — flagging this interpretation here rather than silently picking one.
+- `scripts/seed-admin-users.ts` (`npm run seed:admin-users`) — **NOT run this session.** Seeds exactly 3 accounts: Sunil (`PAYMENT_ADVICE`) and Abha (`CASH_VOUCHER`), full names pre-filled from the existing `VERIFIER_NAMES` list ("Sunil Salunke"/"Abha Khatavkar" — almost certainly the same real people the brief refers to by first name only) but **emails left as `TODO-...` placeholders that make the script refuse to run until edited** — the human said they'd supply these separately. The `ALL`-role account's email was pre-filled as `mcciaexplore@gmail.com` (the address already visible in this session's own context) — **the human should confirm this is correct before running the script, not just trust it was inferred correctly.** Generates a cryptographically random password per account (`crypto.randomBytes(20).toString("base64url")`), prints each once to the console and to `scripts/admin-users-report.md` (gitignored, never committed) — only the bcrypt hash reaches the DB. Re-running is safe (errors on the unique-email constraint) but won't silently reset an existing password.
+
+**Part B — Verify auto-attributes to the logged-in user, old 4-person picker's correction UI removed for Verify:**
+- `POST /api/admin/advice/[id]/verify` no longer reads `verifiedBy` from the request body at all — `getAdminSession()` supplies it server-side from `session.fullName`. `verifySchema` (the old body-validation schema) deleted as now-genuinely-dead code (I introduced its deadness, so cleaning it up is in-scope, unlike other pre-existing dead code noticed but left alone this session — see below). `VERIFIER_NAMES`/`verifierNameSchema` **kept**, since `PATCH .../verify` (the correction route) still imports them — the comment above them in `lib/validation/payment-advice.ts` now explains why they're not dead, and flags that a real per-person name (e.g. the `ALL`-role account's) is no longer guaranteed to be one of these 4.
+- `components/admin/AdviceActions.tsx`: the `VERIFIER_NAMES` `<select>` is gone — the box now just says "Will be recorded as verified by {current user's name}." and a single "Confirm Verification" button, `POST`s with no body.
+- `app/admin/advice/[id]/page.tsx`: the "Verified By" row lost its `NameCorrectionAction` — now a plain `Row` like "Received & In Process". **Not removed**: the `PATCH .../verify` route itself, and its `VERIFIER_NAME_CORRECTED` audit_log history — both are inert (unreachable from any UI now) but untouched, since "remove that correction UI" (the brief's exact words) is narrower than "delete the mechanism and its history."
+
+**Part C — Sanction retired; Ready for Payment (automatic) → Payment Done (manual, new terminal action):**
+- **`sanctioned_at`/`sanctioned_by` columns, and the Sanctioner "Correct name" PATCH route, are untouched** — per the brief's explicit "keep, don't delete." `POST/PATCH /api/admin/advice/[id]/sanction` still exist as working code, just unreachable from any UI going forward (no button anywhere calls `POST` anymore). `SANCTIONER_NAMES`/`sanctionSchema`/`sanctionerNameCorrectionSchema` all kept for the same reason.
+- New columns `payment_advices.payment_done_at`/`payment_done_by` (plain `text` snapshot, same non-FK pattern as `verified_by`/`sanctioned_by` — not a new admin_users FK).
+- "Ready for Payment" is **not a new column** — it's the derived condition `verified_at IS NOT NULL AND payment_done_at IS NULL`, shown automatically the instant Verify happens, no separate click, matching this repo's established "derive from timestamps, no new status enum value" convention used everywhere else in the pipeline.
+- New route `POST /api/admin/advice/[id]/payment-done`: 401 if not signed in, 404/409/409/400 in the same shape as the old Sanction route (not found / not yet verified / already done / bill-passed-for missing-or-invalid), `payment_done_by` auto-attributed from session (no picker, mirrors Verify), dual-writes `status='APPROVED'`, `approved_at`, `approved_by_name` (the human-confirmed judgment call from the top of this entry). Writes `PAYMENT_DONE` to `audit_log`. **Requires "Bill passed for Rs." to already be saved, same as Sanction used to enforce** — this wasn't explicitly mentioned in the brief (which focused on retiring the *picker*, not this adjacent validation), but silently dropping a real "never finalize without a passed amount" business rule seemed like a bigger, unrequested behavior change than carrying it forward; flagging this judgment call explicitly rather than deciding silently.
+- **Not backend-role-gated** — per the same "default filter, not an authorization wall" decision as Part A's landing filter, `payment-done` only requires *some* valid session, not a specific `role`. `AdviceActions.tsx` shows the "Mark Payment Done" button only when the current user's role owns that submission's payment mode (`PAYMENT_ADVICE`↔NEFT, `CASH_VOUCHER`↔CASH) or is `ALL`; anyone else sees an explanatory note instead of the button, but a direct API call from any signed-in session still succeeds (verified live — see below).
+- New email `notifyPaymentDone()` (`lib/email/notify.ts` + `lib/email/templates.ts`'s `renderPaymentDoneEmail()`) — subject `"Payment Advice {serial_no} — Payment Done"`, fires once, only from the new route. `renderVerifiedEmail()`'s body copy updated from "forwarded for sanctioning and payment processing" (stale — Sanction no longer exists) to "It is now Ready for Payment."
+- `AdviceActions.tsx`'s terminal (`status === "APPROVED"`) branch now reads `paymentDoneAt`/`paymentDoneBy` first, falling back to `sanctionedAt`/`sanctionedBy` for any pre-cutover row that was approved the old way (both are never set by the same action, so this fallback is unambiguous, not a guess). `app/admin/advice/[id]/page.tsx`'s Finance Pipeline section gained a "Payment Done" row (Pending / "Ready for Payment" / "{name} · {date}") and relabeled the old "Sanctioned By" row **"Sanctioned By (historical)"**, now only rendered at all when a row already has `sanctioned_at` set — so it naturally disappears from every new submission going forward without deleting anything for old ones.
+
+**Part D — Tabs updated, all other tab logic unchanged:**
+- `lib/admin/filters.ts`: `ADMIN_TABS` renamed `verified_awaiting_sanction` → `verified_ready_payment` (condition changed from "`sanctioned_at` null" to "`payment_done_at` null" — same shape, new column) and `sanctioned_ready` → `payment_done` (still keyed on `status = 'APPROVED'`, unchanged condition, just renamed since there's no more "sanctioned" concept feeding it). The other 5 tabs (`waiting_authority`, `awaiting_finance`, `received_in_process`, `sent_back`, `all`) are byte-for-byte unchanged.
+- `app/admin/page.tsx`: `TabLink` labels updated to "Verified — Ready for Payment" and "Payment Done"; boxed/pill styling (shipped in the previous session) kept as-is.
+
+**Part E — Digital stamps on both PDF types:**
+- New `lib/pdf/Stamp.tsx`: a small `@react-pdf/renderer` component — bordered rounded box, `rotate(-6deg)`, solid brand color per type (navy=Submitted, green=Approved, amber=Verified — darkened to `#B8790C` from the UI's `#E8A33D` for print legibility against white), name + date **inside** the box (per the spec, not as separate cell text). Positioned `absolute`, `bottom/right: 3` inside a `position: relative` signature cell — first tried `top-right` and it visually collided with the existing name/label text (verified by actually rendering and reading the PDF, not just eyeballing the JSX); bottom-right against the blank "Signature :" line reads far cleaner, confirmed by re-rendering.
+- `PaymentAdviceDocument.tsx`: stamps in Submitted (always, once submitted), Recommended by (once `authority_approved_at` set), Verified by (once `verified_at` set) footer cells. **Sanctioned by is never stamped, no exceptions** — confirmed by testing all three progression stages (submitted-only / +approved / +verified) and reading each rendered PDF; the Sanctioned box stayed completely blank at every stage, including once the advice was fully Payment-Done/APPROVED. `footerCell`'s `minHeight` increased 62→80 to give the stamp breathing room. Data type gained `authorityApprovedAt`/`verifiedAt` (ISO timestamps, previously only `verifiedBy`/derived-from-elsewhere existed).
+- `CashVoucherDocument.tsx`: same Submitted/Recommended stamps (no Verified box exists on this document — it only ever had Submitted/Recommended/Sanctioned/Payee's Signature). Data type gained `submittedAt`/`authorityApprovedAt`. `signature` cell `minHeight` increased 77→90.
+- `lib/pdf/render.tsx` and both sample-render scripts (`scripts/render-test-pdf.tsx`, `scripts/render-cash-voucher-pdf.tsx`) updated to pass the new fields through.
+- **Verified by actually rendering and reading real PDFs at each stage, per the brief's explicit ask**, not just inspecting JSX: a hand-built 3-stage test (submitted-only → +approved → +verified) confirmed stamps appear/disappear exactly on schedule with no bleed into cells whose condition isn't met yet. Also confirmed on a fully real, live-submitted-and-processed advice (see the live verification below) — real names, real dates, all three stamps present, Sanctioned box still blank even at the fully-paid/APPROVED terminal state.
+
+**New/updated tests:** `lib/advice/finance-verify-route.test.ts` (POST describe block rewritten — no more body-based name/enum tests, since that validation no longer exists on POST; added a 401-when-signed-out test and a test confirming attribution isn't constrained to the old 4-name list); `lib/advice/finance-payment-done-route.test.ts` (new, 11 tests, mirrors the old sanction-route test shape); `lib/admin-login-route.test.ts` (new, 5 tests — wrong email, wrong password, identical error message for both so the response doesn't leak which was wrong, non-string input, and the full success path including the `last_login_at` call and cookie); `lib/admin/filters.test.ts` (tab rename); `lib/email/templates.test.ts`/`lib/email/notify.test.ts` (new copy, new `notifyPaymentDone` coverage).
+
+**Verified live**, against the real dev server + real Neon DB, using 3 **throwaway** `admin_users` test rows (`test-payment-advice@example.test` etc., deleted after — the real `seed:admin-users` script was never run, per the brief): logged in as each of the 3 roles via the real `/api/admin/login` endpoint and confirmed via the rendered HTML that `paymentMode` defaults to NEFT/CASH/unfiltered respectively, and that the `ALL` account's dashboard cards render with correct counts+sums. Ran one real submission through the entire pipeline via the actual routes (not direct DB writes): submit → authority-approve → receive → **verify with zero request body**, confirmed `verified_by` landed as the real logged-in user's name, not a picked one → confirmed `Mark Payment Done` correctly 400s with no `billPassedFor` saved, then succeeds after saving one → **deliberately called `payment-done` as the wrong-role (`CASH_VOUCHER`) test user against a NEFT advice and confirmed it still succeeds** (200, not 403) — proving the "default filter, not a wall" model is real, not just UI-cosmetic → confirmed via SQL that `status`/`approved_at`/`approved_by_name` all dual-wrote correctly → confirmed the row correctly disappeared from the `verified_ready_payment` tab and appeared in `payment_done` → downloaded the real Payment Advice PDF and confirmed all 3 stamps (Submitted/Approved/Verified) render with the real names/dates and the Sanctioned box stayed blank → confirmed the admin detail page shows no "Correct name" button anywhere (Verify's is gone; no historical Sanction data exists on this new row) and the Payment Done row/terminal box both show the right name+date → **confirmed all 4 live notification emails actually sent via real Resend API calls with real message IDs** (submission confirmation, authority approval, verified, and the brand-new payment-done email), redirected correctly via the still-active `EMAIL_TEST_OVERRIDE_RECIPIENT`. All test data (1 advice + 2 attachments + 3 admin_users rows) deleted afterward.
+
+`tsc --noEmit`, ESLint, and the full Vitest suite all clean (151 passing, 6 pre-existing skipped) — see the session log entry below for exact counts. `next build` re-run clean after this session's changes.
+
+### Shipped — Cash Voucher display/labeling consistency across every surface (Claude Code, 2026-08-01)
+The Cash Voucher numbering series (shipped in an earlier session) only fixed the printed PDF's own "No." field — every other surface still said "Payment Advice" and showed `serial_no` regardless of mode. This session's brief was explicit: audit every surface individually, report "already correct" vs "fixed," don't assume. Rule applied everywhere: CASH → "Cash Payment Voucher" language + `cash_voucher_no` as the primary number (internal `serial_no` still visible, small, labeled "Internal Ref." — never primary); NEFT → completely unchanged.
+
+**New shared utility, `lib/advice/document-identity.ts`** (`documentLabelFor()`, `displayNoFor()`) — single source of truth so every surface derives this the same way instead of each hardcoding its own "Payment Advice"/`serial_no" independently, which is exactly the class of bug this session fixes. Reused by every server-rendered page and every email call site below. Unit-tested (`document-identity.test.ts`, 5 tests).
+
+**Per-surface audit result — every one individually checked, per the brief's explicit instruction not to assume:**
+- 🔧 **Public confirmation screen (`/submitted/[serial]`)** — FIXED. Heading ("Cash Voucher submitted"), big number (`cash_voucher_no`), the authority-share sentence, the "what happens next" note, and the no-sessionStorage fallback text were all previously hardcoded to "Payment Advice"/serial. `SubmissionSummary` (sessionStorage handoff type) gained a `cashVoucherNo` field, threaded through from `/api/submit`'s (now also `/api/edit/[token]`'s) JSON response, which previously didn't return `cashVoucherNo` at all. The "Download" button's mode branching was **already correct** (untouched).
+- 🔧 **Admin queue list (`/admin`)** — FIXED. The list query didn't select `cash_voucher_no` at all; the column always showed `serial_no`. Now shows `cash_voucher_no` for Cash rows via `displayNoFor()`. Column header renamed "Serial No." → "Reference No." (per the brief's own suggested wording, since it now holds either kind of number depending on the row). Did not add a new mode badge/icon — the existing "Mode" column (NEFT/CASH plain text) already gives Admin a scan-at-a-glance signal per row; judged a second visual indicator unnecessary. Flagging this "no new badge" call explicitly since the brief left it to my judgment.
+- 🔧 **Admin detail page (`/admin/advice/[id]`)** — FIXED. Eyebrow label and the big `<h1>` were hardcoded to "Payment Advice"/`serial_no`. Now: eyebrow = `documentLabelFor()`, `<h1>` = `displayNoFor()`, plus a small "Internal Ref.: {serial_no}" line underneath for Cash rows only. **Removed** the now-redundant "Advice No."/"Cash Voucher No." row-pair from the page's "Header" section (added in the earlier Cash Voucher session) — with both numbers now shown at the top of the page, repeating them again lower down was redundant, not an improvement; this is a small cleanup directly motivated by this fix, not scope creep.
+- 🔧 **All 5 notification emails** (submission confirmation, sent-back, authority-approval, verified, payment-done) — **all 5 needed fixing, none were already correct.** Every template's subject line and body hardcoded "Payment Advice" and/or `{{serial_no}}`; `verify`/`payment-done`'s `documentLabel` derivation was already correct (added in the sessions that built those routes) but the *number* shown alongside it was still always `serial_no`. Added `documentLabel`/`displayNo` fields to `AuthorityApprovalEmailData`/`SentBackEmailData`/`SubmissionConfirmationEmailData` (the 2 that already had `documentLabel` — `VerifiedEmailData`/`PaymentDoneEmailData` — just needed `serialNo` renamed to `displayNo` and their subject lines fixed to stop hardcoding "Payment Advice"). All 8 call sites across 6 route files (`submit`, `edit/[token]`, `send-back`, `authority-approval/[token]/reject`, `verify`, `payment-done`) updated to compute both via the new shared helper; 4 of those 6 routes' DB `select()`s didn't include `cash_voucher_no`/`payment_mode` at all and needed both added.
+  - **Reverses a previous, deliberate decision, flagged explicitly rather than silently overwritten**: an earlier session's test asserted the Verified email's subject must be the *literal* string `"Payment Advice {serial}"` even for Cash, "per the exact specified copy" of that session's brief. This session's brief explicitly names "verified" among the emails that must say "Cash Payment Voucher" + `cash_voucher_no` for Cash submissions — a direct contradiction. Proceeded with the new instruction (more recent, more specific, explicitly names this exact email), updated the test, and am flagging the reversal here rather than assuming either brief silently wins.
+  - Also fixed: `send-back` route's "An approved Payment Advice cannot be sent back" 409 message now uses `documentLabelFor()`.
+- 🔧 **Authority-approval page (`/authority-approval/[token]`)** — FIXED. Eyebrow (`{{serial_no}} · Submitted by...`), `<h1>` ("Payment Advice Approval Request"), and the intro sentence ("this payment advice") were all hardcoded. Now mode-aware via the shared helper; Cash rows show `cash_voucher_no` primary with `(Internal Ref. {serial_no})` inline. The `AuthorityApprovalView` component itself (rendered below the header) was **already correct** — fully generic, driven entirely by props, no hardcoded document-type text anywhere in it.
+- 🔧 **Edit/resubmit page (`/edit/[token]`)** — FIXED. Same pattern: eyebrow number and `<h1>` ("Correct and Resubmit Payment Advice") were hardcoded. Now mode-aware.
+- 🟢 **PDF download filename** — **already correct**, no fix needed. `cashVoucherPdfFilename()` (built in the earlier Cash Voucher numbering session) already takes `cash_voucher_no` with a `serial_no` fallback; both the admin and public cash-voucher-pdf routes already pass `advice.cashVoucherNo`. Confirmed live: a real download's `Content-Disposition` header read `Cash-Voucher-CASH-MCCIA-2026-27-0005.pdf`.
+- 🟢 **`AdviceActions.tsx`'s own PDF preview/download buttons** — **already correct**, no fix needed (checked, not assumed): both the pre-approval and post-approval branches already correctly branch on `paymentMode` and say "Cash Payment Voucher"/route to the cash-voucher-pdf endpoint for Cash. Only the terminal-state text line above those buttons ("Sanctioned by"/now "Payment Done —") is mode-agnostic prose, which is fine since it doesn't reference a document type by name.
+- 🟢 **`lib/pdf/PaymentAdviceDocument.tsx`'s own internal "Payment Advice" heading text** — **already correct, not touched.** This document is NEFT-exclusive (Cash never gets this PDF at all, a separate pre-existing, explicitly protected rule — see §5) so hardcoding "Payment Advice" inside it is always true, not a bug.
+- 🟢 **Excel export sheet name (`"Payment Advices"`)** — **not touched, per the brief's explicit "what NOT to change."** The workbook covers both NEFT and Cash rows in one sheet; the brief explicitly said the Excel export stays keyed on `serial_no` and out of scope for this session.
+
+**4 more surfaces found with the exact same inconsistency, NOT in the brief's list — flagged per its explicit "ask me, don't fix silently" instruction, left unfixed pending the human's answer:**
+1. `lib/advice/authority-token.ts`'s `authorityActionError()` — "This Payment Advice has already been approved."/"...already been sent back to the submitter." Shown to the Recommending Authority on an already-actioned link (via both the authority-approval page's banner and the reject route's 409).
+2. `app/api/admin/advice/[id]/route.ts` (the `PATCH` route behind "Bill passed for Rs." save) — "This Payment Advice is already approved and can no longer be edited." 409, surfaced verbatim in `AdviceActions.tsx`'s error text.
+3. The **invalid/expired-link** generic error messages on both `/authority-approval/[token]` (`!advice` branch — token matches no row at all, so the mode genuinely isn't knowable) and `/edit/[token]` ("...for help with this Payment Advice.") — lower priority than 1–2 since the wording is generic/edge-case, and in the `!advice` case there may be no mode to even branch on.
+4. `components/form/PaymentAdviceForm.tsx`'s submit button ("Submit Payment Advice"/"Resubmit") and the confirmation screen's "Submit another Payment Advice" link — the intake **form** itself, which the brief's listed surfaces start *after* (the confirmation screen, not the form). Arguably fine as-is since the form handles both modes and the button doesn't describe a specific already-submitted document, but flagging since it's the same words appearing regardless of the payment mode selected in the form.
+
+**Verified live** against the real dev server + real Neon DB with a real Cash submission run through the actual public/admin routes end-to-end (not direct DB writes): submit → got `cashVoucherNo` back in the JSON response for the first time → authority-approve → receive → verify → saved Bill Passed For → Mark Payment Done. At each step, confirmed via the real rendered HTML (admin queue, admin detail in both the in-progress and terminal states, the authority-approval page) that the eyebrow/heading said "Cash Payment Voucher" and the primary number was `CASH/MCCIA/2026-27/0005` with `MCCIA/2026-27/0037` only ever appearing as the small "Internal Ref." — never as the primary. Reconstructed all 4 fired emails' exact subject/body (live mode doesn't log full HTML, same technique as prior email-verification sessions — re-rendering the pure template functions with the exact data each route used) and confirmed every one said "Cash Payment Voucher" + `CASH/MCCIA/2026-27/0005`, never the bare serial. Confirmed the downloaded Cash Voucher PDF's filename uses the Cash Voucher number. All test data (1 advice, 2 attachments) deleted afterward.
+
+Also fixed a stale row in §7's field-mapping table below ("No. | No. | kept — reuses Payment Advice `serial_no`") — struck through and annotated, since it described the pre-numbering-series behavior an earlier session already superseded but never updated that table for.
+
+`tsc --noEmit`, ESLint, and the full Vitest suite all clean — see the session log entry below for exact counts.
+
+### Investigated (no code change) — "Missing" CASH/MCCIA/2026-27/0003 in the admin queue (Claude Code, 2026-08-01)
+The human noticed the admin queue's Cash Voucher numbers jumped 0001, 0002, 0004 — 0003 nowhere to be seen — and asked for definitive proof of the cause, not an assumption, plus proof the two numbering series are genuinely independent (not restated from design intent).
+
+**Conclusion: (a) expected, not a bug.** `CASH/MCCIA/2026-27/0003` was allocated to a real submission created via the actual `/api/submit` endpoint during this exact engagement's own "Kopardekar merge / Cash Voucher numbering series" session, then deleted as documented test cleanup — see that session's own "Shipped" entry above: *"submitted a real Cash-mode advice through the actual `/api/submit` endpoint... got `cash_voucher_no = CASH/MCCIA/2026-27/0003`... Test row + Blob attachments deleted afterward."* This is a direct, dated, first-party record, not an inference.
+
+**Full reconciliation, all 5 numbers accounted for — queried the real dev DB directly, not assumed:**
+| Number | What it was | Current status |
+|---|---|---|
+| 0001 | Real pre-existing production row (payee "KHAANE PE", `serial_no MCCIA/2026-27/0012`) | Still exists |
+| 0002 | Real pre-existing production row (payee "KHAANE PE", `serial_no MCCIA/2026-27/0033`) | Still exists |
+| 0003 | Real test submission, this session's own "Cash Voucher numbering series" work | Deleted as documented cleanup |
+| 0004 | **Real live production row** (payee "AMAZON .IN", `serial_no MCCIA/2026-27/0036`, submitted 2026-08-01 13:50:56) — genuine MCCIA usage between two of this engagement's test sessions, not test data | Still exists |
+| 0005 | Real test submission, this session's own "Cash Voucher display/labeling" work | Deleted as documented cleanup |
+
+`serial_counters` currently reads `CASH_VOUCHER` at `last_number = 5` — matching exactly, confirming nothing was allocated and left unaccounted for beyond what's explained above.
+
+**Checked for a soft-delete concept, per the ask — none exists.** Grepped `lib/db/schema.ts` for `deletedAt`/`is_deleted`/equivalent: zero matches, on any table. Every deletion in this codebase's history (including every test-cleanup step across every prior session) is a genuine hard `DELETE`, confirmed by `payment_advices` currently holding exactly the rows expected (3 real rows: the two "KHAANE PE" and the one "AMAZON .IN") with no orphaned/tombstoned rows anywhere.
+
+**`audit_log` cross-check**: zero rows currently reference `CASH/MCCIA/2026-27/0003` or `.../0005` in their `details`. This is expected, not a dead end — this engagement's established test-cleanup practice (used in every prior session) always deletes the `audit_log` rows tied to a deleted test `payment_advices` row in the same cleanup transaction, so an absence of `audit_log` traces is consistent with documented, deliberate cleanup, not evidence of anything else.
+
+**Main `serial_no` series has far larger gaps, from the identical pattern — confirms this is normal, existing, engagement-wide behavior, not something specific or new to the Cash Voucher series.** Only 3 `payment_advices` rows exist in the entire database right now (`MCCIA/2026-27/0012`, `0033`, `0036`), while `serial_counters`'s `PAYMENT_ADVICE` counter is at `37` — i.e., roughly 34 numbers were issued and never persist as visible rows today. This isn't a mystery either: dozens of real test submissions were created via the real `/api/submit`/`/api/edit` endpoints and deleted as cleanup across essentially every prior session in this engagement (Approval Workflow, Finance Pipeline, multiple live-email-verification rounds, Task A, Sent Back/Name Correction, the Cash Voucher sessions, the dual-login session, etc.) — each one permanently consumed a `serial_no` that was never going to be reused, by the same gapless-never-reused design the Cash Voucher series now shares.
+
+**Part 2 — proved the two series are independent by reading the actual code and schema, not restating intent:**
+- **Real DB structure** (`psql \d serial_counters`): `PRIMARY KEY (financial_year, series)` — a genuine composite key enforced by Postgres itself. `PAYMENT_ADVICE` and `CASH_VOUCHER` are always different rows; there is no shared row either series could contend for.
+- **`lib/serial.ts`'s `allocateNumber(tx, financialYear, series)`** is the one shared primitive both series call — but every one of its three statements (`insert ... on conflict`, `select ... for update`, `update`) is scoped by `where financial_year = ? and series = ?`. The `SELECT ... FOR UPDATE` row lock is taken on exactly one row; locking/incrementing the `CASH_VOUCHER` row for a given FY can never block or touch the `PAYMENT_ADVICE` row for that same FY, and vice versa.
+- **`allocateSerialNumber()`** hardcodes `PAYMENT_ADVICE_SERIES`; **`allocateCashVoucherNumber()`** hardcodes `CASH_VOUCHER_SERIES` — neither is ever called with the other's series value; there is no parameterization that could cross them.
+- **The call site** (`app/api/submit/route.ts`, inside the single `db.transaction()` that does both allocations): `allocateCashVoucherNumber()` is invoked only inside `values.paymentMode === "CASH" ? await allocateCashVoucherNumber(...) : null` — for a NEFT submission, that function is **never called at all**, meaning the `CASH_VOUCHER` counter row isn't even read, let alone incremented, for a NEFT submission. This is the literal code proof that a NEFT submission never touches the Cash Voucher counter — not an inference from naming.
+
+**One transparency note, not a bug and not what caused this gap**: number allocation (`allocateSerialNumber`/`allocateCashVoucherNumber`) happens in its own `db.transaction()`, committed immediately; the actual `payment_advices` row insert happens in a *separate*, later `db.transaction()`, with the Blob attachment upload (not itself transactional) in between. Structurally, this means a failure between those two points (e.g. a Blob upload error, a server crash) **could** in principle leave a number allocated with no row ever created — a real gap-source, but it is the exact same pattern `serial_no` allocation has always used, unchanged and pre-existing (not introduced by the Cash Voucher work), and it is not what produced the 0003/0005 gaps investigated here (those are explained fully by documented, deliberate test-then-delete). Restructuring this into one fully atomic allocate+insert+upload transaction would be a real, bigger architectural change — not done here, not asked for; flagging for awareness only.
+
+**No code change made** — Part 1 concluded (a), so per the brief's own instruction, no fix and no new test were needed. `document-identity.test.ts`/`serial.test.ts`'s existing coverage (FY-boundary independence, "NEFT never allocates a Cash Voucher number") already exercises the atomicity/independence properties directly relevant here.
+
+### Shipped — Live email switched to Gmail SMTP, Resend kept dormant-but-ready (Claude Code, 2026-08-05)
+Resend requires `mcciapune.com` to be DNS-verified before it can email anyone but the account owner — see the many open items above tracking that. That verification is taking longer than there's time for, so this session switches the *live* provider to Gmail SMTP (via a Google App Password on `mcciaexplore@gmail.com`), which works immediately with no DNS wait. Accepted trade-off, explicit and deliberate, not an oversight: live mail now shows as coming from a Gmail address, not an official MCCIA domain, until `mcciapune.com` is verified and someone flips `EMAIL_PROVIDER` back to `resend`.
+
+- Added `nodemailer` (+ `@types/nodemailer`) — the standard library for this, nothing more exotic.
+- **All of the provider-agnostic logic in `lib/email/notify.ts` is completely unchanged**: `isLiveMode()`, the `EMAIL_TEST_OVERRIDE_RECIPIENT` redirect + subject-prefix logic, the no-email-authority graceful preview fallback (`notifyAuthorityApproval`), and the "never throw to the caller" contract are all byte-for-byte the same code as before this session. Only the actual "hand this email to a provider" call changed.
+- **New provider abstraction, deliberately small** (per the brief's explicit "one function that picks which transport to use," not a big refactor): `getProvider()` reads `EMAIL_PROVIDER` (`"resend"` → Resend; anything else, including unset → `"gmail"`, the new default) and a single `dispatch(from, to, subject, html)` function branches on it. `dispatch()` normalizes both providers to the same "resolves with an id, or throws" shape — Resend's SDK returns `{error}` instead of throwing for API-level failures, so that case is converted into a thrown `Error` right there, meaning `send()`'s one surrounding `try/catch` still needs zero provider-specific branching and didn't need to change shape.
+- **Resend's code path is fully intact, not deleted**: `getResendClient()` (lazy-constructed, same pattern as before) is untouched; `dispatch()` calls it exactly as `send()` used to, just now behind the `getProvider() === "gmail"` check. Switching back later is `EMAIL_PROVIDER=resend` plus a real `RESEND_API_KEY` — no rebuilding.
+- **`getFrom()` now branches by provider**: for `gmail` (default), it's always `GMAIL_USER` — Gmail SMTP requires the authenticated account and the `from` header to match, so `EMAIL_FROM` is simply not consulted in that branch (confirmed live and in a unit test — setting `EMAIL_FROM` while on the gmail provider has zero effect). For `resend`, `getFrom()` is the exact prior logic (`EMAIL_FROM || "onboarding@resend.dev"`), unchanged.
+- **Gmail transport** (`getGmailTransport()`): lazily constructed and cached at module scope, same reasoning as `getResendClient()` always used — importing `notify.ts` never requires `GMAIL_USER`/`GMAIL_APP_PASSWORD` to be set, only actually sending live via gmail does. Uses nodemailer's built-in `service: "gmail"` config exactly as specified, authenticated with `GMAIL_USER`/`GMAIL_APP_PASSWORD` (a Google App Password, not the account's real login password — requires 2-Step Verification to generate one).
+- Env vars: `EMAIL_PROVIDER` (new, `gmail`/`resend`, defaults `gmail`), `GMAIL_USER`/`GMAIL_APP_PASSWORD` (new, only required for the gmail provider) — documented in `.env.local.example` and README's env var table. `RESEND_API_KEY`/`EMAIL_FROM` stay documented too, now explicitly scoped "only used when `EMAIL_PROVIDER=resend`." `EMAIL_TEST_OVERRIDE_RECIPIENT`/`EMAIL_MODE` docs unchanged — they apply identically to both providers.
+- **Incidental fix while touching these same two files**: `.env.local.example` and README still referenced the retired shared `ADMIN_PASSWORD` (dead since the real per-person `admin_users` login shipped) and README's deploy steps still pointed at the old standalone `/admin/authorities` page (replaced by inline management on `/admin/staff` in that same earlier session). Both corrected — small, directly adjacent, not a separate unrelated cleanup pass.
+- **Tests**: `lib/email/notify.test.ts` restructured into three describe blocks — preview mode (unchanged), "live mode, Gmail SMTP (the default provider)" (mocks `nodemailer.createTransport`, re-covers every scenario the old Resend-only suite covered: correct recipient/subject/HTML, override redirect, no-email fallback, SMTP send failures caught without throwing), and "live mode, `EMAIL_PROVIDER=resend` (dormant-but-ready)" (mocks the `Resend` class, proves that path still genuinely works end-to-end, not just left in place unverified). One gotcha hit and documented in a test comment: the Gmail transport is a lazy module-scope singleton (same caching pattern `getResendClient()` always used), so a test asserting `createTransport`'s exact call args has to run before any earlier test in the same describe block has already triggered — and cached — that construction; ordered accordingly.
+- **Verified live** against the real dev server + real Neon DB + real Gmail SMTP (not mocked) — restarted the dev server first so the new env vars were actually read. Ran 3 real submissions through the actual public/admin routes to exercise every one of the 5 emails once each: submission confirmation + authority-approval (submission 1) → sent-back, via a real authority rejection (submission 1) → submission confirmation + authority-approval + verified + payment-done (submission 2, full pipeline: approve → receive → verify → save Bill Passed For → Mark Payment Done) → submission confirmation + graceful no-email fallback for authority "DG" (submission 3). All 6 live sends (submission confirmation ×2, authority approval ×2, sent-back ×1, verified ×1, payment-done ×1 — 7 total email attempts, 6 real sends + 1 correctly-not-sent fallback) succeeded with real Gmail message IDs in the server log (format `<...@gmail.com>`, visibly different from Resend's UUID-style IDs — direct evidence these went through Gmail's SMTP servers, not Resend). No auth-related failures, no "suspicious sign-in" block from Google on this App Password's first live sends. `GMAIL_USER` confirmed set to `mcciaexplore@gmail.com`; since `getFrom()` for gmail unconditionally returns `GMAIL_USER` with no override path (confirmed by reading the code, not assumed), all 6 sends used that as `from` — same no-inbox-access limitation as every prior email-verification session in this engagement, so this is proven from the code path rather than an inbox screenshot, consistent with how "from" was verified for Resend previously. Re-tested the no-email-authority fallback (authority "DG") specifically: server log shows the identical `"No email on file for authority DG, falling back to preview."` warning + full preview HTML dump, zero Gmail transport calls for that specific send — the fallback logic genuinely didn't change, proven, not just restated. All 3 test submissions + 6 attachments deleted afterward.
+
+`tsc --noEmit`, ESLint, and the full Vitest suite all clean — see the session log entry below for exact counts.
+
 ## 4. Open Items (verify before building on top of these)
 
 Status legend: 🔴 unverified / high risk · 🟡 unverified / lower risk · 🟢 verified
@@ -286,20 +435,35 @@ Status legend: 🔴 unverified / high risk · 🟡 unverified / lower risk · �
 - 🟡 **Excel export does not include any of the five new finance-pipeline columns** (`finance_received_at`, `verified_at`, `verified_by`, `sanctioned_at`, `sanctioned_by`) — intentionally left untouched this session, same as the Approval Workflow session left out the authority columns. Confirm with the human whether Finance wants these as export columns before adding.
 - ⬜ **Possible future addition, not built (per the brief — do NOT build without asking):** emails for the "Received & In Process" and "Sanctioned" transitions. Only "Verified" sends an email today; the other two are dashboard-only.
 - 🟢 **Live-send verification: comprehensive, all 4 email types, confirmed 2026-07-31.** Subject prefix, override redirect, correct body content (serial/amount/payee/remarks/etc.), NEFT-vs-Cash PDF-link gating, the no-email graceful fallback, and the Verified-email-fires-only-at-Verify timing were all confirmed live against the real Resend API with real message IDs — see the "Verified" entry above for full detail per test. Logo fix (squished aspect ratio, fixed 2026-07-30) not specifically re-confirmed visually this session, but the emails rendered and sent successfully throughout, consistent with the earlier fix holding.
-- ⬜ **Resend's shared testing domain (`onboarding@resend.dev`) can ONLY deliver to the Resend account's own verified email address — confirmed 2026-07-30 by a real 403 from the API.** Attempted to send `notifyAuthorityApproval` directly to a real, non-override address (`aistudio@mcciapune.com`, a fresh test authority the human added) with `EMAIL_TEST_OVERRIDE_RECIPIENT` temporarily unset. Resend rejected it: `"You can only send testing emails to your own email address (mcciaexplore@gmail.com). To send emails to other recipients, please verify a domain at resend.com/domains, and change the from address to an email using this domain."` The error was caught and logged cleanly by `lib/email/notify.ts`'s existing error handling — did not throw, did not 500 the submit route — so no code changes were needed to handle it, but it's an important operational fact: **as long as `EMAIL_FROM` stays on the shared `onboarding@resend.dev` domain, this app can only ever deliver live email to the Resend account owner's own inbox, never to real staff/authorities/submitters.** Real delivery to anyone else requires the human to verify `mcciapune.com` (or another owned domain) in the Resend dashboard and switch `EMAIL_FROM` to an address on it. `EMAIL_TEST_OVERRIDE_RECIPIENT` was restored immediately after this one-off test; no other submissions were sent while it was unset.
-- 🟡 **Recommending Authority "S H Kopardekar" still has no email on file — confirmed twice now, most recently 2026-07-31.** The human attempted to add `sudhanwak@mcciapune.com` via the Admin UI this session but it landed on the separate "SUDHANWA KOPARDEKAR" row instead (which already had that email since 2026-07-29). Will fall back to preview mode for `notifyAuthorityApproval` indefinitely until the human either redoes the edit on the correct row or confirms these two rows should be merged into one (they're almost certainly the same real person recorded twice — not confirmed either way, flagging rather than guessing).
+- 🟡 **Resend's shared testing domain (`onboarding@resend.dev`) can ONLY deliver to the Resend account's own verified email address — confirmed 2026-07-30 by a real 403 from the API. No longer actively blocking anything as of 2026-08-05**, since Gmail SMTP is now the live provider (see the "Shipped" entry above) — this restriction only matters again once/if `EMAIL_PROVIDER` is switched back to `resend`. Still true, still worth knowing: as long as `EMAIL_FROM` stays on the shared `onboarding@resend.dev` domain, Resend can only ever deliver to the account owner's own inbox. Real delivery to anyone else via Resend requires `mcciapune.com` (or another owned domain) to be verified in the Resend dashboard first.
+- 🟢 **"S H Kopardekar" / "SUDHANWA KOPARDEKAR" duplicate — resolved 2026-08-01.** Merged per the human's explicit confirmation they're the same person. "S H Kopardekar" row deleted after its single `staff_authority_options` reference was reassigned to SUDHANWA KOPARDEKAR (0 `payment_advices` ever referenced it). SUDHANWA KOPARDEKAR (with `sudhanwak@mcciapune.com`) is now the sole, canonical row. See the "Shipped" entry above for the transaction detail and live verification.
 - 🟡 **No admin-facing visibility when an authority has no email and `notifyAuthorityApproval` silently falls back to preview — confirmed live 2026-07-31.** Checked the admin detail page's rendered HTML for a real no-email-authority submission: it shows a generic "Copy link to share with {authority}" button, identical to what's shown when the authority DOES have an email and WAS actually notified. Nothing distinguishes the two cases for Admin. Not fixed (more than a one-line change — needs the detail page's authority query extended to select `email` plus new conditional UI); flagged per the human's explicit instruction not to fix it silently.
-- ⬜ **Resend `mcciapune.com` domain verification status is unknown** — no Resend account/dashboard access this session. Per the brief's explicit instruction, did not touch DNS or attempt domain verification; `EMAIL_FROM` is left at the shared `onboarding@resend.dev` testing domain. The human needs to confirm domain status directly in the Resend dashboard before ever pointing `EMAIL_FROM` at a `mcciapune.com` address. **Now confirmed higher-priority than originally scoped** — see the entry above: until this is done, the app cannot deliver live email to anyone but the Resend account owner, full stop, not just a "nicer to have real domain" cosmetic concern.
+- ⬜ **Resend `mcciapune.com` domain verification status is still unknown — deprioritized, not resolved, as of 2026-08-05.** No Resend account/dashboard access in any session so far; still haven't touched DNS or domain verification, per every prior session's instruction. This no longer blocks live email delivery *today* (Gmail SMTP does that now — see the "Shipped" entry above), but it's still what's needed before switching `EMAIL_PROVIDER` back to `resend` and getting mail to send from an official MCCIA domain instead of Gmail.
+- 🟡 **Gmail SMTP's ~500-emails/day sending limit for a personal account — not a practical concern for this app's real volume (small internal Finance tool), and deliberately not coded around, per the brief.** Worth knowing if usage ever grows unexpectedly, or if something starts looping and sending repeatedly (nothing in this codebase currently does).
+- 🟡 **Live mail now shows as coming from `mcciaexplore@gmail.com`, not an official MCCIA domain — an accepted, deliberate, interim trade-off (2026-08-05), not an oversight.** Every recipient (submitters, authorities) will see a Gmail sender address until `mcciapune.com` is DNS-verified in Resend and `EMAIL_PROVIDER` is switched back. No code change needed when that happens beyond flipping the env var + supplying `RESEND_API_KEY` again — the Resend path was kept fully intact for exactly this.
 - 🟡 **`lib/staff-email.ts`'s `resolveStaffEmailByName()` has no live call site** — built and unit-tested per the brief's explicit request (resolve the 6 Verifier/Sanctioner names against the staff table), but nothing in this session's scope actually emails a verifier or sanctioner, so it isn't wired into any route. Likely forward-looking infrastructure; don't assume it's dead code to be deleted without checking with the human first.
 - 🟢 **Task A (Vendor/Staff/Authority Edit + Deactivate) shipped and verified live 2026-07-31 by Claude Code** — see the "Shipped" entry above for the full audit findings (only Authority Edit was genuinely missing; staff email was never editable; a real dropdown-corruption bug was found and fixed) and the exact live verification performed against the real dev server + real Neon DB.
 - 🟡 **`countInProgressForStaffName()`'s name-match safety check is best-effort, not exact** — `payment_advices` has no FK to `staff_members` at all, so deactivating a staff member whose submitted name doesn't textually match their canonical staff record (typo, nickname, maiden/married name change) will silently report 0 in-progress submissions even if they have some. This is a schema limitation, not a bug in the check itself — flagged in code and here rather than presented as reliable. Only a `staff_member_id` FK on `payment_advices` (a bigger, unrequested schema change) would make this exact.
 - ⬜ **Task B audit (2026-07-31): "Received" and "In Process" are still one combined timestamp (`finance_received_at`), not two separate steps** — the human's own stated intended workflow describes them as distinct manual steps. Question asked directly, not decided: should this become two separate timestamps/tabs, or is the combined state fine for how Finance actually works day to day? **Blocking any schema change here until the human answers.**
 - 🟢 **Rejected/sent-back visibility gap — fixed 2026-07-31.** A "Sent Back" tab now exists with a live count and a Remarks column; see the "Shipped" entry above. Verified live: a rejected submission correctly appears there with its remarks, and the existing 5 tabs' counts were confirmed unchanged by a live before/after check.
-- 🟡 **General undo/reverse still does not exist — deliberately, per the brief.** What was built instead is a *narrow* name-only correction for Verifier/Sanctioner (see the "Shipped" entry above) — it does not cover correcting a wrong Received timestamp, un-verifying, un-sanctioning, or any other field. If Admin needs to undo something beyond a wrong name on Verify/Sanction, the only path is still the full Send Back → resubmit cycle (wipes authority approval, restarts the pipeline, re-notifies everyone). Not built further; report-only for anything beyond the two narrow fixes shipped this session.
+- 🟡 **General undo/reverse still does not exist — deliberately.** **Superseded 2026-08-01**: the narrow Verifier "Correct name" correction UI referenced here no longer exists (Verify is auto-attributed from the login session now, nothing to mis-pick) — see the "Real logins, retire Sanction" entry above. The Sanctioner correction UI still exists, but only ever applies to historical pre-cutover rows. If Admin needs to undo something (a wrong Received timestamp, un-verifying, un-marking Payment Done, or any other field), the only path is still the full Send Back → resubmit cycle (wipes authority approval, restarts the pipeline, re-notifies everyone). Not built; report-only.
+- 🟢 **Cash Voucher independent numbering series shipped and verified live 2026-08-01.** `payment_advices.cash_voucher_no` + `serial_counters`'s new `(financial_year, series)` composite key — see the "Shipped" entry above for the full schema/allocation detail and the live-tested real submission (`CASH/MCCIA/2026-27/0003` printed correctly on the actual PDF, main `serial_no` unaffected).
+- ⬜ **Undecided (needs human decision):** should `cash_voucher_no` be added as a new Excel export column for Cash-mode rows? Currently not exported (mirrors the already-declined "Expenditure Breakdown" column decision). Flagged, not added.
+- 🟡 **`TEST_DATABASE_URL` is set in `.env.local` but empty** — the 4 new Cash Voucher series integration tests (and the 2 pre-existing main-series ones) are all `describe.skipIf(!testDbUrl)`-gated and skip in this environment, same as every prior session. If a scratch Postgres/Neon branch is ever pointed at by that var, these would start actually running — worth doing at some point to get real concurrent-allocation coverage on the new series, not just the pure `formatCashVoucherNo()` unit tests that do run today.
+- 🟡 **Admin tab bar boxed/pill restyle (2026-08-01) verified via rendered HTML class-string inspection, not a visual screenshot or live click-through** — same browser-automation gap as every other UI-only change in this repo. Confirmed the active/inactive class strings are exactly as intended (see the "Shipped" entry above); a human should give it a quick visual glance to confirm it reads well.
+- 🟢 **`scripts/seed-admin-users.ts` has been run — resolved.** Confirmed live 2026-08-01 (during login-failure debugging, see below): `admin_users` has exactly 3 real rows — `sunils@mcciapune.com` (PAYMENT_ADVICE), `abhak@mcciapune.com` (CASH_VOUCHER), `mcciaexplore@gmail.com` (ALL) — created within the same second, i.e. one real run of the script by the human, not by an agent. The earlier open item calling this blocking/unresolved is now stale.
+- 🟢 **Login failure debugged and root-caused 2026-08-01, not a code bug.** The human reported "Incorrect email or password" for `sunils@mcciapune.com` despite using the password the seed script printed. Verified end-to-end: fetched the real stored `password_hash` from the dev DB, confirmed `bcrypt.compare()` against the exact password (given directly by the human in chat) returned `true`, and confirmed a real `POST /api/admin/login` with that same email/password over HTTP returned `200 OK`. Reviewed both the login route and `verifyPassword()` line-by-line — correct argument order, no double-hashing, no trim asymmetry. Root cause found by diffing the human's next paste byte-for-byte: it silently contained a trailing space + an invisible Unicode Word Joiner (U+2060) — 29 chars instead of 27 — most likely picked up copying out of `scripts/admin-users-report.md` in a non-plain-text viewer. Reproduced the exact failure by running `bcrypt.compare()` with the 29-char (junk-appended) string, confirmed `false`. No code changed; this was purely a clipboard/copy-source issue, told to the human with the exact fix (copy from a plain terminal `cat`, or strip the trailing chars after pasting).
+- 🟡 **Dashboard-card interpretation (6 cards, not 7) is a judgment call, not something the human explicitly confirmed** — see the "Shipped" entry above for the reasoning (the brief's Part A literally lists "Verified" and "Ready for Payment" as two separate dashboard stages, but Part C makes clear they're the same derived condition). If the human actually wants both shown as distinct cards for some reason not evident in the brief, this needs revisiting.
+- 🟢 **The dual-login feature has now also been live-verified with a real named account (Abha Khatavkar, `abhak@mcciapune.com`), not just throwaway test rows** — see the Cash Voucher display/labeling session's live verification above. Sunil's real account was also used directly (login-flow debugging above). The `ALL` account and Sunil's account still haven't been used to drive a full pipeline run end-to-end; low-priority since the code path is identical regardless of which real account exercises it.
+- 🟡 **Amber stamp color (`#B8790C`, darkened from the UI's `#E8A33D`) for the Verified stamp was an agent judgment call, not human-picked** — the brief said "amber or navy — use your judgement," and navy was already used for Submitted, so amber was chosen for visual distinction between all three stamps. Darkened specifically for print legibility on white paper, confirmed by reading the actual rendered PDF. Flagging the exact hex in case the human wants an exact brand-amber match instead.
+- ⬜ **No login exists for Chintamani (Sanction is now physical/offline) — explicitly out of scope per the brief, not an oversight.** If MCCIA ever wants Chintamani's physical sanctioning logged digitally, that's future work, not this session's.
+- ⬜ **4 more surfaces found with the same "Payment Advice"/serial_no-regardless-of-mode inconsistency, flagged not fixed, per the human's explicit "ask me, don't fix silently" instruction — awaiting an answer:** (1) `lib/advice/authority-token.ts`'s already-actioned-link messages, (2) the Bill-Passed-For-save route's already-approved 409 message, (3) the invalid/expired-link generic error pages on `/authority-approval/[token]` and `/edit/[token]`, (4) the public intake form's "Submit Payment Advice"/"Resubmit" button and the confirmation screen's "Submit another Payment Advice" link. See the "Shipped" entry above for exact file/line detail on each.
+- 🟢 **"Missing" `CASH/MCCIA/2026-27/0003` investigated and fully explained 2026-08-01 — expected, not a bug.** See the "Investigated" entry above for the complete reconciliation (all 5 numbers 0001–0005 accounted for) and the code-level proof that the two numbering series are independent. No code change.
+- ⬜ **A genuine, real live production Cash submission (payee "AMAZON .IN", `serial_no MCCIA/2026-27/0036`, `cash_voucher_no CASH/MCCIA/2026-27/0004`, submitted 2026-08-01 13:50:56) was discovered sitting in the dev DB during the investigation above, mixed in among this engagement's own test data.** Not touched, not part of any test cleanup — flagging only because it's a reminder that this "dev" database has real, live MCCIA usage in it, not just test rows: any future test-data cleanup in this database must positively identify test rows (e.g. by payee name/email pattern used in that session) rather than assuming everything present is disposable.
 
 ## 5. Do Not Touch Without Asking
 
-- `lib/auth.ts` — admin JWT session logic
+- `lib/auth.ts` — admin JWT session logic. **As of 2026-08-01, split across 3 files, deliberately, not an accident to "clean up":** `lib/auth.ts` (Edge-safe — signs/verifies the JWT only, imported by `proxy.ts` which runs on the Edge runtime), `lib/admin-users.ts` (Node-only — bcrypt + DB lookups), `lib/admin-session.ts` (Node-only — reads the cookie via `next/headers` for Server Components/Route Handlers). Don't merge these back into one file; `next/headers`/`bcryptjs` in the Edge-loaded file would break the build or bloat the Edge bundle for no reason.
 - `lib/serial.ts` — serial number allocation (gapless guarantee is load-bearing; a "cleanup" here can silently break FY rollover)
 - Anything in `lib/db/migrations/` — always ask before editing or regenerating an existing migration; only ever *add* new ones
 - The dual representation of `nature_of_expenditure` (structured `cash_voucher_items` for Cash + joined string on `payment_advices.nature_of_expenditure` for NEFT/Excel stability) — this looks redundant but is intentional. Don't collapse it to "just use the line items table" without checking Excel export first.
@@ -310,12 +474,18 @@ Status legend: 🔴 unverified / high risk · 🟡 unverified / lower risk · �
 - **"Waiting on Authority" / "Ready for Finance" are derived from `authority_approved_at`, not a new status enum value** — this was a deliberate choice (see the Approval Workflow entry above) to avoid a second piece of state that can drift out of sync with `status`. Don't add a `PENDING_AUTHORITY` status value without checking every place `status` is filtered/branched on first (admin list, `StatusChip`, `/edit/[token]` validity check, etc.).
 - **`authority_token` is intentionally not single-use** (unlike `edit_token`, which is nulled after resubmit) and has a **90-day** TTL, not 14 — both differences are deliberate, not inconsistency with the edit-token pattern. See the Approval Workflow entry above for why. Don't "fix" these to match edit_token without asking.
 - **`lib/advice/send-back.ts`'s `performSendBack()` is now shared by Admin's send-back and the Authority's reject action.** Both routes depend on its exact behavior (sets `status`/`sentBackAt`/`adminRemarks`/`editToken` always; sets `authorityRejectedAt`/`authorityRemarks` only when `authorityRejection: true`). Don't fork it back into two copies or change its default (non-authority) behavior without checking both call sites.
-- **There is no `/api/admin/advice/[id]/approve` route anymore.** It was retired and folded into `POST /api/admin/advice/[id]/sanction`, which dual-writes `status`/`approved_at`/`approved_by_name` alongside `sanctioned_at`/`sanctioned_by`. Don't recreate a standalone Approve route/button — see the Finance pipeline entry above for the full reasoning. If you need "who approved this," that's `approved_by_name` (still populated, now always one of the 2 fixed sanctioner names instead of free text).
-- **`VERIFIER_NAMES` (4 people) and `SANCTIONER_NAMES` (2 people) in `lib/validation/payment-advice.ts` are deliberately hardcoded, not a CRUD-managed table.** Don't build an admin UI to manage these, same philosophy as this repo's other explicit "small fixed list, not a table" decisions. If MCCIA adds/removes a person, that's a one-line code change made by an agent, not a data change made by Admin.
+- **There is no `/api/admin/advice/[id]/approve` route anymore.** It was retired and folded into Sanction, which was itself later retired 2026-08-01 (see below) and folded into Payment Done. If you need "who approved this," that's `approved_by_name` — as of 2026-08-01 it's dual-written by `POST /api/admin/advice/[id]/payment-done`, not Sanction, for every new submission (pre-cutover rows may still have it from the old Sanction action; both mechanisms write the same field, never both on the same row).
+- **Sanction is retired as an active pipeline step (2026-08-01) — replaced by automatic "Ready for Payment" + manual "Mark Payment Done."** `POST/PATCH /api/admin/advice/[id]/sanction`, `sanctioned_at`/`sanctioned_by`, `SANCTIONER_NAMES`/`sanctionSchema` all still exist in code and are **intentionally kept, not deleted** (historical data + the Sanctioner "Correct name" route for pre-cutover rows) — but nothing in the UI calls `POST .../sanction` anymore. Don't re-add a Sanction button/picker to the active flow without asking; use `POST .../payment-done` for any new terminal-action work.
+- **`VERIFIER_NAMES` (4 people) in `lib/validation/payment-advice.ts` no longer gates the active Verify flow (2026-08-01)** — `verified_by` is auto-attributed from the logged-in `admin_users.full_name` (real per-person login), which is not guaranteed to be one of these 4 names. `VERIFIER_NAMES` is kept only because `PATCH .../verify` (the historical name-correction route) still uses it. `SANCTIONER_NAMES` (2 people) is unchanged/still hardcoded, same reasoning as always — not a CRUD-managed table, one-line code change if MCCIA adds/removes a Sanctioner.
+- **The shared `ADMIN_PASSWORD` login no longer exists — removed entirely 2026-08-01, no fallback.** Real per-person logins (`admin_users` table, email + bcrypt password) replaced it completely. Don't reintroduce an `ADMIN_PASSWORD` env-var check "as a fallback" or "for convenience" — the human's explicit instruction was to remove the old check path entirely, not keep it dormant.
+- **"Mark Payment Done" (`POST /api/admin/advice/[id]/payment-done`) is NOT backend-role-gated to `PAYMENT_ADVICE`/`CASH_VOUCHER`** — any signed-in `admin_users` session can call it for any submission regardless of payment mode, deliberately, per the same "default filter, not an authorization wall" decision that governs the landing-page filter default. Only the UI (`AdviceActions.tsx`) hides the button for a non-matching role. Don't add backend role enforcement here without checking with the human first — it would be a real behavior change, not a bug fix.
+- **`lib/pdf/Stamp.tsx`'s stamps are positioned `bottom-right` inside each signature cell, not `top-right`** — top-right was tried first and visually collided with the existing name/label text (confirmed by rendering and reading the actual PDF, not just inspecting JSX). If repositioning, re-render and actually read the output before assuming a CSS change looks fine.
 - **`sanctioned_by_name` (submitter-filled) no longer exists — don't confuse it with `sanctioned_by` (admin-recorded) or `verified_by_name` (submitter-filled, PDF footer) vs `verified_by` (admin-recorded, Finance pipeline).** The submitter-filled/admin-recorded pairs look similar but are unrelated concepts that happen to both end up printed near each other on the PDFs. See the Finance pipeline entry above.
 - **The Payment Advice PDF (`/api/advice/[id]/pdf`, `/api/admin/advice/[id]/pdf`) 404s for every Cash submission, at every status, no exceptions.** Don't add a code path that serves it for Cash even conditionally (e.g. "for Admin only," "once approved") — the human's instruction was Cash never gets this PDF, full stop. Only the Cash Payment Voucher exists for Cash.
-- **`EMAIL_FROM` must stay `onboarding@resend.dev` (the Resend shared testing domain) until the human confirms `mcciapune.com` is DNS-verified in the Resend dashboard.** Don't switch it to a `mcciapune.com` address, and don't touch DNS/attempt domain verification — explicit human instruction, and outside what an agent can even do (needs their IT team).
+- **`EMAIL_FROM` only applies when `EMAIL_PROVIDER=resend`, and must stay `onboarding@resend.dev` (the Resend shared testing domain) until the human confirms `mcciapune.com` is DNS-verified in the Resend dashboard.** Don't switch it to a `mcciapune.com` address, and don't touch DNS/attempt domain verification — explicit human instruction, and outside what an agent can even do (needs their IT team).
 - **`EMAIL_MODE` must default to `"preview"` for anything other than exactly the string `"live"` — this is deliberate and load-bearing, not a bug.** It's what keeps every environment (including any that forgets to set the var) behaving exactly as it did before Resend was wired up. Don't change the comparison to be more permissive (e.g. truthy-check) without asking.
+- **`EMAIL_PROVIDER` must default to `"gmail"` for anything other than exactly the string `"resend"` (2026-08-05) — this mirrors `EMAIL_MODE`'s "explicit opt-in, safe default" pattern.** Gmail is the current live provider; don't flip the default to `resend` without asking (Resend still can't deliver to anyone but the account owner until `mcciapune.com` is DNS-verified — flipping the default without that would silently break live delivery). The Resend code path (`getResendClient()`, the `resend` branch in `dispatch()`/`getFrom()`) must stay intact, not deleted, even while dormant.
+- **For the `gmail` provider, `getFrom()` always returns `GMAIL_USER`, ignoring `EMAIL_FROM` entirely — this is a hard Gmail SMTP requirement (the authenticated account and the `from` header must match), not a bug or an oversight to "fix" by wiring `EMAIL_FROM` in too.** Don't try to send "as" a different address through the gmail provider.
 - **`notifyAuthorityApproval()`'s `to` parameter is `string | null`, not `string` like the other three notify functions** — deliberately, since ~2/13 recommending authorities have no email on file and must silently fall back to preview (never throw, never block the calling route) rather than erroring. Don't change its signature to require a non-null email.
 - **`lib/staff-authority-emails.ts`'s `NAME_EMAIL_LIST` is the single authoritative source for staff/authority emails** — `scripts/backfill-staff-authority-emails.ts` and `lib/staff-email.ts` both import from it rather than duplicating the list or the name-normalization logic. If MCCIA sends an updated email list, edit this one file and re-run the backfill script; don't hand-edit DB rows or create a second list.
 - **Never assume the `vi.mock`/`vi.fn().mockImplementation()` pattern for mocking a class constructor is broken across a whole test file just because one test fails and the same test passes in isolation — check `afterEach`/`beforeEach` for `vi.restoreAllMocks()` first.** It silently strips `mockImplementation` from plain `vi.fn()`s (not just spy state, despite the name), which only manifests as failures once 2+ tests share the mock. Cost real time to root-cause in this session (see the session log entry below) — don't rediscover it the hard way again.
@@ -324,12 +494,281 @@ Status legend: 🔴 unverified / high risk · 🟡 unverified / lower risk · �
 - **`countInProgressForStaffName()` matches by name, not FK** (`payment_advices` has no `staff_member_id` column) — it is a best-effort approximation, not a reliable reference check. Don't present its result as exact, and don't "fix" it by adding fuzzy matching without asking — the human may want a real FK instead, which is a bigger schema change.
 - **The Verifier/Sanctioner "Correct name" action is a narrow name-only fix, not undo/reverse — don't extend it into general undo without asking.** It exists as `PATCH` on the same `verify`/`sanction` route files that already have `POST` (not new route paths) — keep that pattern if extending it. `PATCH .../sanction` deliberately also updates `approved_by_name` alongside `sanctioned_by` (flagged in the Shipped entry above) since it's a dual-write mirror of the same fact; `PATCH .../verify` has no equivalent second field to sync. Neither PATCH ever touches `verified_at`/`sanctioned_at`/`status`/`bill_passed_for` — don't add that without asking, it would turn a name fix into an undo.
 - **The "Sent Back" tab's Remarks column reads `admin_remarks`, not `authority_remarks`.** `admin_remarks` is always set by `performSendBack()` regardless of who triggered it (Admin or the Authority); `authority_remarks` is only set for authority rejections specifically and would be blank for Admin-initiated send-backs. Don't switch the column to `authority_remarks` — it would silently go blank for half the rows.
+- **"S H Kopardekar" no longer exists as a `recommending_authorities` row — merged into "SUDHANWA KOPARDEKAR" 2026-08-01.** Don't recreate a "S H Kopardekar" row; if the human ever mentions that name again, it means SUDHANWA KOPARDEKAR (`sudhanwak@mcciapune.com`).
+- **`payment_advices.cash_voucher_no` is a separate, independent number from `serial_no` — never conflate or repoint one reader at the other.** `serial_no` (format `MCCIA/<FY>/NNNN`) stays the DB/audit-log/Excel identifier for every submission regardless of mode; `cash_voucher_no` (format `CASH/MCCIA/<FY>/NNNN`) exists only for Cash-mode submissions and is purely what prints on the Cash Voucher PDF's "No." field. Excel export deliberately does not include `cash_voucher_no` — see the open item above; don't add it without asking.
+- **`serial_counters` now has a composite primary key `(financial_year, series)`, not just `financial_year`.** `series` is `'PAYMENT_ADVICE'` or `'CASH_VOUCHER'` — both allocated through the exact same `allocateNumber()` gapless `SELECT ... FOR UPDATE` primitive in `lib/serial.ts` (still covered by the existing "don't touch `lib/serial.ts`" rule above). Don't add a third series without checking whether the composite-key shape still fits, and don't collapse the two series back into a shared counter — they must stay independently gapless per-FY.
+- **`lib/advice/document-identity.ts` (`documentLabelFor()`/`displayNoFor()`) is now the single source of truth for "what do we call this submission, and what number do we show as primary."** Every server-rendered page and every email call site uses it (2026-08-01 session). Don't hardcode "Payment Advice"/`serial_no` in a new surface, or reimplement the NEFT/CASH branching inline — that's exactly the class of bug this file exists to prevent from recurring. If you add a new user-facing surface that names the document type or shows its reference number, use these two functions.
 
 ## 6. Session Log
 
 Append one entry per session, newest at the top. Keep entries short — this is a changelog, not a diary.
+(Note: this header was accidentally dropped in an earlier edit and restored 2026-08-01 by Claude Code — no content was lost, only the heading line.)
 
 ```
+2026-08-05 — Claude Code — Switched live email from Resend to Gmail SMTP
+(nodemailer, service:"gmail", GMAIL_USER/GMAIL_APP_PASSWORD) as an interim
+provider — mcciapune.com DNS verification in Resend is taking longer than
+there's time for; Gmail works immediately, accepted trade-off is mail shows
+as coming from mcciaexplore@gmail.com, not an official MCCIA domain, until
+that's done. All provider-agnostic logic in lib/email/notify.ts (EMAIL_MODE
+check, EMAIL_TEST_OVERRIDE_RECIPIENT redirect+subject-prefix, the no-email-
+authority preview fallback, never-throw-to-caller contract) is unchanged —
+only the low-level "hand this to a provider" call changed, via one new
+small dispatch() function gated by a new EMAIL_PROVIDER env var (gmail
+default, resend opt-in). Resend's code path kept fully intact, not deleted
+— getResendClient() untouched, just unused while gmail is the default;
+switching back later is EMAIL_PROVIDER=resend + a real RESEND_API_KEY, no
+rebuilding. getFrom() now branches by provider: gmail always uses
+GMAIL_USER (Gmail SMTP requires authenticated account = from address, so
+EMAIL_FROM is not consulted in that branch), resend keeps its exact prior
+EMAIL_FROM-or-default logic. Restructured lib/email/notify.test.ts into
+gmail (default) and resend (dormant-but-ready) describe blocks, mocking
+nodemailer.createTransport alongside the existing Resend mock — every
+scenario the old Resend-only suite covered is re-proven against gmail, and
+a smaller set proves resend still genuinely works too. One test-ordering
+gotcha hit and documented: the Gmail transport is a lazy module-scope
+singleton (same pattern the Resend client always used), so the test
+asserting createTransport's exact call args has to run first, before
+caching kicks in. Incidental fix while touching .env.local.example/README
+for the new env vars: both still referenced the long-retired shared
+ADMIN_PASSWORD and README's deploy steps still pointed at the old
+/admin/authorities page — corrected both, small and directly adjacent, not
+a separate cleanup pass. Verified live against the real dev server + real
+Neon DB + real Gmail SMTP (not mocked): 3 real submissions run through the
+actual public/admin routes exercised all 5 email types plus the no-email-
+authority fallback (submission confirmation x2, authority approval x2,
+sent-back via a real authority rejection, verified, payment-done, one
+authority-approval that correctly fell back to preview for "DG") — every
+live send got a real Gmail message ID in the server log (format
+<...@gmail.com>, visibly distinct from Resend's UUID-style IDs), no auth
+failures, no Google "suspicious sign-in" block on this App Password's first
+sends. Confirmed via the code (getFrom() has no override path for gmail)
+that every send used GMAIL_USER=mcciaexplore@gmail.com as "from" — same
+no-inbox-access limitation as every prior email-verification session, so
+proven from the code path rather than an inbox screenshot. Re-confirmed the
+DG fallback specifically: identical warning + preview HTML dump, zero
+Gmail transport calls for that one send. All 3 test submissions + 6
+attachments deleted after. tsc/ESLint/Vitest all clean (see below for exact
+counts).
+
+2026-08-01 — Claude Code — Investigated the human's report of a "missing"
+CASH/MCCIA/2026-27/0003 in the admin queue (0001, 0002, 0004 visible, 0003
+not). No code change — concluded definitively expected, not a bug, with
+direct evidence rather than assumption. Queried the real dev DB: only 3
+payment_advices rows exist total (2 real pre-existing "KHAANE PE" rows at
+0001/0002, 1 real live "AMAZON .IN" row at 0004 submitted today, discovered
+mixed in among this engagement's own test data). Cross-referenced
+AGENT_HANDOFF.md's own session history and found first-party documentation
+that 0003 (and separately 0005, also "missing" from the live queue) were
+each allocated to a real test submission created via the actual /api/submit
+endpoint in two of this engagement's own prior sessions, then deleted as
+routine test cleanup — quoted directly from those sessions' own "Shipped"
+entries. serial_counters' CASH_VOUCHER counter (currently at 5) matches
+exactly, with all 5 numbers fully accounted for. Confirmed no soft-delete
+concept exists anywhere in the schema (grepped, zero matches) — all
+deletions across this engagement's history are genuine hard DELETEs.
+Checked the main serial_no series for the same pattern: far larger gaps
+(only 3 rows exist, counter at 37) from the identical dozens-of-sessions
+test-then-delete history, confirming this is normal, existing, engagement-
+wide behavior, not something new or specific to the Cash Voucher series.
+Proved series independence from the actual code and schema, not restated
+from design intent: `\d serial_counters` shows a real composite PRIMARY KEY
+(financial_year, series) enforced by Postgres; lib/serial.ts's shared
+allocateNumber() scopes every statement (insert-on-conflict, SELECT ... FOR
+UPDATE, update) by both financial_year AND series, so locking one series's
+counter row can never touch the other's; allocateSerialNumber()/
+allocateCashVoucherNumber() hardcode their own series constant, never
+parameterized/crossed; and the /api/submit call site only invokes
+allocateCashVoucherNumber() inside `paymentMode === "CASH" ? ... : null` —
+for NEFT, that function is never called at all, so the CASH_VOUCHER counter
+row isn't even read for a NEFT submission (literal code proof, not
+inference). Flagged one transparency note that isn't a bug and isn't what
+caused this gap: number allocation and the payment_advices row insert are
+two separate transactions with Blob upload in between, meaning a failure
+between them could in principle strand an allocated number — but this is
+the same pre-existing pattern serial_no has always used, unchanged, not
+introduced by the Cash Voucher work. Also flagged: the real "AMAZON .IN"
+production row found during this investigation is a reminder this dev DB
+has genuine live MCCIA usage in it, not just test rows — future cleanup
+must positively identify test rows, not assume everything present is
+disposable. No code, schema, or test changes — Part 1 concluded (a), so
+per the brief's own instruction nothing needed fixing.
+
+2026-08-01 — Claude Code — Cash Voucher display/labeling consistency fix.
+Prior sessions gave Cash submissions their own PDF number (cash_voucher_no)
+but every OTHER surface still said "Payment Advice" and showed serial_no
+regardless of mode. Audited every surface the brief listed individually
+(not assumed): public confirmation screen, admin queue list, admin detail
+page, all 5 notification emails, authority-approval page, edit/resubmit
+page, PDF filename. 7 of 8 needed fixing; only the PDF filename and
+AdviceActions.tsx's own download buttons were already correct. Built a
+shared lib/advice/document-identity.ts (documentLabelFor/displayNoFor) as
+the single source of truth, used everywhere instead of each surface
+re-deriving it. Added cashVoucherNo to /api/submit and /api/edit/[token]'s
+JSON responses (previously missing entirely) and to SubmissionSummary
+(sessionStorage handoff type). Added cash_voucher_no + payment_mode to 4
+routes' DB selects that didn't have them. Renamed serialNo->displayNo and
+added documentLabel across all 5 email interfaces; fixed all 5 templates'
+subject lines and hardcoded body text. One flagged reversal of a prior
+session's explicit decision: an earlier test asserted the Verified email's
+subject must always be the literal "Payment Advice {serial}" even for Cash
+"per the exact specified copy" of that session's brief — this session's
+brief explicitly names "verified" as needing the Cash Payment Voucher fix,
+a direct contradiction, so proceeded with the newer instruction and flagged
+the reversal rather than silently picking one. Removed a redundant
+Advice-No./Cash-Voucher-No. row pair from the admin detail page's Header
+section now that the same two numbers show at the top of the page.
+Found and reported (not fixed, per the human's explicit "ask me" instruction
+for out-of-list surfaces) 4 more surfaces with the identical inconsistency:
+authority-token.ts's already-actioned messages, the Bill-Passed-For route's
+already-approved message, two invalid/expired-link generic error pages, and
+the intake form's submit button. Fixed a stale §7 field-mapping table row
+that still described the pre-numbering-series behavior. New test:
+lib/advice/document-identity.test.ts (5 tests); updated
+lib/email/templates.test.ts, lib/email/notify.test.ts,
+lib/advice/finance-payment-done-route.test.ts, and
+lib/advice/authority-reject-route.test.ts for the renamed/added fields.
+Verified live against the real dev server + real Neon DB: a real Cash
+submission run through submit -> authority-approve -> receive -> verify ->
+Mark Payment Done via the actual routes (not direct DB writes), checking
+the real rendered HTML at every step (queue, detail in both in-progress and
+terminal states, authority-approval page) and reconstructing all 4 fired
+emails' exact content (live mode doesn't log full HTML) — every surface
+correctly showed "Cash Payment Voucher" + CASH/MCCIA/2026-27/0005, with
+MCCIA/2026-27/0037 only ever appearing as the small Internal Ref., never
+primary. Confirmed the downloaded PDF's filename uses the Cash Voucher
+number. Test data deleted after. tsc/ESLint/Vitest all clean (see below for
+exact counts). Also, separately this same day: debugged a "Incorrect email
+or password" report for a real seeded account (sunils@mcciapune.com) — no
+code bug; root-caused to a trailing invisible Unicode Word Joiner character
+in the human's copy-paste source, confirmed via a direct bcrypt.compare()
+against the real stored hash (true for the clean password, false with the
+trailing junk) and a real 200 OK login with the clean password over HTTP.
+See §4's Open Items for the resolved seed-script-run status this surfaced.
+
+2026-08-01 — Claude Code — Large brief (Dual_Login_Retire_Sanction_Stamps_
+Prompt.md, kept in repo root): real per-person Admin logins, Verify
+auto-attribution, retired Sanction, new Payment Done flow, digital PDF
+stamps. One required confirmation obtained before writing Part C's code:
+grepped every real reader of approved_at/approved_by_name (exactly 2 —
+Excel's Approved On/By columns, the PDF's "Approved on :" line), reported
+that back, and got explicit yes on dual-writing Payment Done into those
+legacy fields, matching what Sanction used to do. Part A: new admin_users
+table (migration 0009, clean drizzle-kit generate, also adds
+payment_advices.payment_done_at/payment_done_by), bcryptjs (pure-JS, no
+native bindings). Split lib/auth.ts into 3 files preserving its documented
+Edge/Node boundary: lib/auth.ts (Edge-safe, JWT only, now carries
+{adminUserId, fullName, adminRole} and strictly rejects the old
+{role:"admin"} shared-password token shape — clean cutover, no hybrid
+compat), lib/admin-users.ts (Node, bcrypt+DB), lib/admin-session.ts (Node,
+next/headers cookie reader for Server Components/Route Handlers).
+ADMIN_PASSWORD check path removed entirely, no fallback, per explicit
+instruction. Login route timing-safe against email enumeration (bcrypt
+compares against a fixed dummy hash even for a nonexistent email; identical
+generic error message either way). Landing-page paymentMode filter defaults
+by role (PAYMENT_ADVICE->NEFT, CASH_VOUCHER->CASH, ALL->unfiltered) only
+when the URL never mentioned paymentMode at all (sp.paymentMode===undefined,
+distinct from an explicit ""="All" choice) — a default, not a wall, no
+backend blocking added anywhere. ALL-role account gets 6 summary dashboard
+cards (count+sum per stage) reusing the same queries that back the tab
+badges, so they can't disagree. One interpretation flagged, not decided
+silently: brief's Part A lists "Verified" and "Ready for Payment" as two
+dashboard stages; Part C makes clear they're the same derived condition, so
+built 6 cards matching Part D's tab list, not 7. seed-admin-users.ts written
+but NOT run — Sunil/Abha emails are still TODO placeholders (human said
+they'd supply separately), ALL-role email pre-filled from session context
+(mcciaexplore@gmail.com) but flagged for the human to confirm, not assumed.
+Part B: verify route no longer reads verifiedBy from the body at all —
+auto-attributed from the session; deleted the now-dead verifySchema; kept
+VERIFIER_NAMES (still used by the historical PATCH correction route) with an
+updated comment explaining why. Removed the NameCorrectionAction from the
+Verified By row on the admin detail page; left the PATCH route and its past
+audit_log entries untouched. Part C: sanctioned_at/sanctioned_by columns and
+the Sanctioner correction route kept exactly as they were, per explicit
+"keep, don't delete" — just no UI calls POST .../sanction anymore. Ready for
+Payment is derived (verified_at set, payment_done_at null), no new column,
+no click. New POST .../payment-done route: session-derived paymentDoneBy,
+same 404/409/409/400 guard shape Sanction used to have, still requires Bill
+Passed For to already be saved (a real business rule that predates the
+picker being retired, not something to drop silently) dual-writes
+status/approved_at/approved_by_name, writes PAYMENT_DONE to audit_log, fires
+new notifyPaymentDone() email. Deliberately not backend-role-gated (same
+"default filter not a wall" philosophy) — verified live by calling it as
+the wrong-role test user against a NEFT advice and confirming it still
+succeeds. AdviceActions terminal branch now prefers paymentDoneAt/By,
+falling back to sanctionedAt/By for pre-cutover rows. VERIFIED_TEMPLATE
+copy fixed ("forwarded for sanctioning..." -> "now Ready for Payment", since
+the old copy referenced a step that no longer exists). Part D: renamed 2 of
+7 tabs (verified_awaiting_sanction->verified_ready_payment,
+sanctioned_ready->payment_done), same underlying conditions just relabeled/
+recolumned; other 5 unchanged. Part E: new lib/pdf/Stamp.tsx (rotated
+bordered box, name+date inside the stamp, navy/green/amber per type) wired
+into both PaymentAdviceDocument (Submitted/Recommended/Verified, Sanctioned
+NEVER stamped) and CashVoucherDocument (Submitted/Recommended only, no
+Verified box exists there). Iterated once on positioning after actually
+rendering and reading the PDF: top-right collided with existing text,
+bottom-right against the blank Signature line reads clean. Verified all 3
+progression stages (submitted-only / +approved / +verified) by rendering
+and reading real PDFs at each stage, confirming stamps appear/disappear
+exactly on schedule and Sanctioned stays blank even at the fully-paid
+terminal state. New/updated tests: finance-verify-route.test.ts (POST
+describe rewritten for session-derived attribution, no more enum
+validation there), finance-payment-done-route.test.ts (new, 11 tests),
+admin-login-route.test.ts (new, 5 tests, includes a same-error-message
+enumeration-resistance check), filters.test.ts, templates.test.ts,
+notify.test.ts. Verified live end-to-end against the real dev server + real
+Neon DB using 3 throwaway admin_users test rows (not the real seed script):
+logged in as all 3 roles, confirmed the paymentMode default and ALL-role
+dashboard render correctly; ran one real submission through submit ->
+authority-approve -> receive -> verify (zero request body, confirmed
+verified_by is the real logged-in name) -> Mark Payment Done (400 without
+Bill Passed For saved, 200 after; deliberately called as the wrong-role
+user and confirmed 200 not 403); confirmed the row moved from
+verified_ready_payment into payment_done; downloaded the real PDF and
+confirmed all 3 stamps render with real names/dates and Sanctioned stayed
+blank; confirmed all 4 live notification emails (including the brand-new
+payment-done one) actually sent via real Resend calls with real message
+IDs, correctly redirected through EMAIL_TEST_OVERRIDE_RECIPIENT. All test
+data (1 advice, 2 attachments, 3 admin_users rows) deleted after. Also
+restored this file's own "## 6. Session Log" header, found accidentally
+dropped by an earlier session's edit (no content was lost). tsc/ESLint/
+Vitest (151 passing, 6 pre-existing skipped)/next build all clean.
+
+2026-08-01 — Claude Code — Three independent fixes per the human's brief, done
+in order with a report after each. Fix 1: merged the confirmed-duplicate
+"S H Kopardekar" / "SUDHANWA KOPARDEKAR" authority — reassigned S H
+Kopardekar's single staff_authority_options reference (0 payment_advices ever
+referenced it) to SUDHANWA KOPARDEKAR, verified zero references remained
+inside the same transaction (a RAISE EXCEPTION guard would have aborted
+otherwise), then hard-deleted the duplicate row. Fix 2: gave the Cash Voucher
+its own independent gapless numbering series (CASH/MCCIA/<FY>/NNNN),
+completely separate from the unchanged main serial_no. Migration 0008 adds
+payment_advices.cash_voucher_no (nullable) and changes serial_counters'
+primary key to (financial_year, series) — one row per (FY, series) pair,
+same SELECT ... FOR UPDATE gapless mechanism as before, now parameterized by
+series instead of forking a second mechanism. Backfilled the 2 pre-existing
+real Cash submissions with 0001/0002 in the same migration. Both numbers now
+allocate in the same transaction at /api/submit; /api/edit/[token] handles
+the edge case of a resubmission flipping payment mode. Cash Voucher PDF's
+"No." field and the admin detail page (new "Advice No." + "Cash Voucher No."
+rows, Cash-mode only) both updated. Deliberately did not add cash_voucher_no
+to the Excel export — flagged as a question for the human, mirroring the
+already-declined "Expenditure Breakdown" column. New unit + TEST_DATABASE_URL-
+gated integration tests in lib/serial.test.ts (FY boundary, series
+independence, NEFT never allocating a Cash Voucher number). Fix 3: restyled
+the admin tab bar from underline to boxed/pill (rounded-md border on every
+tab; active = filled navy bg-[#0b1f3a] text-white; inactive = border-gray-300
+bg-white text-gray-600 with navy hover) — purely cosmetic, no filter/gating
+logic touched, count badges unchanged. All three verified live against the
+real dev server + real Neon DB: the merge via direct SQL + a real Cash
+submission's PDF correctly showing "SUDHANWA KOPARDEKAR"; the numbering
+series via a real /api/submit Cash submission whose downloaded PDF printed
+CASH/MCCIA/2026-27/0003 while serial_no stayed MCCIA/2026-27/0034; the tab
+restyle via the real rendered admin HTML's class strings (no browser
+automation tool exists in this environment — flagged, not silently claimed
+as a visual screenshot). All test data cleaned up after. tsc/ESLint/Vitest/
+next build all clean (see below for exact counts).
+
 2026-07-31 — Claude Code — Full live-send verification of all 4 notification
 emails, per the human's brief, with a real RESEND_API_KEY + EMAIL_MODE=live +
 EMAIL_TEST_OVERRIDE_RECIPIENT set in .env.local. Pure verification, no code
@@ -780,7 +1219,7 @@ session) — flagging so nobody assumes it's safe on a remote.
 | Amount in Words | *(removed)* | — |
 | Sanctioned by | Sanctioned by | kept, but now filled by submitter at submission, not Admin at approval |
 | Payee's Signature | Payee's Signature | kept, blank on printout (wet-ink) |
-| No. | No. | kept — reuses Payment Advice `serial_no` |
+| No. | No. | ~~kept — reuses Payment Advice `serial_no`~~ **Superseded** — has its own independent series, `cash_voucher_no` (`CASH/MCCIA/<FY>/NNNN`), since the Cash Voucher numbering session; this row was never updated to match at the time, fixed 2026-08-01. |
 | Date | Date | kept |
 | Rs./Ps. columns, Total | Rs./Ps. columns, Total | kept, Total now auto-summed from line items |
 

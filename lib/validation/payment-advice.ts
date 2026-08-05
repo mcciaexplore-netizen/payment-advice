@@ -54,11 +54,20 @@ export type Status = z.infer<typeof statusSchema>;
 
 /**
  * Finance Verification + Sanctioning pipeline (runs after Recommending
- * Authority approval, for both NEFT and Cash). Deliberately a small
- * hardcoded list, not a CRUD-managed table like vendors/authorities — these
- * are two small fixed groups of named people, not something Admin adds to
- * over time. Everyone still shares the single Admin login; the dropdown is
- * only how each stage records WHICH of these people actually did it.
+ * Authority approval, for both NEFT and Cash).
+ *
+ * VERIFIER_NAMES / verifierNameSchema: retained ONLY for the still-existing
+ * `PATCH .../verify` correction route and its historical audit_log entries
+ * (see AGENT_HANDOFF.md's "Real logins, retire Sanction" session) — Verify
+ * itself no longer uses a picker. Since real per-person Admin logins
+ * (admin_users), `verified_by` is auto-attributed from the logged-in
+ * user's full_name, which is not guaranteed to be one of these 4 names
+ * (e.g. the ALL-role account). Don't reuse this enum for new validation.
+ *
+ * SANCTIONER_NAMES / sanctionerNameSchema / sanctionSchema: Sanction is
+ * retired as an active step (see AGENT_HANDOFF.md) — kept only because
+ * `POST/PATCH .../sanction` still exist for historical data, unreachable
+ * from the UI going forward.
  */
 export const VERIFIER_NAMES = [
   "Sunil Salunke",
@@ -72,10 +81,6 @@ export type VerifierName = z.infer<typeof verifierNameSchema>;
 export const SANCTIONER_NAMES = ["Chintamani Shrotri", "DG"] as const;
 export const sanctionerNameSchema = z.enum(SANCTIONER_NAMES);
 export type SanctionerName = z.infer<typeof sanctionerNameSchema>;
-
-export const verifySchema = z.object({
-  verifiedBy: verifierNameSchema,
-});
 
 export const sanctionSchema = z.object({
   sanctionedBy: sanctionerNameSchema,

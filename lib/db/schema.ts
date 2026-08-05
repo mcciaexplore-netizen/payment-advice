@@ -9,7 +9,25 @@ import {
   integer,
   jsonb,
   unique,
+  primaryKey,
 } from "drizzle-orm/pg-core";
+
+/** Real per-person Admin logins, replacing the old shared ADMIN_PASSWORD.
+ * `role` gates only the default landing filter (Payment-Advice/Cash-Voucher/
+ * combined) — NOT a backend authorization wall; every logged-in user can
+ * still see everything via the "All" tab/filter. See AGENT_HANDOFF.md. */
+export const adminUsers = pgTable("admin_users", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  fullName: text("full_name").notNull(),
+  email: text("email").notNull().unique(),
+  passwordHash: text("password_hash").notNull(),
+  role: text("role").notNull(), // 'PAYMENT_ADVICE' | 'CASH_VOUCHER' | 'ALL'
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+  lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
+});
 
 export const vendors = pgTable("vendors", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -128,6 +146,12 @@ export const paymentAdvices = pgTable("payment_advices", {
   bankAccountNo: text("bank_account_no"),
   bankIfsc: text("bank_ifsc"),
   beneficiaryName: text("beneficiary_name"),
+  // Own gapless series (CASH/MCCIA/<FY>/NNNN, via serial_counters' CASH_VOUCHER
+  // row), allocated only for payment_mode = 'CASH', at submission time,
+  // alongside serial_no. serial_no stays the DB/audit-log/Excel identifier
+  // for every submission regardless of mode; this is purely what prints on
+  // the Cash Voucher PDF.
+  cashVoucherNo: text("cash_voucher_no"),
 
   // People
   submittedByName: text("submitted_by_name").notNull(),
@@ -187,8 +211,20 @@ export const paymentAdvices = pgTable("payment_advices", {
   financeReceivedAt: timestamp("finance_received_at", { withTimezone: true }),
   verifiedAt: timestamp("verified_at", { withTimezone: true }),
   verifiedBy: text("verified_by"),
+  // Retired as an active pipeline step (see AGENT_HANDOFF.md) — sanctioning
+  // now happens physically/offline. Columns kept, not dropped: preserves
+  // historical data and the "Correct name" audit trail for rows sanctioned
+  // before the retirement. No new row will ever set these going forward.
   sanctionedAt: timestamp("sanctioned_at", { withTimezone: true }),
   sanctionedBy: text("sanctioned_by"),
+  // Replaces Sanction as the terminal action. "Ready for Payment" itself is
+  // derived (verified_at set, payment_done_at null — no new column needed),
+  // same "derive from timestamps" convention as every other pipeline stage
+  // in this table. Auto-attributed from the logged-in admin_users.full_name
+  // at the time of the click, same snapshot-not-FK pattern as verified_by/
+  // sanctioned_by.
+  paymentDoneAt: timestamp("payment_done_at", { withTimezone: true }),
+  paymentDoneBy: text("payment_done_by"),
 
   createdAt: timestamp("created_at", { withTimezone: true })
     .defaultNow()
@@ -239,10 +275,20 @@ export const cashVoucherItems = pgTable("cash_voucher_items", {
     .notNull(),
 });
 
-export const serialCounters = pgTable("serial_counters", {
-  financialYear: text("financial_year").primaryKey(),
-  lastNumber: integer("last_number").default(0).notNull(),
-});
+/** One row per (financial year, series) pair. 'PAYMENT_ADVICE' is the
+ * original series (MCCIA/<FY>/NNNN, every submission); 'CASH_VOUCHER' is the
+ * independent series (CASH/MCCIA/<FY>/NNNN, CASH-mode submissions only).
+ * Both allocated via the same SELECT ... FOR UPDATE gapless pattern in
+ * lib/serial.ts — this is one mechanism serving two series, not two. */
+export const serialCounters = pgTable(
+  "serial_counters",
+  {
+    financialYear: text("financial_year").notNull(),
+    series: text("series").notNull().default("PAYMENT_ADVICE"),
+    lastNumber: integer("last_number").default(0).notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.financialYear, table.series] })],
+);
 
 export const auditLog = pgTable("audit_log", {
   id: uuid("id").primaryKey().defaultRandom(),

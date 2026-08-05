@@ -14,9 +14,22 @@ import {
   searchParamsRecordToURLSearchParams,
   SortColumn,
 } from "@/lib/admin/filters";
-import { Status } from "@/lib/validation/payment-advice";
+import { PaymentMode, Status } from "@/lib/validation/payment-advice";
+import { getAdminSession } from "@/lib/admin-session";
+import { displayNoFor } from "@/lib/advice/document-identity";
 
 type SearchParamsRecord = Record<string, string | string[] | undefined>;
+
+// The 6 real pipeline-stage tabs (everything except "all") — also drives
+// the ALL-role account's summary dashboard cards, one per stage.
+const DASHBOARD_STAGE_TABS: { tab: AdminTab; label: string }[] = [
+  { tab: "waiting_authority", label: "Waiting on Authority" },
+  { tab: "awaiting_finance", label: "Awaiting Finance Review" },
+  { tab: "received_in_process", label: "Received & In Process" },
+  { tab: "verified_ready_payment", label: "Verified — Ready for Payment" },
+  { tab: "payment_done", label: "Payment Done" },
+  { tab: "sent_back", label: "Sent Back" },
+];
 
 export const dynamic = "force-dynamic";
 
@@ -70,7 +83,18 @@ export default async function AdminListPage({
   searchParams: Promise<SearchParamsRecord>;
 }) {
   const sp = await searchParams;
+  const session = await getAdminSession();
+
   const filterParams = parseAdviceFilterParams(searchParamsRecordToURLSearchParams(sp));
+  // Default filter, not an authorization wall: only applied when the URL
+  // never mentioned paymentMode at all (a fresh landing) — an explicit
+  // "All" selection submits paymentMode="" and is left alone. Any signed-in
+  // user can still change or clear this filter; nothing is backend-blocked.
+  if (sp.paymentMode === undefined && session) {
+    if (session.adminRole === "PAYMENT_ADVICE") filterParams.paymentMode = "NEFT";
+    else if (session.adminRole === "CASH_VOUCHER") filterParams.paymentMode = "CASH";
+  }
+
   const tabParam = Array.isArray(sp.tab) ? sp.tab[0] : sp.tab;
   const tab: AdminTab = isAdminTab(tabParam) ? tabParam : "waiting_authority";
   const baseWhere = buildAdviceWhere(filterParams);
@@ -89,13 +113,14 @@ export default async function AdminListPage({
     awaitingFinanceCount,
     receivedCount,
     verifiedCount,
-    sanctionedCount,
+    paymentDoneCount,
     sentBackCount,
   ] = await Promise.all([
     db
       .select({
         id: paymentAdvices.id,
         serialNo: paymentAdvices.serialNo,
+        cashVoucherNo: paymentAdvices.cashVoucherNo,
         formDate: paymentAdvices.formDate,
         payeeName: paymentAdvices.payeeName,
         amount: paymentAdvices.amount,
@@ -114,31 +139,57 @@ export default async function AdminListPage({
       .select({ count: count(), sum: sum(paymentAdvices.amount) })
       .from(paymentAdvices)
       .where(where),
+    // Also selects sum() (not just count()) so these same 6 queries can
+    // back both the tab badges (count only) and, for the ALL-role
+    // dashboard, the summary cards (count + total amount) — one set of
+    // queries, two UI uses, always in sync with each other.
     db
-      .select({ count: count() })
+      .select({ count: count(), sum: sum(paymentAdvices.amount) })
       .from(paymentAdvices)
       .where(and(baseWhere, buildTabCondition("waiting_authority"))),
     db
-      .select({ count: count() })
+      .select({ count: count(), sum: sum(paymentAdvices.amount) })
       .from(paymentAdvices)
       .where(and(baseWhere, buildTabCondition("awaiting_finance"))),
     db
-      .select({ count: count() })
+      .select({ count: count(), sum: sum(paymentAdvices.amount) })
       .from(paymentAdvices)
       .where(and(baseWhere, buildTabCondition("received_in_process"))),
     db
-      .select({ count: count() })
+      .select({ count: count(), sum: sum(paymentAdvices.amount) })
       .from(paymentAdvices)
-      .where(and(baseWhere, buildTabCondition("verified_awaiting_sanction"))),
+      .where(and(baseWhere, buildTabCondition("verified_ready_payment"))),
     db
-      .select({ count: count() })
+      .select({ count: count(), sum: sum(paymentAdvices.amount) })
       .from(paymentAdvices)
-      .where(and(baseWhere, buildTabCondition("sanctioned_ready"))),
+      .where(and(baseWhere, buildTabCondition("payment_done"))),
     db
-      .select({ count: count() })
+      .select({ count: count(), sum: sum(paymentAdvices.amount) })
       .from(paymentAdvices)
       .where(and(baseWhere, buildTabCondition("sent_back"))),
   ]);
+
+  const dashboardCounts: Record<AdminTab, { count: number; sum: number }> = {
+    waiting_authority: { count: waitingCount[0]?.count ?? 0, sum: Number(waitingCount[0]?.sum ?? 0) },
+    awaiting_finance: {
+      count: awaitingFinanceCount[0]?.count ?? 0,
+      sum: Number(awaitingFinanceCount[0]?.sum ?? 0),
+    },
+    received_in_process: {
+      count: receivedCount[0]?.count ?? 0,
+      sum: Number(receivedCount[0]?.sum ?? 0),
+    },
+    verified_ready_payment: {
+      count: verifiedCount[0]?.count ?? 0,
+      sum: Number(verifiedCount[0]?.sum ?? 0),
+    },
+    payment_done: {
+      count: paymentDoneCount[0]?.count ?? 0,
+      sum: Number(paymentDoneCount[0]?.sum ?? 0),
+    },
+    sent_back: { count: sentBackCount[0]?.count ?? 0, sum: Number(sentBackCount[0]?.sum ?? 0) },
+    all: { count: 0, sum: 0 },
+  };
 
   const totalCount = totalsRow[0]?.count ?? 0;
   const totalAmount = Number(totalsRow[0]?.sum ?? 0);
@@ -175,7 +226,25 @@ export default async function AdminListPage({
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-2 border-b border-gray-200">
+      {session?.adminRole === "ALL" ? (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          {DASHBOARD_STAGE_TABS.map(({ tab: stageTab, label }) => (
+            <Link
+              key={stageTab}
+              href={queryString(sp, { tab: stageTab, page: undefined })}
+              className="flex flex-col gap-1 rounded-md border border-gray-200 p-3 hover:border-[#0b1f3a]"
+            >
+              <span className="text-xs font-medium uppercase tracking-wide text-gray-500">{label}</span>
+              <span className="font-heading text-2xl text-[#0b1f3a]">{dashboardCounts[stageTab].count}</span>
+              <span className="text-xs text-gray-500">
+                ₹ {dashboardCounts[stageTab].sum.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+              </span>
+            </Link>
+          ))}
+        </div>
+      ) : null}
+
+      <div className="flex flex-wrap gap-2">
         <TabLink
           label="Waiting on Authority"
           tab="waiting_authority"
@@ -198,17 +267,17 @@ export default async function AdminListPage({
           searchParams={sp}
         />
         <TabLink
-          label="Verified — Awaiting Sanction"
-          tab="verified_awaiting_sanction"
+          label="Verified — Ready for Payment"
+          tab="verified_ready_payment"
           activeTab={tab}
           count={verifiedCount[0]?.count ?? 0}
           searchParams={sp}
         />
         <TabLink
-          label="Sanctioned — Ready for Payment"
-          tab="sanctioned_ready"
+          label="Payment Done"
+          tab="payment_done"
           activeTab={tab}
-          count={sanctionedCount[0]?.count ?? 0}
+          count={paymentDoneCount[0]?.count ?? 0}
           searchParams={sp}
         />
         <TabLink
@@ -275,7 +344,7 @@ export default async function AdminListPage({
         <table className="w-full min-w-[900px] text-left text-sm">
           <thead className="border-b border-gray-200 bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
             <tr>
-              <th className="px-4 py-3"><SortHeader label="Serial No." column="serialNo" searchParams={sp} currentSort={sort} currentDir={dir} /></th>
+              <th className="px-4 py-3"><SortHeader label="Reference No." column="serialNo" searchParams={sp} currentSort={sort} currentDir={dir} /></th>
               <th className="px-4 py-3"><SortHeader label="Form Date" column="formDate" searchParams={sp} currentSort={sort} currentDir={dir} /></th>
               <th className="px-4 py-3"><SortHeader label="Payee" column="payeeName" searchParams={sp} currentSort={sort} currentDir={dir} /></th>
               <th className="px-4 py-3 text-right"><SortHeader label="Amount" column="amount" searchParams={sp} currentSort={sort} currentDir={dir} /></th>
@@ -297,7 +366,9 @@ export default async function AdminListPage({
             ) : (
               rows.map((row) => (
                 <tr key={row.id} className="border-b border-gray-100 last:border-0 hover:bg-gray-50">
-                  <td className="whitespace-nowrap px-4 py-3 font-medium text-[#0b1f3a]">{row.serialNo}</td>
+                  <td className="whitespace-nowrap px-4 py-3 font-medium text-[#0b1f3a]">
+                    {displayNoFor(row.paymentMode as PaymentMode, row.serialNo, row.cashVoucherNo)}
+                  </td>
                   <td className="whitespace-nowrap px-4 py-3">{formatDate(row.formDate)}</td>
                   <td className="px-4 py-3">{row.payeeName}</td>
                   <td className="whitespace-nowrap px-4 py-3 text-right">₹ {formatAmount(row.amount)}</td>
@@ -373,10 +444,10 @@ function TabLink({
   return (
     <Link
       href={queryString(searchParams, { tab, page: undefined })}
-      className={`-mb-px border-b-2 px-4 py-2.5 text-sm font-medium ${
+      className={`rounded-md border px-4 py-2 text-sm font-medium ${
         isActive
-          ? "border-[#0b1f3a] text-[#0b1f3a]"
-          : "border-transparent text-gray-500 hover:text-[#0b1f3a]"
+          ? "border-[#0b1f3a] bg-[#0b1f3a] text-white"
+          : "border-gray-300 bg-white text-gray-600 hover:border-[#0b1f3a] hover:text-[#0b1f3a]"
       }`}
     >
       {label}

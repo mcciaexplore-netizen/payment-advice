@@ -13,19 +13,22 @@
     "db:studio": "drizzle-kit studio",
     "pdf:test:cash-voucher": "tsx scripts/render-cash-voucher-pdf.tsx",
     "import:master-data": "tsx scripts/import-master-data.ts",
-    "backfill:staff-emails": "tsx scripts/backfill-staff-authority-emails.ts"
+    "backfill:staff-emails": "tsx scripts/backfill-staff-authority-emails.ts",
+    "seed:admin-users": "tsx scripts/seed-admin-users.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.5.7",
     "@neondatabase/serverless": "^1.1.0",
     "@react-pdf/renderer": "^4.5.1",
     "@vercel/blob": "^2.6.1",
+    "bcryptjs": "^3.0.3",
     "clsx": "^2.1.1",
     "date-fns": "^4.4.0",
     "drizzle-orm": "^0.45.2",
     "exceljs": "^4.4.0",
     "jose": "^6.2.4",
     "next": "16.2.12",
+    "nodemailer": "^9.0.4",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "react-hook-form": "^7.83.0",
@@ -35,7 +38,9 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@types/bcryptjs": "^2.4.6",
     "@types/node": "^20",
+    "@types/nodemailer": "^8.0.1",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/ws": "^8.18.1",

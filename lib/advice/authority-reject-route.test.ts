@@ -21,6 +21,8 @@ const ADVICE_ID = "11111111-1111-4111-8111-111111111111";
 const pending = {
   id: ADVICE_ID,
   serialNo: "MCCIA/2026-27/0001",
+  cashVoucherNo: null,
+  paymentMode: "NEFT",
   submittedByName: "Priya Sharma",
   submittedByEmail: "priya@example.com",
   payeeName: "Acme Supplies",
@@ -90,7 +92,8 @@ describe("POST /api/authority-approval/[token]/reject", () => {
 
     expect(mocks.notifySentBack).toHaveBeenCalledWith(
       expect.objectContaining({
-        serialNo: pending.serialNo,
+        displayNo: pending.serialNo,
+        documentLabel: "Payment Advice",
         sentBackBy: "Asha Rao",
         remarks: "Please fix the amount",
         editLink: expect.stringContaining("/edit/new-edit-token"),

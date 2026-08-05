@@ -1,14 +1,19 @@
 import { Document, Image, Page, StyleSheet, Text, View } from "@react-pdf/renderer";
 import fs from "node:fs";
 import path from "node:path";
+import { Stamp, StampColor } from "@/lib/pdf/Stamp";
 
 export type CashVoucherPdfData = {
-  serialNo: string;
+  cashVoucherNo: string;
   formDate: string;
   payeeName: string;
   items: { description: string; amount: string }[];
   submittedByName: string;
+  submittedAt: string; // ISO timestamp — drives the Submitted stamp's date
   recommendingAuthorityName: string;
+  // ISO timestamp — drives the Recommended-by (Approved) stamp; null until
+  // the Recommending Authority actually approves.
+  authorityApprovedAt: string | null;
   sanctionedBy: string | null;
 };
 
@@ -42,7 +47,14 @@ const styles = StyleSheet.create({
   totalLabel: { backgroundColor: "#EAF3ED", fontFamily: "Helvetica-Bold", color: NAVY },
   totalAmount: { backgroundColor: "#EAF3ED", fontFamily: "Helvetica-Bold", color: NAVY, textAlign: "right" },
   signatures: { flexDirection: "row", marginTop: 32, borderTop: BORDER, borderLeft: BORDER },
-  signature: { width: "25%", minHeight: 77, borderRight: BORDER, borderBottom: BORDER, padding: 8 },
+  signature: {
+    width: "25%",
+    minHeight: 90,
+    borderRight: BORDER,
+    borderBottom: BORDER,
+    padding: 8,
+    position: "relative",
+  },
   signatureLabel: { fontFamily: "Helvetica-Bold", fontSize: 7.5, color: NAVY },
   signatureName: { fontSize: 8, marginTop: 5, minHeight: 19 },
   date: { fontSize: 7.5, marginTop: 8 },
@@ -83,7 +95,7 @@ export function CashVoucherDocument({ data }: { data: CashVoucherPdfData }) {
         <View style={styles.titleRule} />
 
         <View style={styles.metadata}>
-          <View style={styles.metadataItem}><Text style={styles.metadataLabel}>No.</Text><Text style={styles.metadataValue}>{data.serialNo}</Text></View>
+          <View style={styles.metadataItem}><Text style={styles.metadataLabel}>No.</Text><Text style={styles.metadataValue}>{data.cashVoucherNo}</Text></View>
           <View style={styles.metadataItem}><Text style={styles.metadataLabel}>Date</Text><Text style={styles.metadataValue}>{formatDate(data.formDate)}</Text></View>
         </View>
 
@@ -110,8 +122,27 @@ export function CashVoucherDocument({ data }: { data: CashVoucherPdfData }) {
         </View>
 
         <View style={styles.signatures} wrap={false}>
-          <Signature label="Submitted by" name={data.submittedByName} />
-          <Signature label="Recommended by" name={data.recommendingAuthorityName} />
+          <Signature
+            label="Submitted by"
+            name={data.submittedByName}
+            stamp={{ label: "SUBMITTED", name: data.submittedByName, date: formatDate2(data.submittedAt), color: "navy" }}
+          />
+          <Signature
+            label="Recommended by"
+            name={data.recommendingAuthorityName}
+            stamp={
+              data.authorityApprovedAt
+                ? {
+                    label: "APPROVED",
+                    name: data.recommendingAuthorityName,
+                    date: formatDate2(data.authorityApprovedAt),
+                    color: "green",
+                  }
+                : undefined
+            }
+          />
+          {/* Sanctioned by: never stamped, per spec — stays a physical
+              wet-ink box for Chintamani, untouched by the stamp feature. */}
           <Signature label="Sanctioned by" name={data.sanctionedBy ?? ""} />
           <Signature label="Payee's Signature" name="" />
         </View>
@@ -120,6 +151,30 @@ export function CashVoucherDocument({ data }: { data: CashVoucherPdfData }) {
   );
 }
 
-function Signature({ label, name }: { label: string; name: string }) {
-  return <View style={styles.signature}><Text style={styles.signatureLabel}>{label}</Text><Text style={styles.signatureName}>{name}</Text><Text style={styles.date}>Date: __________________</Text></View>;
+/** ISO timestamp -> dd/mm/yyyy, for stamp dates (distinct from formatDate
+ * above, which formats the plain YYYY-MM-DD form date). */
+function formatDate2(iso: string): string {
+  const d = new Date(iso);
+  const dd = String(d.getDate()).padStart(2, "0");
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  return `${dd}/${mm}/${d.getFullYear()}`;
+}
+
+function Signature({
+  label,
+  name,
+  stamp,
+}: {
+  label: string;
+  name: string;
+  stamp?: { label: string; name: string; date: string; color: StampColor };
+}) {
+  return (
+    <View style={styles.signature}>
+      <Text style={styles.signatureLabel}>{label}</Text>
+      <Text style={styles.signatureName}>{name}</Text>
+      <Text style={styles.date}>Date: __________________</Text>
+      {stamp ? <Stamp label={stamp.label} name={stamp.name} date={stamp.date} color={stamp.color} /> : null}
+    </View>
+  );
 }

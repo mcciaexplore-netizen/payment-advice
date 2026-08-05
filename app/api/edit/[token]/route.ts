@@ -5,6 +5,8 @@ import { db } from "@/lib/db";
 import { paymentAdvices, attachments, auditLog, cashVoucherItems, recommendingAuthorities } from "@/lib/db/schema";
 import { notifyAuthorityApproval } from "@/lib/email/notify";
 import { generateAuthorityToken } from "@/lib/advice/authority-token";
+import { displayNoFor, documentLabelFor } from "@/lib/advice/document-identity";
+import { allocateCashVoucherNumber } from "@/lib/serial";
 import { parsePaymentAdviceFormData } from "@/lib/form-data";
 import {
   paymentAdviceFormSchema,
@@ -177,6 +179,16 @@ export async function POST(
     const oldBlobPathnamesToDelete: string[] = [];
     const { token: authorityToken, expiresAt: authorityTokenExpiresAt } = generateAuthorityToken();
 
+    // A resubmission can flip payment mode. If it now needs a Cash Voucher
+    // number and never had one (was NEFT before, or predates this series),
+    // allocate one now — same gapless mechanism as at original submission.
+    // If it's flipping away from CASH, the old number no longer applies.
+    const cashVoucherNo =
+      values.paymentMode === "CASH"
+        ? advice.cashVoucherNo ??
+          (await db.transaction((tx) => allocateCashVoucherNumber(tx, advice.financialYear)))
+        : null;
+
     await db.transaction(async (tx) => {
       await tx
         .update(paymentAdvices)
@@ -221,6 +233,7 @@ export async function POST(
           enclosures: values.enclosures ?? null,
           specialRemarks: values.specialRemarks ?? null,
           paymentMode: values.paymentMode,
+          cashVoucherNo,
           bankAccountNo: values.bankAccountNo ?? null,
           bankIfsc: values.bankIfsc ?? null,
           beneficiaryName: values.beneficiaryName ?? null,
@@ -293,7 +306,8 @@ export async function POST(
     const authorityName = authority?.authorityName ?? "MCCIA Finance & Accounts";
     await notifyAuthorityApproval(
       {
-        serialNo: advice.serialNo,
+        displayNo: displayNoFor(values.paymentMode, advice.serialNo, cashVoucherNo),
+        documentLabel: documentLabelFor(values.paymentMode),
         authorityName,
         submittedByName: values.submittedByName,
         payeeName: values.payeeName,
@@ -312,6 +326,7 @@ export async function POST(
 
     return NextResponse.json({
       serialNo: advice.serialNo,
+      cashVoucherNo,
       id: advice.id,
       authorityToken,
       authorityName,

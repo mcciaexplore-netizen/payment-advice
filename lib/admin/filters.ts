@@ -100,20 +100,26 @@ export const ADMIN_LIST_PAGE_SIZE = 25;
  * Splits the queue by pipeline stage, layered on top of the existing
  * filters — not a replacement for them. The first four tabs all imply
  * status SUBMITTED (a SENT_BACK entry belongs in none of them, and once
- * sanctioned, status flips to APPROVED so it naturally falls out of all
- * four too); "sanctioned_ready" is the only one keyed on status APPROVED
+ * Payment Done fires, status flips to APPROVED so it naturally falls out of
+ * all four too); "payment_done" is the only one keyed on status APPROVED
  * instead. "sent_back" makes SENT_BACK entries proactively visible (they
  * were previously only reachable via "all" + a manual status filter — see
  * AGENT_HANDOFF.md's Task B audit). "all" imposes no extra condition,
  * matching the full unfiltered list this page showed before the Approval
  * Workflow.
+ *
+ * "verified_ready_payment" replaced "verified_awaiting_sanction" — Sanction
+ * is retired as an active step (see AGENT_HANDOFF.md's "Real logins, retire
+ * Sanction" session); "Ready for Payment" is not a new column, it's the
+ * exact same derived condition the old tab used (verified_at set), just
+ * renamed/relabeled since there's no more Sanction stage to be "awaiting."
  */
 export const ADMIN_TABS = [
   "waiting_authority",
   "awaiting_finance",
   "received_in_process",
-  "verified_awaiting_sanction",
-  "sanctioned_ready",
+  "verified_ready_payment",
+  "payment_done",
   "sent_back",
   "all",
 ] as const;
@@ -138,10 +144,10 @@ export function buildTabCondition(tab: AdminTab): SQL | undefined {
   if (tab === "received_in_process") {
     return and(submitted, isNotNull(paymentAdvices.financeReceivedAt), isNull(paymentAdvices.verifiedAt));
   }
-  if (tab === "verified_awaiting_sanction") {
-    return and(submitted, isNotNull(paymentAdvices.verifiedAt), isNull(paymentAdvices.sanctionedAt));
+  if (tab === "verified_ready_payment") {
+    return and(submitted, isNotNull(paymentAdvices.verifiedAt), isNull(paymentAdvices.paymentDoneAt));
   }
-  if (tab === "sanctioned_ready") {
+  if (tab === "payment_done") {
     return eq(paymentAdvices.status, "APPROVED");
   }
   if (tab === "sent_back") {

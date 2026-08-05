@@ -5,7 +5,8 @@ import { db } from "@/lib/db";
 import { paymentAdvices, attachments, auditLog, cashVoucherItems, recommendingAuthorities } from "@/lib/db/schema";
 import { notifyAuthorityApproval, notifySubmissionConfirmation } from "@/lib/email/notify";
 import { generateAuthorityToken } from "@/lib/advice/authority-token";
-import { allocateSerialNumber } from "@/lib/serial";
+import { displayNoFor, documentLabelFor } from "@/lib/advice/document-identity";
+import { allocateCashVoucherNumber, allocateSerialNumber } from "@/lib/serial";
 import { parsePaymentAdviceFormData } from "@/lib/form-data";
 import {
   paymentAdviceFormSchema,
@@ -97,10 +98,16 @@ export async function POST(req: NextRequest) {
   const now = new Date();
   let serialNo: string;
   let financialYear: string;
+  let cashVoucherNo: string | null;
   try {
-    ({ serialNo, financialYear } = await db.transaction((tx) =>
-      allocateSerialNumber(tx, now),
-    ));
+    ({ serialNo, financialYear, cashVoucherNo } = await db.transaction(async (tx) => {
+      const allocated = await allocateSerialNumber(tx, now);
+      const voucherNo =
+        values.paymentMode === "CASH"
+          ? await allocateCashVoucherNumber(tx, allocated.financialYear)
+          : null;
+      return { ...allocated, cashVoucherNo: voucherNo };
+    }));
   } catch (err) {
     console.error("Failed to allocate serial number", err);
     return NextResponse.json(
@@ -146,6 +153,7 @@ export async function POST(req: NextRequest) {
         .values({
           serialNo,
           financialYear,
+          cashVoucherNo,
           status: "SUBMITTED",
           authorityToken,
           authorityTokenExpiresAt,
@@ -223,9 +231,12 @@ export async function POST(req: NextRequest) {
       .limit(1);
     const origin = new URL(req.url).origin;
     const authorityName = authority?.authorityName ?? "MCCIA Finance & Accounts";
+    const displayNo = displayNoFor(values.paymentMode, serialNo, cashVoucherNo);
+    const documentLabel = documentLabelFor(values.paymentMode);
     await notifySubmissionConfirmation(
       {
-        serialNo,
+        displayNo,
+        documentLabel,
         authorityName,
         submittedByName: values.submittedByName,
         payeeName: values.payeeName,
@@ -243,7 +254,8 @@ export async function POST(req: NextRequest) {
     );
     await notifyAuthorityApproval(
       {
-        serialNo,
+        displayNo,
+        documentLabel,
         authorityName,
         submittedByName: values.submittedByName,
         payeeName: values.payeeName,
@@ -260,7 +272,7 @@ export async function POST(req: NextRequest) {
       authority?.email ?? null,
     );
 
-    return NextResponse.json({ serialNo, id: adviceId, authorityToken, authorityName });
+    return NextResponse.json({ serialNo, cashVoucherNo, id: adviceId, authorityToken, authorityName });
   } catch (err) {
     console.error("Submit failed after blob upload, cleaning up", err);
     await Promise.allSettled(uploadedPathnames.map((p) => del(p)));

@@ -2,7 +2,25 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { SANCTIONER_NAMES, Status, VERIFIER_NAMES } from "@/lib/validation/payment-advice";
+import { Status } from "@/lib/validation/payment-advice";
+import { AdminRole } from "@/lib/auth";
+
+const ROLE_LABELS: Record<AdminRole, string> = {
+  PAYMENT_ADVICE: "a Payment Advice",
+  CASH_VOUCHER: "a Cash Voucher",
+  ALL: "an All-Access",
+};
+
+/** Whether the current session's role "owns" this submission's payment
+ * mode — a UI-only default, not a backend authorization wall (per the
+ * human's explicit decision, see AGENT_HANDOFF.md): the ALL-role account
+ * can mark either mode Payment Done, and each of PAYMENT_ADVICE/
+ * CASH_VOUCHER only owns its matching mode. */
+function ownsSubmissionType(role: AdminRole, paymentMode: "NEFT" | "CASH"): boolean {
+  if (role === "ALL") return true;
+  if (role === "PAYMENT_ADVICE") return paymentMode === "NEFT";
+  return paymentMode === "CASH";
+}
 
 export function AdviceActions({
   adviceId,
@@ -19,6 +37,10 @@ export function AdviceActions({
   verifiedBy,
   sanctionedAt,
   sanctionedBy,
+  paymentDoneAt,
+  paymentDoneBy,
+  currentUserFullName,
+  currentUserRole,
 }: {
   adviceId: string;
   status: Status;
@@ -34,6 +56,10 @@ export function AdviceActions({
   verifiedBy: string | null;
   sanctionedAt: string | null;
   sanctionedBy: string | null;
+  paymentDoneAt: string | null;
+  paymentDoneBy: string | null;
+  currentUserFullName: string;
+  currentUserRole: AdminRole;
 }) {
   const router = useRouter();
   const [authorityLinkCopied, setAuthorityLinkCopied] = useState(false);
@@ -53,13 +79,11 @@ export function AdviceActions({
   const [receiving, setReceiving] = useState(false);
   const [receiveError, setReceiveError] = useState<string | null>(null);
 
-  const [verifiedByChoice, setVerifiedByChoice] = useState("");
   const [verifying, setVerifying] = useState(false);
   const [verifyError, setVerifyError] = useState<string | null>(null);
 
-  const [sanctionedByChoice, setSanctionedByChoice] = useState("");
-  const [sanctioning, setSanctioning] = useState(false);
-  const [sanctionError, setSanctionError] = useState<string | null>(null);
+  const [markingPaymentDone, setMarkingPaymentDone] = useState(false);
+  const [paymentDoneError, setPaymentDoneError] = useState<string | null>(null);
 
   const [showSendBack, setShowSendBack] = useState(false);
   const [remarks, setRemarks] = useState("");
@@ -109,11 +133,7 @@ export function AdviceActions({
     setVerifyError(null);
     setVerifying(true);
     try {
-      const res = await fetch(`/api/admin/advice/${adviceId}/verify`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ verifiedBy: verifiedByChoice }),
-      });
+      const res = await fetch(`/api/admin/advice/${adviceId}/verify`, { method: "POST" });
       const data = await res.json();
       if (!res.ok) {
         setVerifyError(data.error ?? "Could not verify.");
@@ -125,26 +145,25 @@ export function AdviceActions({
     }
   }
 
-  async function sanction() {
-    setSanctionError(null);
-    setSanctioning(true);
+  async function markPaymentDone() {
+    setPaymentDoneError(null);
+    setMarkingPaymentDone(true);
     try {
-      const res = await fetch(`/api/admin/advice/${adviceId}/sanction`, {
+      const res = await fetch(`/api/admin/advice/${adviceId}/payment-done`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          sanctionedBy: sanctionedByChoice,
           billPassedFor: billPassedFor ? Number(billPassedFor) : undefined,
         }),
       });
       const data = await res.json();
       if (!res.ok) {
-        setSanctionError(data.error ?? "Could not sanction.");
+        setPaymentDoneError(data.error ?? "Could not mark Payment Done.");
         return;
       }
       router.refresh();
     } finally {
-      setSanctioning(false);
+      setMarkingPaymentDone(false);
     }
   }
 
@@ -179,15 +198,20 @@ export function AdviceActions({
   }
 
   if (status === "APPROVED") {
+    // paymentDoneAt/By is the going-forward source; sanctionedAt/By is the
+    // fallback for rows that were approved before Sanction was retired (see
+    // AGENT_HANDOFF.md) — both are never set together by the same action.
+    const doneAt = paymentDoneAt ?? sanctionedAt;
+    const doneBy = paymentDoneBy ?? sanctionedBy;
     return (
       <div className="flex flex-col gap-2 rounded-md border border-gray-200 p-4">
         <p className="text-sm font-medium text-[#0b1f3a]">
           Bill passed for Rs. {initialBillPassedFor ?? "—"}
         </p>
         <p className="text-sm text-gray-600">
-          Sanctioned by {sanctionedBy ?? "—"}
-          {sanctionedAt
-            ? ` on ${new Date(sanctionedAt).toLocaleDateString("en-IN", { day: "2-digit", month: "2-digit", year: "numeric" })}`
+          Payment Done{doneBy ? ` — ${doneBy}` : ""}
+          {doneAt
+            ? ` on ${new Date(doneAt).toLocaleDateString("en-IN", { day: "2-digit", month: "2-digit", year: "numeric" })}`
             : ""}
           .
         </p>
@@ -297,9 +321,9 @@ export function AdviceActions({
         </div>
       )}
 
-      {/* Finance Verification + Sanctioning pipeline — only one stage's
-          action is ever actionable at a time, gated in the same order the
-          server enforces (received -> verified -> sanctioned). */}
+      {/* Finance pipeline — only one stage's action is ever actionable at a
+          time, gated in the same order the server enforces (received ->
+          verified -> Ready for Payment (automatic) -> Payment Done). */}
       {authorityApprovedAt && !financeReceivedAt ? (
         <div className="flex flex-col gap-2 rounded-md border border-[#e8a33d]/40 bg-[#e8a33d]/10 p-3 text-sm text-[#8a5a12]">
           <p>Ready for Finance to receive this submission.</p>
@@ -317,26 +341,14 @@ export function AdviceActions({
 
       {financeReceivedAt && !verifiedAt ? (
         <div className="flex flex-col gap-3 rounded-md border border-[#e8a33d]/40 bg-[#e8a33d]/10 p-4 text-sm text-[#8a5a12]">
-          <label className="font-medium text-[#0b1f3a]">
-            Verified By <span className="text-xs font-normal text-[#b3261e]">Required</span>
-          </label>
-          <select
-            value={verifiedByChoice}
-            onChange={(e) => setVerifiedByChoice(e.target.value)}
-            className="admin-filter-input"
-          >
-            <option value="">Select…</option>
-            {VERIFIER_NAMES.map((name) => (
-              <option key={name} value={name}>
-                {name}
-              </option>
-            ))}
-          </select>
+          <p>
+            Will be recorded as verified by <span className="font-medium">{currentUserFullName}</span>.
+          </p>
           {verifyError ? <p className="font-medium text-[#b3261e]">{verifyError}</p> : null}
           <button
             type="button"
             onClick={verify}
-            disabled={verifying || !verifiedByChoice}
+            disabled={verifying}
             className="w-fit rounded-md bg-[#0b1f3a] px-4 py-2 text-sm font-medium text-white hover:bg-[#0b1f3a]/90 disabled:opacity-50"
           >
             {verifying ? "Verifying…" : "Confirm Verification"}
@@ -356,37 +368,40 @@ export function AdviceActions({
         </div>
       ) : null}
 
-      {verifiedAt && !sanctionedAt ? (
+      {/* "Ready for Payment" is automatic the moment verifiedAt is set — no
+          click required. Sanction no longer exists as an active step (see
+          AGENT_HANDOFF.md); Payment Done is the new terminal action. */}
+      {verifiedAt && !paymentDoneAt ? (
         <div className="flex flex-col gap-3 rounded-md border border-[#2e8b57]/30 bg-[#2e8b57]/5 p-4 text-sm">
-          <label className="font-medium text-[#0b1f3a]">
-            Sanctioned By <span className="text-xs font-normal text-[#b3261e]">Required</span>
-          </label>
-          <select
-            value={sanctionedByChoice}
-            onChange={(e) => setSanctionedByChoice(e.target.value)}
-            className="admin-filter-input"
-          >
-            <option value="">Select…</option>
-            {SANCTIONER_NAMES.map((name) => (
-              <option key={name} value={name}>
-                {name}
-              </option>
-            ))}
-          </select>
-          {!billPassedFor ? (
+          <p className="font-medium text-[#1e5c39]">Ready for Payment.</p>
+          {ownsSubmissionType(currentUserRole, paymentMode) ? (
+            <>
+              <p className="text-[#1e5c39]">
+                Will be recorded as paid by <span className="font-medium">{currentUserFullName}</span>.
+              </p>
+              {!billPassedFor ? (
+                <p className="text-xs text-gray-500">
+                  &quot;Bill passed for Rs.&quot; above must be saved before marking Payment Done.
+                </p>
+              ) : null}
+              {paymentDoneError ? (
+                <p className="font-medium text-[#b3261e]">{paymentDoneError}</p>
+              ) : null}
+              <button
+                type="button"
+                onClick={markPaymentDone}
+                disabled={markingPaymentDone || !billPassedFor}
+                className="w-fit rounded-md bg-[#2e8b57] px-4 py-2 text-sm font-medium text-white hover:bg-[#2e8b57]/90 disabled:opacity-50"
+              >
+                {markingPaymentDone ? "Marking…" : "Mark Payment Done"}
+              </button>
+            </>
+          ) : (
             <p className="text-xs text-gray-500">
-              &quot;Bill passed for Rs.&quot; above must be saved before sanctioning.
+              Only {ROLE_LABELS[paymentMode === "CASH" ? "CASH_VOUCHER" : "PAYMENT_ADVICE"]} account
+              (or an All-Access account) can mark this Payment Done.
             </p>
-          ) : null}
-          {sanctionError ? <p className="font-medium text-[#b3261e]">{sanctionError}</p> : null}
-          <button
-            type="button"
-            onClick={sanction}
-            disabled={sanctioning || !sanctionedByChoice || !billPassedFor}
-            className="w-fit rounded-md bg-[#2e8b57] px-4 py-2 text-sm font-medium text-white hover:bg-[#2e8b57]/90 disabled:opacity-50"
-          >
-            {sanctioning ? "Sanctioning…" : "Confirm Sanction"}
-          </button>
+          )}
         </div>
       ) : null}
 

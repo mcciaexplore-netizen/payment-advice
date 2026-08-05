@@ -1,38 +1,85 @@
 import { Resend } from "resend";
+import nodemailer from "nodemailer";
 import {
   type AuthorityApprovalEmailData,
+  type PaymentDoneEmailData,
   type SentBackEmailData,
   type SubmissionConfirmationEmailData,
   type VerifiedEmailData,
   renderAuthorityApprovalEmail,
+  renderPaymentDoneEmail,
   renderSentBackEmail,
   renderSubmissionConfirmationEmail,
   renderVerifiedEmail,
 } from "@/lib/email/templates";
 
 type EmailMessage = { subject: string; html: string };
+type EmailProvider = "gmail" | "resend";
 
 function isLiveMode(): boolean {
   return process.env.EMAIL_MODE === "live";
 }
 
+/**
+ * "gmail" is the current interim default (Gmail SMTP via an App Password —
+ * see AGENT_HANDOFF.md for why: mcciapune.com isn't DNS-verified in Resend
+ * yet, and Gmail works immediately with no DNS wait). Set
+ * EMAIL_PROVIDER=resend to switch back once that domain is verified —
+ * everything below this point (Resend client, getFrom's resend branch)
+ * stays intact and ready, just dormant while gmail is the default.
+ */
+function getProvider(): EmailProvider {
+  return process.env.EMAIL_PROVIDER === "resend" ? "resend" : "gmail";
+}
+
 function getFrom(): string {
+  if (getProvider() === "gmail") {
+    // Gmail SMTP requires "from" to match the authenticated account — you
+    // can't send "as" a different address the way Resend allowed with a
+    // verified domain.
+    const user = process.env.GMAIL_USER;
+    if (!user) {
+      throw new Error("GMAIL_USER environment variable is not set");
+    }
+    return user;
+  }
   return process.env.EMAIL_FROM || "onboarding@resend.dev";
 }
 
 // Constructed lazily (not at module load) so importing this file never
 // requires RESEND_API_KEY to be set — only actually sending in live mode
-// does, matching how lib/db/index.ts lazily creates its connection.
-let cachedClient: Resend | null = null;
+// with EMAIL_PROVIDER=resend does, matching how lib/db/index.ts lazily
+// creates its connection. Kept fully intact and unused while gmail is the
+// default provider, ready for EMAIL_PROVIDER=resend once mcciapune.com is
+// DNS-verified.
+let cachedResendClient: Resend | null = null;
 function getResendClient(): Resend {
-  if (!cachedClient) {
+  if (!cachedResendClient) {
     const apiKey = process.env.RESEND_API_KEY;
     if (!apiKey) {
       throw new Error("RESEND_API_KEY environment variable is not set");
     }
-    cachedClient = new Resend(apiKey);
+    cachedResendClient = new Resend(apiKey);
   }
-  return cachedClient;
+  return cachedResendClient;
+}
+
+// Same lazy-construction reasoning as getResendClient — only required when
+// EMAIL_MODE=live and EMAIL_PROVIDER=gmail (the current default).
+let cachedGmailTransport: nodemailer.Transporter | null = null;
+function getGmailTransport(): nodemailer.Transporter {
+  if (!cachedGmailTransport) {
+    const user = process.env.GMAIL_USER;
+    const pass = process.env.GMAIL_APP_PASSWORD;
+    if (!user || !pass) {
+      throw new Error("GMAIL_USER / GMAIL_APP_PASSWORD environment variables are not set");
+    }
+    cachedGmailTransport = nodemailer.createTransport({
+      service: "gmail",
+      auth: { user, pass },
+    });
+  }
+  return cachedGmailTransport;
 }
 
 function preview(kind: string, message: EmailMessage) {
@@ -40,22 +87,48 @@ function preview(kind: string, message: EmailMessage) {
 }
 
 /**
+ * The one place that actually hands an email to a provider's SDK/transport
+ * — everything in send() around this call (mode check, override redirect,
+ * subject prefixing, try/catch, logging) is provider-agnostic and
+ * unchanged. Normalizes both providers to the same "resolves with an id,
+ * or throws" shape so send()'s single try/catch keeps working unmodified:
+ * Resend's SDK returns `{error}` instead of throwing for API-level
+ * failures, so that case is converted into a thrown error here rather than
+ * needing a second error-handling path.
+ */
+async function dispatch(
+  from: string,
+  to: string,
+  subject: string,
+  html: string,
+): Promise<{ id?: string }> {
+  if (getProvider() === "gmail") {
+    const info = await getGmailTransport().sendMail({ from, to, subject, html });
+    return { id: info.messageId };
+  }
+  const result = await getResendClient().emails.send({ from, to, subject, html });
+  if (result.error) {
+    throw new Error(`Resend error: ${JSON.stringify(result.error)}`);
+  }
+  return { id: result.data?.id };
+}
+
+/**
  * Preview mode (default, and whenever EMAIL_MODE isn't exactly "live"):
  * exact prior behavior — render + console.log, no network call.
  *
- * Live mode: sends via Resend. When EMAIL_TEST_OVERRIDE_RECIPIENT is set,
- * every email is redirected there instead of `to`, with the subject
- * prefixed "[TEST — would go to: {to}] ", so the full
- * render->send->deliver pipeline can be verified against a real inbox
- * before trusting real recipient data.
+ * Live mode: sends via whichever provider EMAIL_PROVIDER selects (see
+ * getProvider()). When EMAIL_TEST_OVERRIDE_RECIPIENT is set, every email is
+ * redirected there instead of `to`, with the subject prefixed
+ * "[TEST — would go to: {to}] ", so the full render->send->deliver
+ * pipeline can be verified against a real inbox before trusting real
+ * recipient data.
  *
- * Resend failures (network, invalid recipient, rate limit — the SDK
- * returns `{error}` rather than throwing for API-level failures, but a
- * network-level failure can still throw) are caught and logged, never
- * thrown — every caller sits inside a real workflow action (submit,
- * send-back, verify, generate authority link), none of which should fail
- * or roll back because an email didn't send. Email is a notification, not
- * a gate.
+ * Provider failures (network, invalid recipient, auth, rate limit) are
+ * caught and logged, never thrown — every caller sits inside a real
+ * workflow action (submit, send-back, verify, generate authority link),
+ * none of which should fail or roll back because an email didn't send.
+ * Email is a notification, not a gate.
  */
 async function send(kind: string, to: string, message: EmailMessage): Promise<void> {
   if (!isLiveMode()) {
@@ -68,21 +141,12 @@ async function send(kind: string, to: string, message: EmailMessage): Promise<vo
   const subject = override ? `[TEST — would go to: ${to}] ${message.subject}` : message.subject;
 
   try {
-    const result = await getResendClient().emails.send({
-      from: getFrom(),
-      to: recipient,
-      subject,
-      html: message.html,
-    });
-    if (result.error) {
-      console.error(`[Email] Resend returned an error sending "${kind}" to ${recipient}:`, result.error);
-      return;
-    }
+    const result = await dispatch(getFrom(), recipient, subject, message.html);
     console.info(
-      `[Email sent: ${kind}] to ${recipient}${override ? ` (redirected from ${to})` : ""}, id ${result.data?.id}`,
+      `[Email sent: ${kind}] to ${recipient}${override ? ` (redirected from ${to})` : ""}, id ${result.id}`,
     );
   } catch (err) {
-    console.error(`[Email] Failed to send "${kind}" via Resend:`, err);
+    console.error(`[Email] Failed to send "${kind}" via ${getProvider()}:`, err);
   }
 }
 
@@ -115,10 +179,17 @@ export async function notifySubmissionConfirmation(
   return message;
 }
 
-// No email is sent for "Received & In Process" or "Sanctioned" transitions
-// — not requested, dashboard-only for now. See AGENT_HANDOFF.md.
+// No email is sent for "Received & In Process" — not requested,
+// dashboard-only. Sanctioned no longer exists as an active step at all (see
+// AGENT_HANDOFF.md); Payment Done is the new, only terminal notification.
 export async function notifyVerified(data: VerifiedEmailData, to: string) {
   const message = renderVerifiedEmail(data);
   await send("verified", to, message);
+  return message;
+}
+
+export async function notifyPaymentDone(data: PaymentDoneEmailData, to: string) {
+  const message = renderPaymentDoneEmail(data);
+  await send("payment done", to, message);
   return message;
 }

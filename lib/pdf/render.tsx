@@ -41,8 +41,10 @@ export async function renderPaymentAdvicePdf(
         submittedByName: advice.submittedByName,
         recommendingAuthorityName,
         verifiedBy: advice.verifiedBy,
+        verifiedAt: advice.verifiedAt ? advice.verifiedAt.toISOString() : null,
         sanctionedBy: advice.sanctionedBy,
         submittedAt: advice.submittedAt.toISOString(),
+        authorityApprovedAt: advice.authorityApprovedAt ? advice.authorityApprovedAt.toISOString() : null,
         approvedAt: advice.approvedAt ? advice.approvedAt.toISOString() : null,
         approvedByName: advice.approvedByName,
       }}
@@ -62,18 +64,20 @@ export async function renderCashVoucherPdf(
   return renderToBuffer(
     <CashVoucherDocument
       data={{
-        serialNo: advice.serialNo,
+        cashVoucherNo: advice.cashVoucherNo ?? advice.serialNo,
         formDate: advice.formDate,
         payeeName: advice.payeeName,
         items: items.map((item) => ({ description: item.description, amount: item.amount })),
         submittedByName: advice.submittedByName,
+        submittedAt: advice.submittedAt.toISOString(),
         recommendingAuthorityName,
+        authorityApprovedAt: advice.authorityApprovedAt ? advice.authorityApprovedAt.toISOString() : null,
         sanctionedBy: advice.sanctionedBy,
       }}
     />,
   );
 }
 
-export function cashVoucherPdfFilename(serialNo: string): string {
-  return `Cash-Voucher-${serialNo.replace(/\//g, "-")}.pdf`;
+export function cashVoucherPdfFilename(cashVoucherNo: string): string {
+  return `Cash-Voucher-${cashVoucherNo.replace(/\//g, "-")}.pdf`;
 }

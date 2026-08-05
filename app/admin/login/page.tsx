@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/Input";
 
 export default function AdminLoginPage() {
   const router = useRouter();
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -19,7 +20,7 @@ export default function AdminLoginPage() {
       const res = await fetch("/api/admin/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password }),
+        body: JSON.stringify({ email, password }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -52,14 +53,28 @@ export default function AdminLoginPage() {
           </div>
         ) : null}
         <div className="flex flex-col gap-1.5">
+          <label htmlFor="email" className="text-sm font-medium text-[#0b1f3a]">
+            Email
+          </label>
+          <Input
+            id="email"
+            type="email"
+            autoFocus
+            required
+            autoComplete="username"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+        </div>
+        <div className="flex flex-col gap-1.5">
           <label htmlFor="password" className="text-sm font-medium text-[#0b1f3a]">
             Password
           </label>
           <Input
             id="password"
             type="password"
-            autoFocus
             required
+            autoComplete="current-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
           />

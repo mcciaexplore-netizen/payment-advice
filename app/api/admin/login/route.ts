@@ -2,9 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   ADMIN_SESSION_COOKIE,
   ADMIN_SESSION_MAX_AGE_SECONDS,
+  AdminRole,
   createAdminSessionToken,
-  verifyAdminPassword,
 } from "@/lib/auth";
+import { findActiveAdminUserByEmail, recordAdminLogin, verifyPassword } from "@/lib/admin-users";
 
 export const runtime = "nodejs";
 
@@ -56,16 +57,35 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json().catch(() => null);
+  const email = body?.email;
   const password = body?.password;
 
-  if (typeof password !== "string" || !verifyAdminPassword(password)) {
+  if (typeof email !== "string" || typeof password !== "string") {
     recordFailedAttempt(ip);
-    return NextResponse.json({ error: "Incorrect password." }, { status: 401 });
+    return NextResponse.json({ error: "Incorrect email or password." }, { status: 401 });
+  }
+
+  const user = await findActiveAdminUserByEmail(email);
+  // Runs the (deliberately slow) bcrypt compare against a fixed dummy hash
+  // even when no matching user exists, so a nonexistent-email response
+  // takes the same time as a wrong-password one — timing alone can't be
+  // used to enumerate which emails are registered.
+  const DUMMY_HASH = "$2a$12$CwTycUXWue0Thq9StjUM0uJ8n7Kn8b0Q3E1Y3jz3aOVfV1c5b1u0G";
+  const passwordOk = await verifyPassword(password, user?.passwordHash ?? DUMMY_HASH);
+
+  if (!user || !passwordOk) {
+    recordFailedAttempt(ip);
+    return NextResponse.json({ error: "Incorrect email or password." }, { status: 401 });
   }
 
   clearAttempts(ip);
-  const token = await createAdminSessionToken();
-  const res = NextResponse.json({ ok: true });
+  await recordAdminLogin(user.id);
+  const token = await createAdminSessionToken({
+    adminUserId: user.id,
+    fullName: user.fullName,
+    adminRole: user.role as AdminRole,
+  });
+  const res = NextResponse.json({ ok: true, fullName: user.fullName, role: user.role });
   res.cookies.set(ADMIN_SESSION_COOKIE, token, {
     httpOnly: true,
     secure: true,

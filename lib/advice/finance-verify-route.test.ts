@@ -14,11 +14,19 @@ const mocks = vi.hoisted(() => {
     cb({ update: txUpdate, insert: txInsert }),
   );
   const notifyVerified = vi.fn();
-  return { limit, select, txSet, txInsert, txValues, transaction, notifyVerified };
+  const getAdminSession = vi.fn(
+    async (): Promise<{ adminUserId: string; fullName: string; adminRole: string } | null> => ({
+      adminUserId: "admin-1",
+      fullName: "Abha Khatavkar",
+      adminRole: "PAYMENT_ADVICE",
+    }),
+  );
+  return { limit, select, txSet, txInsert, txValues, transaction, notifyVerified, getAdminSession };
 });
 
 vi.mock("@/lib/db", () => ({ db: { select: mocks.select, transaction: mocks.transaction } }));
 vi.mock("@/lib/email/notify", () => ({ notifyVerified: mocks.notifyVerified }));
+vi.mock("@/lib/admin-session", () => ({ getAdminSession: mocks.getAdminSession }));
 
 import { POST, PATCH } from "../../app/api/admin/advice/[id]/verify/route";
 
@@ -36,60 +44,53 @@ const receivedNeft = {
   verifiedAt: null,
 };
 
-function req(body: unknown) {
+function req() {
   return new NextRequest(`http://localhost/api/admin/advice/${ADVICE_ID}/verify`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
   });
 }
 
 describe("POST /api/admin/advice/[id]/verify", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.getAdminSession.mockResolvedValue({
+      adminUserId: "admin-1",
+      fullName: "Abha Khatavkar",
+      adminRole: "PAYMENT_ADVICE",
+    });
+  });
+
+  it("401s when not signed in", async () => {
+    mocks.getAdminSession.mockResolvedValueOnce(null);
+    const res = await POST(req(), { params: Promise.resolve({ id: ADVICE_ID }) });
+    expect(res.status).toBe(401);
+    expect(mocks.select).not.toHaveBeenCalled();
   });
 
   it("404s when the advice doesn't exist", async () => {
     mocks.limit.mockResolvedValueOnce([]);
-    const res = await POST(req({ verifiedBy: "Sunil Salunke" }), {
-      params: Promise.resolve({ id: ADVICE_ID }),
-    });
+    const res = await POST(req(), { params: Promise.resolve({ id: ADVICE_ID }) });
     expect(res.status).toBe(404);
     expect(mocks.transaction).not.toHaveBeenCalled();
   });
 
   it("409s when not yet marked Received & In Process", async () => {
     mocks.limit.mockResolvedValueOnce([{ ...receivedNeft, financeReceivedAt: null }]);
-    const res = await POST(req({ verifiedBy: "Sunil Salunke" }), {
-      params: Promise.resolve({ id: ADVICE_ID }),
-    });
+    const res = await POST(req(), { params: Promise.resolve({ id: ADVICE_ID }) });
     expect(res.status).toBe(409);
     expect(mocks.transaction).not.toHaveBeenCalled();
   });
 
   it("409s when already verified (double-action prevention)", async () => {
     mocks.limit.mockResolvedValueOnce([{ ...receivedNeft, verifiedAt: new Date() }]);
-    const res = await POST(req({ verifiedBy: "Sunil Salunke" }), {
-      params: Promise.resolve({ id: ADVICE_ID }),
-    });
+    const res = await POST(req(), { params: Promise.resolve({ id: ADVICE_ID }) });
     expect(res.status).toBe(409);
     expect(mocks.transaction).not.toHaveBeenCalled();
   });
 
-  it("400s for a name outside the fixed 4-person list", async () => {
+  it("auto-attributes verifiedBy from the logged-in session (no picker, no body), writes an audit entry with the verifier as actor, and emails the submitter with the NEFT document label", async () => {
     mocks.limit.mockResolvedValueOnce([receivedNeft]);
-    const res = await POST(req({ verifiedBy: "Someone Else" }), {
-      params: Promise.resolve({ id: ADVICE_ID }),
-    });
-    expect(res.status).toBe(400);
-    expect(mocks.transaction).not.toHaveBeenCalled();
-  });
-
-  it("verifies, writes an audit entry with the verifier as actor, and emails the submitter with the NEFT document label", async () => {
-    mocks.limit.mockResolvedValueOnce([receivedNeft]);
-    const res = await POST(req({ verifiedBy: "Abha Khatavkar" }), {
-      params: Promise.resolve({ id: ADVICE_ID }),
-    });
+    const res = await POST(req(), { params: Promise.resolve({ id: ADVICE_ID }) });
     expect(res.status).toBe(200);
     expect(mocks.txSet).toHaveBeenCalledWith(
       expect.objectContaining({ verifiedAt: expect.any(Date), verifiedBy: "Abha Khatavkar" }),
@@ -103,18 +104,23 @@ describe("POST /api/admin/advice/[id]/verify", () => {
     );
   });
 
-  it("rejects the old 'Aabha Khatavkar' misspelling — the authoritative list spells it 'Abha'", async () => {
-    mocks.limit.mockResolvedValueOnce([receivedNeft]);
-    const res = await POST(req({ verifiedBy: "Aabha Khatavkar" }), {
-      params: Promise.resolve({ id: ADVICE_ID }),
+  it("attributes to whichever real name is on the session, not constrained to the retired 4-person list (e.g. the ALL-role account)", async () => {
+    mocks.getAdminSession.mockResolvedValueOnce({
+      adminUserId: "admin-3",
+      fullName: "MCCIA Finance (All Access)",
+      adminRole: "ALL",
     });
-    expect(res.status).toBe(400);
-    expect(mocks.transaction).not.toHaveBeenCalled();
+    mocks.limit.mockResolvedValueOnce([receivedNeft]);
+    const res = await POST(req(), { params: Promise.resolve({ id: ADVICE_ID }) });
+    expect(res.status).toBe(200);
+    expect(mocks.txSet).toHaveBeenCalledWith(
+      expect.objectContaining({ verifiedBy: "MCCIA Finance (All Access)" }),
+    );
   });
 
   it("uses the Cash Payment Voucher document label for a Cash advice", async () => {
     mocks.limit.mockResolvedValueOnce([{ ...receivedNeft, paymentMode: "CASH" }]);
-    await POST(req({ verifiedBy: "Vaidehi Marathe" }), { params: Promise.resolve({ id: ADVICE_ID }) });
+    await POST(req(), { params: Promise.resolve({ id: ADVICE_ID }) });
     expect(mocks.notifyVerified).toHaveBeenCalledWith(
       expect.objectContaining({ documentLabel: "Cash Payment Voucher" }),
       receivedNeft.submittedByEmail,

@@ -57,6 +57,20 @@
       "when": 1785432486971,
       "tag": "0007_drop_verified_by_name",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1785570314392,
+      "tag": "0008_cash_voucher_series",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1785578955492,
+      "tag": "0009_admin_users_and_payment_done",
+      "breakpoints": true
     }
   ]
 }

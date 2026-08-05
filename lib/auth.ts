@@ -1,18 +1,26 @@
 import { SignJWT, jwtVerify } from "jose";
 
 /**
- * All admin authentication lives here so Phase 1's single shared password
- * can later be swapped for Google Workspace SSO without touching page or
- * route code — callers only ever see createAdminSessionToken /
- * verifyAdminSessionToken / verifyAdminPassword.
- *
- * This module is imported by middleware.ts, which runs on the Edge
- * runtime — so it must stay free of Node-only APIs (jose works on both
- * Edge and Node).
+ * Real per-person Admin authentication (admin_users table), replacing the
+ * old shared ADMIN_PASSWORD. This module only signs/verifies the session
+ * JWT — it stays free of Node-only APIs (bcrypt, DB access) because it's
+ * imported by proxy.ts, which runs on the Edge runtime. Password hashing
+ * and DB lookups live in lib/admin-users.ts (Node-only); reading the
+ * decoded session from a request's cookies in a Server Component/Route
+ * Handler lives in lib/admin-session.ts (also Node-only, uses next/headers).
  */
 
 export const ADMIN_SESSION_COOKIE = "mccia_admin_session";
 export const ADMIN_SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 7; // 7 days
+
+export const ADMIN_ROLES = ["PAYMENT_ADVICE", "CASH_VOUCHER", "ALL"] as const;
+export type AdminRole = (typeof ADMIN_ROLES)[number];
+
+export type AdminSessionPayload = {
+  adminUserId: string;
+  fullName: string;
+  adminRole: AdminRole;
+};
 
 function getSecretKey() {
   const secret = process.env.AUTH_SECRET;
@@ -22,38 +30,41 @@ function getSecretKey() {
   return new TextEncoder().encode(secret);
 }
 
-export async function createAdminSessionToken(): Promise<string> {
-  return new SignJWT({ role: "admin" })
+export async function createAdminSessionToken(
+  session: AdminSessionPayload,
+): Promise<string> {
+  return new SignJWT({ ...session })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime(`${ADMIN_SESSION_MAX_AGE_SECONDS}s`)
     .sign(getSecretKey());
 }
 
-export async function verifyAdminSessionToken(token: string): Promise<boolean> {
+/** Verifies the JWT signature/expiry and validates the payload shape
+ * strictly (all three claims present as the right type) — a token signed
+ * under the old shared-password format (`{role: "admin"}` only) fails this
+ * and is treated as no session, forcing a fresh per-person login rather
+ * than silently accepting a stale-format token. */
+export async function decodeAdminSessionToken(
+  token: string,
+): Promise<AdminSessionPayload | null> {
   try {
     const { payload } = await jwtVerify(token, getSecretKey());
-    return payload.role === "admin";
+    const { adminUserId, fullName, adminRole } = payload;
+    if (
+      typeof adminUserId !== "string" ||
+      typeof fullName !== "string" ||
+      typeof adminRole !== "string" ||
+      !(ADMIN_ROLES as readonly string[]).includes(adminRole)
+    ) {
+      return null;
+    }
+    return { adminUserId, fullName, adminRole: adminRole as AdminRole };
   } catch {
-    return false;
+    return null;
   }
 }
 
-/** Constant-time string compare, implemented without runtime-specific crypto
- * APIs so this file stays usable from both the Edge and Node runtimes. */
-function timingSafeEqual(a: string, b: string): boolean {
-  const maxLength = Math.max(a.length, b.length);
-  let diff = a.length === b.length ? 0 : 1;
-  for (let i = 0; i < maxLength; i++) {
-    diff |= (a.charCodeAt(i) || 0) ^ (b.charCodeAt(i) || 0);
-  }
-  return diff === 0;
-}
-
-export function verifyAdminPassword(password: string): boolean {
-  const expected = process.env.ADMIN_PASSWORD;
-  if (!expected) {
-    throw new Error("ADMIN_PASSWORD environment variable is not set");
-  }
-  return timingSafeEqual(password, expected);
+export async function verifyAdminSessionToken(token: string): Promise<boolean> {
+  return (await decodeAdminSessionToken(token)) !== null;
 }

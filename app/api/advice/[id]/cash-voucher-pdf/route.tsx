@@ -37,7 +37,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   return new NextResponse(new Uint8Array(buffer), {
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `attachment; filename="${cashVoucherPdfFilename(advice.serialNo)}"`,
+      "Content-Disposition": `attachment; filename="${cashVoucherPdfFilename(advice.cashVoucherNo ?? advice.serialNo)}"`,
     },
   });
 }

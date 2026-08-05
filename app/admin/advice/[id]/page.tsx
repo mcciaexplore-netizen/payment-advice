@@ -11,7 +11,9 @@ import {
 import { StatusChip } from "@/components/admin/StatusChip";
 import { AdviceActions } from "@/components/admin/AdviceActions";
 import { NameCorrectionAction } from "@/components/admin/NameCorrectionAction";
-import { Status, VERIFIER_NAMES, SANCTIONER_NAMES } from "@/lib/validation/payment-advice";
+import { PaymentMode, Status, SANCTIONER_NAMES } from "@/lib/validation/payment-advice";
+import { getAdminSession } from "@/lib/admin-session";
+import { displayNoFor, documentLabelFor } from "@/lib/advice/document-identity";
 
 export const dynamic = "force-dynamic";
 
@@ -69,11 +71,15 @@ export default async function AdviceDetailPage({
 }) {
   const { id } = await params;
 
-  const [advice] = await db
-    .select()
-    .from(paymentAdvices)
-    .where(eq(paymentAdvices.id, id))
-    .limit(1);
+  const [advice, session] = await Promise.all([
+    db
+      .select()
+      .from(paymentAdvices)
+      .where(eq(paymentAdvices.id, id))
+      .limit(1)
+      .then((rows) => rows[0]),
+    getAdminSession(),
+  ]);
   if (!advice) notFound();
 
   const [authority, adviceAttachments, adviceAuditLog, voucherItems] = await Promise.all([
@@ -103,9 +109,14 @@ export default async function AdviceDetailPage({
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
-            Payment Advice
+            {documentLabelFor(advice.paymentMode as PaymentMode)}
           </p>
-          <h1 className="font-heading text-3xl text-[#0b1f3a]">{advice.serialNo}</h1>
+          <h1 className="font-heading text-3xl text-[#0b1f3a]">
+            {displayNoFor(advice.paymentMode as PaymentMode, advice.serialNo, advice.cashVoucherNo)}
+          </h1>
+          {advice.paymentMode === "CASH" ? (
+            <p className="mt-1 text-xs text-gray-500">Internal Ref.: {advice.serialNo}</p>
+          ) : null}
         </div>
         <StatusChip status={advice.status as Status} />
       </div>
@@ -113,6 +124,8 @@ export default async function AdviceDetailPage({
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
         <div className="flex flex-col gap-8 lg:col-span-2">
           <Section title="Header">
+            {/* Advice No. / Cash Voucher No. are now shown at the top of the
+                page (primary + "Internal Ref."), not duplicated here. */}
             <Row label="Form Date" value={formatDate(advice.formDate)} />
             <Row label="Financial Year" value={advice.financialYear} />
           </Section>
@@ -184,29 +197,33 @@ export default async function AdviceDetailPage({
               label="Received & In Process"
               value={advice.financeReceivedAt ? formatDateTime(advice.financeReceivedAt) : "Pending"}
             />
-            <div className="flex items-baseline gap-2 text-sm">
-              <span className="min-w-[200px] text-xs font-medium uppercase tracking-wide text-gray-500">
-                Verified By
-              </span>
-              {advice.verifiedAt && advice.verifiedBy ? (
-                <span className="flex items-center gap-3 text-sm text-[#171717]">
-                  {advice.verifiedBy} · {formatDateTime(advice.verifiedAt)}
-                  <NameCorrectionAction
-                    adviceId={advice.id}
-                    kind="verify"
-                    currentName={advice.verifiedBy}
-                    options={VERIFIER_NAMES}
-                  />
+            <Row
+              label="Verified By"
+              value={
+                advice.verifiedAt && advice.verifiedBy
+                  ? `${advice.verifiedBy} · ${formatDateTime(advice.verifiedAt)}`
+                  : "Pending"
+              }
+            />
+            <Row
+              label="Payment Done"
+              value={
+                advice.paymentDoneAt && advice.paymentDoneBy
+                  ? `${advice.paymentDoneBy} · ${formatDateTime(advice.paymentDoneAt)}`
+                  : advice.verifiedAt
+                    ? "Ready for Payment"
+                    : "Pending"
+              }
+            />
+            {/* Sanction is retired as an active step (see AGENT_HANDOFF.md) —
+                shown only when a historical row already has it set, so the
+                "Correct name" action stays available for old data without
+                implying Sanction is still part of the active flow. */}
+            {advice.sanctionedAt && advice.sanctionedBy ? (
+              <div className="flex items-baseline gap-2 text-sm">
+                <span className="min-w-[200px] text-xs font-medium uppercase tracking-wide text-gray-500">
+                  Sanctioned By (historical)
                 </span>
-              ) : (
-                <span className="text-sm text-[#171717]">Pending</span>
-              )}
-            </div>
-            <div className="flex items-baseline gap-2 text-sm">
-              <span className="min-w-[200px] text-xs font-medium uppercase tracking-wide text-gray-500">
-                Sanctioned By
-              </span>
-              {advice.sanctionedAt && advice.sanctionedBy ? (
                 <span className="flex items-center gap-3 text-sm text-[#171717]">
                   {advice.sanctionedBy} · {formatDateTime(advice.sanctionedAt)}
                   <NameCorrectionAction
@@ -216,10 +233,8 @@ export default async function AdviceDetailPage({
                     options={SANCTIONER_NAMES}
                   />
                 </span>
-              ) : (
-                <span className="text-sm text-[#171717]">Pending</span>
-              )}
-            </div>
+              </div>
+            ) : null}
           </Section>
 
           <Section title="Attachments">
@@ -301,6 +316,10 @@ export default async function AdviceDetailPage({
             verifiedBy={advice.verifiedBy}
             sanctionedAt={advice.sanctionedAt?.toISOString() ?? null}
             sanctionedBy={advice.sanctionedBy}
+            paymentDoneAt={advice.paymentDoneAt?.toISOString() ?? null}
+            paymentDoneBy={advice.paymentDoneBy}
+            currentUserFullName={session?.fullName ?? "Unknown"}
+            currentUserRole={session?.adminRole ?? "ALL"}
           />
         </div>
       </div>

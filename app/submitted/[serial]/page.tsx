@@ -33,9 +33,14 @@ export default function SubmittedPage() {
     <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-8 px-6 py-16">
       <div className="flex flex-col items-center gap-2 text-center">
         <p className="text-sm font-medium text-[#2e8b57]">
-          Payment Advice submitted
+          {summary?.paymentMode === "CASH" ? "Cash Voucher submitted" : "Payment Advice submitted"}
         </p>
-        <p className="font-heading text-4xl text-[#0b1f3a]">{serial}</p>
+        <p className="font-heading text-4xl text-[#0b1f3a]">
+          {summary?.paymentMode === "CASH" ? (summary.cashVoucherNo ?? serial) : serial}
+        </p>
+        {summary?.paymentMode === "CASH" ? (
+          <p className="text-xs text-gray-500">Internal Ref.: {serial}</p>
+        ) : null}
       </div>
 
       {summary ? (
@@ -58,7 +63,7 @@ export default function SubmittedPage() {
         </dl>
       ) : (
         <p className="rounded-md border border-gray-200 p-4 text-center text-sm text-gray-600">
-          Your Payment Advice has been recorded under the serial number above.
+          Your submission has been recorded under the number above.
         </p>
       )}
 
@@ -87,7 +92,8 @@ export default function SubmittedPage() {
           <div className="flex flex-col items-center gap-2 rounded-md border border-[#e8a33d]/40 bg-[#e8a33d]/10 px-4 py-3 text-center text-sm text-[#8a5a12]">
             <p>
               Share this link with <span className="font-medium">{summary.authorityName}</span>{" "}
-              so they can review and approve this Payment Advice.
+              so they can review and approve this{" "}
+              {summary.paymentMode === "CASH" ? "Cash Payment Voucher" : "Payment Advice"}.
             </p>
             <button
               type="button"
@@ -123,7 +129,7 @@ export default function SubmittedPage() {
           </p>
         )}
         <p className="mt-2">
-          Please note down the serial number above — quote it if you contact
+          Please note down the number above — quote it if you contact
           Accounts about this payment.
         </p>
       </div>
