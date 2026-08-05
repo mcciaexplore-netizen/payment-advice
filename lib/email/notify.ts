@@ -1,5 +1,7 @@
 import { Resend } from "resend";
 import nodemailer from "nodemailer";
+import { db } from "@/lib/db";
+import { auditLog } from "@/lib/db/schema";
 import {
   type AuthorityApprovalEmailData,
   type PaymentDoneEmailData,
@@ -129,8 +131,24 @@ async function dispatch(
  * workflow action (submit, send-back, verify, generate authority link),
  * none of which should fail or roll back because an email didn't send.
  * Email is a notification, not a gate.
+ *
+ * That said, a provider-level failure (e.g. missing/invalid SMTP
+ * credentials — as happened when GMAIL_USER/GMAIL_APP_PASSWORD weren't set
+ * in a deploy's env vars) is a real infrastructure problem, not the benign
+ * "recipient has no email on file" case (that one never reaches send() at
+ * all — see notifyAuthorityApproval's `!to` branch, which stays a plain
+ * console.warn + preview by design). So in addition to the console.error
+ * below, this writes a distinct `EMAIL_SEND_FAILED` audit_log row when an
+ * adviceId is available, so it surfaces in that advice's Audit Trail in the
+ * admin UI instead of only existing in Vercel's function logs. Best-effort:
+ * a failure to write that row must not itself throw.
  */
-async function send(kind: string, to: string, message: EmailMessage): Promise<void> {
+async function send(
+  kind: string,
+  to: string,
+  message: EmailMessage,
+  adviceId?: string,
+): Promise<void> {
   if (!isLiveMode()) {
     preview(kind, message);
     return;
@@ -146,13 +164,31 @@ async function send(kind: string, to: string, message: EmailMessage): Promise<vo
       `[Email sent: ${kind}] to ${recipient}${override ? ` (redirected from ${to})` : ""}, id ${result.id}`,
     );
   } catch (err) {
-    console.error(`[Email] Failed to send "${kind}" via ${getProvider()}:`, err);
+    const provider = getProvider();
+    console.error(`[Email] Failed to send "${kind}" via ${provider}:`, err);
+    if (adviceId) {
+      try {
+        await db.insert(auditLog).values({
+          paymentAdviceId: adviceId,
+          action: "EMAIL_SEND_FAILED",
+          actor: "System",
+          details: {
+            kind,
+            provider,
+            error: err instanceof Error ? err.message : String(err),
+          },
+        });
+      } catch (auditErr) {
+        console.error(`[Email] Also failed to write EMAIL_SEND_FAILED audit_log row:`, auditErr);
+      }
+    }
   }
 }
 
 export async function notifyAuthorityApproval(
   data: AuthorityApprovalEmailData,
   to: string | null,
+  adviceId?: string,
 ) {
   const message = renderAuthorityApprovalEmail(data);
   if (!to) {
@@ -160,36 +196,37 @@ export async function notifyAuthorityApproval(
     preview("authority approval", message);
     return message;
   }
-  await send("authority approval", to, message);
+  await send("authority approval", to, message, adviceId);
   return message;
 }
 
-export async function notifySentBack(data: SentBackEmailData, to: string) {
+export async function notifySentBack(data: SentBackEmailData, to: string, adviceId?: string) {
   const message = renderSentBackEmail(data);
-  await send("sent back", to, message);
+  await send("sent back", to, message, adviceId);
   return message;
 }
 
 export async function notifySubmissionConfirmation(
   data: SubmissionConfirmationEmailData,
   to: string,
+  adviceId?: string,
 ) {
   const message = renderSubmissionConfirmationEmail(data);
-  await send("submission confirmation", to, message);
+  await send("submission confirmation", to, message, adviceId);
   return message;
 }
 
 // No email is sent for "Received & In Process" — not requested,
 // dashboard-only. Sanctioned no longer exists as an active step at all (see
 // AGENT_HANDOFF.md); Payment Done is the new, only terminal notification.
-export async function notifyVerified(data: VerifiedEmailData, to: string) {
+export async function notifyVerified(data: VerifiedEmailData, to: string, adviceId?: string) {
   const message = renderVerifiedEmail(data);
-  await send("verified", to, message);
+  await send("verified", to, message, adviceId);
   return message;
 }
 
-export async function notifyPaymentDone(data: PaymentDoneEmailData, to: string) {
+export async function notifyPaymentDone(data: PaymentDoneEmailData, to: string, adviceId?: string) {
   const message = renderPaymentDoneEmail(data);
-  await send("payment done", to, message);
+  await send("payment done", to, message, adviceId);
   return message;
 }

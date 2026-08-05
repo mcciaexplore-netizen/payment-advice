@@ -260,6 +260,10 @@ export const authorityRejectSchema = z.object({
   remarks: requiredTrimmed("Remarks are required to send this back to the submitter"),
 });
 
+export const authorityIdentityConfirmSchema = z.object({
+  email: z.string().trim().min(1, "Email is required").email("Enter a valid email address"),
+});
+
 export const approveSchema = z.object({
   approvedByName: requiredTrimmed("Approving officer's name is required"),
   billPassedFor: z.number().positive("Bill passed for Rs. is required"),

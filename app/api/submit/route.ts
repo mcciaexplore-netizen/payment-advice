@@ -251,6 +251,7 @@ export async function POST(req: NextRequest) {
             : undefined,
       },
       values.submittedByEmail,
+      adviceId,
     );
     await notifyAuthorityApproval(
       {
@@ -270,6 +271,7 @@ export async function POST(req: NextRequest) {
         approvalLink: `${origin}/authority-approval/${authorityToken}`,
       },
       authority?.email ?? null,
+      adviceId,
     );
 
     return NextResponse.json({ serialNo, cashVoucherNo, id: adviceId, authorityToken, authorityName });

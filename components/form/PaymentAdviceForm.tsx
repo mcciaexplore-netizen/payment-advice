@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useFieldArray, useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -76,6 +76,20 @@ export function PaymentAdviceForm({
     useFieldArray({ control, name: "cashVoucherItems" });
 
   const [matchedStaff, setMatchedStaff] = useState<StaffSearchResult | null>(null);
+  // Same "only react on an actual identity change" pattern
+  // RecommendingAuthorityField's lastStaffId ref already uses — onMatch can
+  // re-fire repeatedly for the *same* matched staff member (e.g. on every
+  // keystroke once an exact match is typed), and re-running the email
+  // auto-fill logic on those redundant calls would be harmless on its own,
+  // but tying the actual fill/clear decision to a real identity change
+  // keeps this in lockstep with how the Authority field behaves and makes
+  // the "did the match actually change" intent explicit here too.
+  const lastMatchedStaffIdRef = useRef<string | null>(null);
+  // Tracks whatever this logic itself last wrote into "Your Email" (or null
+  // if it never has) — lets resolveAutoFillEmail tell a stale auto-fill
+  // (safe to replace on the next match change) apart from a real manual
+  // edit or an /edit/[token] resubmit prefill (never touched).
+  const lastAutoFilledEmailRef = useRef<string | null>(null);
 
   const paymentMode = useWatch({ control, name: "paymentMode" });
   const payeeName = useWatch({ control, name: "payeeName" }) ?? "";
@@ -101,14 +115,30 @@ export function PaymentAdviceForm({
     });
   }, [appendCashVoucherItem, cashVoucherItems, paymentMode, setValue]);
 
-  // Mirrors applyVendor's "fill only what's on file" pattern below. Only
-  // auto-fills when the field is still empty — never overwrites a value
-  // the submitter already typed, or (on /edit/[token] resubmit) an already
-  // pre-filled value from the original submission.
+  // Mirrors applyVendor's "fill only what's on file" pattern below, plus
+  // RecommendingAuthorityField's "only react when the matched identity
+  // actually changes" pattern above it. A stale auto-fill from a previous
+  // match is updated/cleared when the match changes to someone new; a real
+  // manual edit (or an /edit/[token] resubmit prefill) is never touched.
   function handleStaffMatch(staff: StaffSearchResult | null) {
     setMatchedStaff(staff);
-    const email = resolveAutoFillEmail(staff, getValues("submittedByEmail"));
-    if (email) setValue("submittedByEmail", email);
+
+    const staffId = staff?.id ?? null;
+    if (staffId === lastMatchedStaffIdRef.current) return;
+    lastMatchedStaffIdRef.current = staffId;
+
+    const action = resolveAutoFillEmail(
+      staff,
+      getValues("submittedByEmail") ?? "",
+      lastAutoFilledEmailRef.current,
+    );
+    if (action.type === "fill") {
+      setValue("submittedByEmail", action.email);
+      lastAutoFilledEmailRef.current = action.email;
+    } else if (action.type === "clear") {
+      setValue("submittedByEmail", "");
+      lastAutoFilledEmailRef.current = null;
+    }
   }
 
   function applyVendor(vendor: VendorSearchResult) {

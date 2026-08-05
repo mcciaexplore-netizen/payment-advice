@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   resendSend: vi.fn(),
   gmailSendMail: vi.fn(),
   createTransport: vi.fn(),
+  auditInsertValues: vi.fn(),
 }));
 vi.mock("resend", () => ({
   Resend: vi.fn().mockImplementation(() => ({ emails: { send: mocks.resendSend } })),
@@ -15,6 +16,9 @@ vi.mock("nodemailer", () => {
     createTransport: mocks.createTransport,
   };
 });
+vi.mock("@/lib/db", () => ({
+  db: { insert: vi.fn(() => ({ values: mocks.auditInsertValues })) },
+}));
 
 import {
   notifyAuthorityApproval,
@@ -255,6 +259,11 @@ describe("lib/email/notify.ts", () => {
       expect(mocks.gmailSendMail).toHaveBeenCalledTimes(1);
     });
 
+    it("the 'no email on file' fallback is a distinct, expected case — it never writes an EMAIL_SEND_FAILED audit_log row, even with an adviceId given, because it's not a provider failure", async () => {
+      await notifyAuthorityApproval(authorityApprovalData, null, "advice-123");
+      expect(mocks.auditInsertValues).not.toHaveBeenCalled();
+    });
+
     it("catches an SMTP send failure (nodemailer rejects, e.g. auth/quota) without throwing, and logs it", async () => {
       mocks.gmailSendMail.mockRejectedValue(new Error("Invalid login: 535-5.7.8 Username and Password not accepted"));
       await expect(
@@ -267,6 +276,48 @@ describe("lib/email/notify.ts", () => {
       mocks.gmailSendMail.mockRejectedValue(new Error("boom"));
       const result = await notifySentBack(sentBackData, "submitter@example.com");
       expect(result.subject).toBe("Action Required: Payment Advice MCCIA/2026-27/0002 Sent Back");
+    });
+
+    it("writes a distinct EMAIL_SEND_FAILED audit_log row (not the normal notification path) when a provider send fails and an adviceId was given — this is the real-infra-failure case, e.g. missing/invalid GMAIL_APP_PASSWORD, and must not go unnoticed the way it did when Vercel env vars were missing", async () => {
+      mocks.gmailSendMail.mockRejectedValue(
+        new Error("Invalid login: 535-5.7.8 Username and Password not accepted"),
+      );
+      await notifySubmissionConfirmation(submissionConfirmationData, "submitter@example.com", "advice-123");
+      expect(mocks.auditInsertValues).toHaveBeenCalledWith(
+        expect.objectContaining({
+          paymentAdviceId: "advice-123",
+          action: "EMAIL_SEND_FAILED",
+          actor: "System",
+          details: expect.objectContaining({
+            kind: "submission confirmation",
+            provider: "gmail",
+            error: expect.stringContaining("Username and Password not accepted"),
+          }),
+        }),
+      );
+    });
+
+    it("does not write an audit_log row when no adviceId is given, even on a send failure (adviceId stays optional for callers that don't have one handy)", async () => {
+      mocks.gmailSendMail.mockRejectedValue(new Error("boom"));
+      await notifySubmissionConfirmation(submissionConfirmationData, "submitter@example.com");
+      expect(mocks.auditInsertValues).not.toHaveBeenCalled();
+    });
+
+    it("does not write an EMAIL_SEND_FAILED row when the send succeeds, even with an adviceId given", async () => {
+      await notifySubmissionConfirmation(submissionConfirmationData, "submitter@example.com", "advice-123");
+      expect(mocks.auditInsertValues).not.toHaveBeenCalled();
+    });
+
+    it("a failure to write the EMAIL_SEND_FAILED audit_log row itself is swallowed and logged, never thrown", async () => {
+      mocks.gmailSendMail.mockRejectedValue(new Error("boom"));
+      mocks.auditInsertValues.mockRejectedValueOnce(new Error("db unreachable"));
+      await expect(
+        notifySubmissionConfirmation(submissionConfirmationData, "submitter@example.com", "advice-123"),
+      ).resolves.not.toThrow();
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.stringContaining("Also failed to write EMAIL_SEND_FAILED audit_log row"),
+        expect.anything(),
+      );
     });
   });
 

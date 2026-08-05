@@ -101,6 +101,7 @@ describe("POST /api/admin/advice/[id]/verify", () => {
     expect(mocks.notifyVerified).toHaveBeenCalledWith(
       expect.objectContaining({ verifiedBy: "Abha Khatavkar", documentLabel: "Payment Advice" }),
       receivedNeft.submittedByEmail,
+      ADVICE_ID,
     );
   });
 
@@ -124,6 +125,7 @@ describe("POST /api/admin/advice/[id]/verify", () => {
     expect(mocks.notifyVerified).toHaveBeenCalledWith(
       expect.objectContaining({ documentLabel: "Cash Payment Voucher" }),
       receivedNeft.submittedByEmail,
+      ADVICE_ID,
     );
   });
 });

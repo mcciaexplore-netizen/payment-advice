@@ -32,7 +32,14 @@ export function Field({
           {required ? "Required" : "Optional"}
         </span>
       </label>
-      {help ? <p className="text-xs text-gray-500">{help}</p> : null}
+      {/* Always rendered, whether or not `help` is set — this reserves the
+          same fixed-height slot for every field, so two fields sitting
+          side-by-side in a grid (one with helper text, one without) still
+          start their inputs at the same vertical position. `invisible`
+          (not a display:none/conditional render) keeps a real line box in
+          the layout without a one-off margin hack that could drift again
+          if the copy changes. */}
+      <p className={`text-xs text-gray-500 ${help ? "" : "invisible"}`}>{help || " "}</p>
       {children}
       {error ? (
         <p role="alert" className="text-sm font-medium text-[#b3261e]">

@@ -65,7 +65,11 @@ const styles = StyleSheet.create({
   headerCenter: { flex: 1, alignItems: "center", textAlign: "center", paddingHorizontal: 4 },
   headerTitle: { fontFamily: "Helvetica-Bold", fontSize: 9 },
   headerSubtitle: { fontFamily: "Helvetica-Bold", fontSize: 10, marginTop: 2 },
-  headerFormNo: { fontSize: 7, textAlign: "right", width: 92 },
+  // Invisible spacer, same width the old form-number text occupied —
+  // headerCenter is centered (flex: 1) between two fixed-width flanks, so
+  // removing that text without a same-size stand-in would visibly shift
+  // the centered title left, off where it was balanced before.
+  headerRightSpacer: { width: 92 },
   serialRow: { textAlign: "right", marginBottom: 4 },
   serialText: { fontFamily: "Helvetica-Bold", fontSize: 10 },
   dateRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 8 },
@@ -160,7 +164,7 @@ export function PaymentAdviceDocument({ data }: { data: PaymentAdvicePdfData }) 
             </Text>
             <Text style={styles.headerSubtitle}>Payment Advice</Text>
           </View>
-          <Text style={styles.headerFormNo}>MCCIA / ACTT / PAD / 013</Text>
+          <View style={styles.headerRightSpacer} />
         </View>
 
         <View style={styles.serialRow}>

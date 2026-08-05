@@ -134,6 +134,7 @@ describe("POST /api/admin/advice/[id]/payment-done", () => {
     expect(mocks.notifyPaymentDone).toHaveBeenCalledWith(
       expect.objectContaining({ displayNo: verified.serialNo, documentLabel: "Payment Advice" }),
       verified.submittedByEmail,
+      ADVICE_ID,
     );
   });
 
@@ -150,6 +151,7 @@ describe("POST /api/admin/advice/[id]/payment-done", () => {
     expect(mocks.notifyPaymentDone).toHaveBeenCalledWith(
       expect.objectContaining({ documentLabel: "Cash Payment Voucher" }),
       verified.submittedByEmail,
+      ADVICE_ID,
     );
   });
 

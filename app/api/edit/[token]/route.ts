@@ -322,6 +322,7 @@ export async function POST(
         approvalLink: `${origin}/authority-approval/${authorityToken}`,
       },
       authority?.email ?? null,
+      advice.id,
     );
 
     return NextResponse.json({

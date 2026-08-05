@@ -47,7 +47,7 @@ Design system: Navy `#0B1F3A`, Forest green `#2E8B57`, Amber `#E8A33D`. Headings
 
 ## 3. Current State (update this every session)
 
-**Last updated:** 5 August 2026, by Claude Code (live email now sends via Gmail SMTP, not Resend — interim provider switch pending `mcciapune.com` DNS verification; all 5 notification emails re-verified live through the new transport; Resend kept fully intact and selectable via `EMAIL_PROVIDER=resend` for later — see below)
+**Last updated:** 6 August 2026, by Claude Code (fixed the "Your Name"/"Your Email" vertical misalignment structurally in the shared `Field` component, and fixed a real bug where a stale auto-filled email was never updated/cleared when the matched staff member changed — see below)
 
 ### Shipped — Phase 1 baseline (Claude Code)
 - Public form `/` (no login): submitter, payee (vendor typeahead), bill/reference, payment mode (NEFT/Cash), enclosures, mandatory Tax Invoice + Approval/Budget PDF attachments
@@ -414,6 +414,56 @@ Resend requires `mcciapune.com` to be DNS-verified before it can email anyone bu
 
 `tsc --noEmit`, ESLint, and the full Vitest suite all clean — see the session log entry below for exact counts.
 
+### Shipped — Provider-level email failures now surface in the Audit Trail, not just server logs (Claude Code, 2026-08-05)
+Prompted by the human clicking a stale authority-approval link and asking, separately, whether a *real* send failure (as opposed to the benign "no email on file" case) would actually be noticed — it wouldn't have been, beyond a `console.error` only visible in Vercel's function logs. This closes that gap without changing anything about the "no email on file" path, which was already correct as designed (`notifyAuthorityApproval`'s `!to` branch — console.warn + preview, never reaches `send()` at all, never writes an audit row).
+
+- `send()` in `lib/email/notify.ts` now takes an optional `adviceId` param. On a provider failure (SMTP auth error, network error, Resend API error — anything caught by the existing `try/catch` around `dispatch()`), it still `console.error`s as before, and additionally — if `adviceId` was given — writes `{ action: "EMAIL_SEND_FAILED", actor: "System", details: { kind, provider, error } }` to `audit_log`. That write is itself wrapped in a try/catch (best-effort, never throws) — a DB hiccup while logging a failure must not become a second unhandled failure.
+- All 5 `notify*` exported functions (`notifySubmissionConfirmation`, `notifyAuthorityApproval`, `notifySentBack`, `notifyVerified`, `notifyPaymentDone`) gained the same optional `adviceId` param, threaded through to `send()`. All 7 call sites across `app/api/submit`, `app/api/edit/[token]`, `app/api/authority-approval/[token]/reject`, `app/api/admin/advice/[id]/verify`, `app/api/admin/advice/[id]/payment-done`, `app/api/admin/advice/[id]/send-back` now pass the advice's real id — it was already in scope at every one of those call sites, no new query needed anywhere.
+- No new UI — the existing "Audit Trail" section on `/admin/advice/[id]` (`app/admin/advice/[id]/page.tsx`) already renders every `audit_log` row generically (action/actor/timestamp/IP), so `EMAIL_SEND_FAILED` just shows up there like any other event. Considered a dedicated banner component too; the existing Audit Trail already satisfies "surface it somewhere Admin can see" with zero new UI code, so that's what shipped.
+- **Verified live against the real dev DB and real Gmail SMTP** (not mocked): temporarily forced a wrong `GMAIL_APP_PASSWORD` (via a throwaway script's own `process.env` override — the real `.env.local` was never touched) and called `notifySubmissionConfirmation` with a real existing advice's id (`MCCIA/2026-27/0041`). Got a real Google `535-5.7.8 Username and Password not accepted` SMTP rejection, and confirmed the exact `EMAIL_SEND_FAILED` row landed in `audit_log` with that real error message in `details`. Test row deleted afterward (this was a real, unrelated advice — only the one throwaway audit row was removed, not the advice itself).
+- Tests: `lib/email/notify.test.ts` gained a `db.insert` mock plus 5 new cases (writes on failure with an adviceId; does not write without one; does not write on success; a failure to write the audit row itself is swallowed and logged, never thrown; the no-email-on-file fallback never writes one either). 5 pre-existing `notifyVerified`/`notifyPaymentDone`/`notifySentBack` call-site assertions in `finance-verify-route.test.ts`, `finance-payment-done-route.test.ts`, and `authority-reject-route.test.ts` updated for the new third argument. Full suite: 174 passed, 6 skipped (unrelated, pre-existing `TEST_DATABASE_URL`-gated integration tests). `tsc --noEmit` and ESLint both clean.
+
+### Shipped — Closed a real security gap: identity confirmation before Recommending Authority Approve/Send Back (Claude Code, 2026-08-06)
+**The risk, precisely:** `/authority-approval/[token]`'s only protection was the token itself — unguessable, but its sole distribution channel was one email to the named authority. If that email was ever forwarded, or an inbox shared/compromised, **anyone holding the link could approve or reject a real payment** — no check ever confirmed the person clicking was actually the named authority. This had been true since the Approval Workflow shipped (2026-07-30) and was never flagged as a gap until now.
+
+**The fix — lightweight identity confirmation, explicitly not a login system, exactly as scoped:**
+- The submission details section (payee, amount, attachments, etc.) renders completely unchanged, always visible. Only the Approve/Send Back button row is gated — replaced by a single "Confirm your email to continue" field until the visitor types the email on file for **this advice's specific authority** (not a global `admin_users`/`staff_members` lookup — scoped via `advice.recommendingAuthorityId`, per the brief).
+- New route `POST /api/authority-approval/[token]/confirm-identity` (`app/api/authority-approval/[token]/confirm-identity/route.ts`). Reuses `authorityActionError()` so an already-approved/rejected/expired link 409s the same way approve/reject already do — nothing to confirm identity for on a dead link.
+- **Match logic**: `emailsMatch()` (`lib/advice/authority-identity.ts`) — trim + lowercase compare, same normalization convention `lib/admin-users.ts` already uses for admin login. A wrong email returns a deliberately generic 401 — `"That email doesn't match our records for this approval."` — never reveals the real email or any other identifying detail, per the brief's explicit anti-probing requirement (verified: the correct email never appears anywhere in a failure response body).
+- **Rate limiting — DB-backed, not an in-memory map.** Unlike `app/api/admin/login/route.ts`'s per-instance `Map` limiter (which the comment there already admits doesn't hold up across Vercel serverless cold starts), this counts recent `AUTHORITY_IDENTITY_CHECK_FAILED` `audit_log` rows for the advice (`createdAt >= now - 15min`) before evaluating each attempt. 5 wrong attempts within the rolling window → the 6th request of any kind (including one with the *correct* email) gets `429` — a genuine lockout, not just "wrong guesses keep failing." Self-cleaning: once the oldest of the 5 ages past 15 minutes, the count drops and access resumes with no separate lockout-expiry field needed. Scoped per-token (per-advice), exactly as asked — not per-IP.
+- **Every wrong attempt writes a distinct `AUTHORITY_IDENTITY_CHECK_FAILED` audit_log row** (`actor: "Unverified visitor"`, `details: {attemptedEmail}`, real IP) — a rate-limited (6th+) attempt does *not* get its own row, since it never reaches the comparison step. A correct confirmation does **not** write any audit row (not asked for; only failures needed to be traceable per the brief).
+- **Session persistence**: on success, sets a per-token `HttpOnly`/`Secure`/`SameSite=lax` cookie (`mccia_authority_identity_{token}`, deliberately no `Max-Age`/`Expires` — a true browser-session cookie, cleared on browser close, matching "remember it for that browser session" literally). One cookie per token, not a single shared one, so an authority with more than one pending approval isn't forced to re-confirm on a second link just because they confirmed on a first. `app/authority-approval/[token]/page.tsx` reads it server-side via `cookies()` and passes `identityConfirmed` down; `AuthorityApprovalView` shows the button row directly when true, the email-confirm form otherwise.
+- **Real edge case found and resolved before writing any code, not silently defaulted:** `recommending_authorities.email` is nullable, and exactly one active, currently-used authority — **"DG"** — had no email on file, which would have permanently locked that authority out of ever confirming identity. Asked the human directly rather than guessing fail-open-vs-fail-closed; **the human provided DG's real email (`dg@mcciapune.com`), which was set directly in the real DB**, resolving the edge case outright. The route still fails closed defensively (`503`, generic message, does *not* count as a rate-limited attempt) for any future authority ever added without an email, so the gap can't silently reopen.
+- **Explicitly not touched, per the brief**: `/edit/[token]` (the submitter's resubmit link) — no identity gate added there; token TTL/generation mechanism/delivery unchanged; no login system introduced.
+- New files: `lib/advice/authority-identity.ts` (`emailsMatch`, `identityCookieName`, rate-limit constants), `lib/advice/authority-identity.test.ts` (5 tests), `lib/advice/authority-confirm-identity-route.test.ts` (8 tests: 404 bad token, 409 already-actioned, 409 expired, 429 after 5 failures with the email check never even reached, 400 malformed email, 503 + not-counted-as-an-attempt when the authority has no email, 401 + generic error + correctly-shaped audit row on a wrong email, 200 + cookie set on a case/whitespace-insensitive match). New Zod schema `authorityIdentityConfirmSchema` in `lib/validation/payment-advice.ts`.
+- **Verified live against the real dev server + real Neon DB** (not just mocked tests): inserted two real test advices routed to DG. On the first — 5 wrong-email attempts in a row, each a real `401` with the generic message, each writing its own real `AUTHORITY_IDENTITY_CHECK_FAILED` audit_log row (confirmed via direct query: 5 rows, correct `attemptedEmail`/IP each) — then a 6th attempt **using DG's actual correct email** still got `429`, proving the lockout blocks everyone, not just continued guessing. On the second — confirmed the raw page HTML shows only the "Continue" button (no `>Approve<`/`>Send Back<` anywhere) before confirming; a wrong email first, then `"  DG@MCCIAPUNE.com  "` (mixed case, whitespace) correctly matched and returned `200` with a real `Set-Cookie: mccia_authority_identity_{token}=1; Path=/; Secure; HttpOnly; SameSite=lax` header (no `Max-Age`/`Expires` — genuinely a session cookie, confirmed by inspecting the raw header); reloading the same page with that exact cookie attached then rendered `>Approve<`/`>Send Back<` directly, no re-prompt. Both test advices and all 6 audit rows deleted afterward. `tsc --noEmit`, ESLint, the full Vitest suite (187 passed, 6 pre-existing skipped), and `next build` all clean.
+
+### Shipped — Removed the obsolete paper-form code `MCCIA/ACTT/PAD/013` (Claude Code, 2026-08-06)
+That code was the old physical paper form's printed identifier (from the form this app replaced, `MCCIA/ACTT/PAD/013`) — no longer meaningful once the app got its own numbering (`MCCIA/<FY>/NNNN` and `CASH/MCCIA/<FY>/NNNN`). Removed everywhere it still appeared in the live app, per-surface audit below (not assumed — every surface individually checked, plus an exhaustive case-insensitive regex grep for `ACTT` and `PAD[ /_-]*013` across every file in the repo, confirming exactly these occurrences and no others, including checking `public/mccia-logo.png` isn't carrying it baked into pixels — it isn't, just the wordmark).
+
+**Per-surface findings:**
+- 🔧 **Public submission form header** (`app/page.tsx`) — was there, small eyebrow text above the "Payment Advice" H1. Removed the line entirely; no layout fix needed, the H1 simply becomes the first line in that stacked block, reads completely naturally.
+- 🔧 **Payment Advice PDF header** (`lib/pdf/PaymentAdviceDocument.tsx`) — was there, top-right of the header row (`styles.headerFormNo`, a fixed 92pt-wide right-aligned text), flanking the centered institutional title against the logo on the left. Text removed, but the **92pt-wide element itself was kept as an invisible spacer** (`styles.headerRightSpacer`) rather than deleted outright — the centered title (`headerCenter`, `flex: 1`) is centered *between* the logo and this element, so deleting the element too would have visibly shifted the title left, off its original balance. Rendered and visually inspected (`npx tsx scripts/render-test-pdf.tsx`) — header reads clean, centered, no visible gap or hint anything was removed.
+- ✅ **Cash Voucher PDF** (`lib/pdf/CashVoucherDocument.tsx`) — verified, not assumed: its masthead was never a 3-part layout like the Payment Advice PDF's — it's just `[logo][centered heading, flex: 1]`, two parts, no third right-side element ever existed here. Genuinely never carried this code. Re-rendered (`npm run pdf:test:cash-voucher`) and visually confirmed unaffected.
+- ✅ **Admin detail page, authority-approval page, edit/resubmit page, all 5 email templates** (`lib/email/templates.ts`) — zero occurrences in any of them, confirmed by the exhaustive grep, not by spot-checking pages alone.
+- ✅ **Every other source file** (constants, config, other components/templates) — zero occurrences.
+- **Found in 3 documentation files, deliberately left untouched, flagging per the "ask me if found somewhere unexpected" instruction**: `README.md`, `SPEC.md`, and this file's own §1 Project Overview all reference `MCCIA/ACTT/PAD/013` as **historical/background prose** — describing what the old paper form used to be called, past tense, while explaining why this app exists. That's accurate documentation of history, not a live surface showing stale branding to a real user, and the brief's own acceptance criteria scoped the "zero occurrences" grep to "components, PDF templates, email templates, constants files" specifically. Did not touch these three — say the word if you'd like them reworded too.
+- **Live-tested**: fresh Payment Advice PDF and Cash Voucher PDF rendered and visually inspected (screenshots taken via `qlmanage` thumbnailing, cropped to the header region) — both clean. Public form loaded from the real dev server (`curl http://localhost:3000/`) — confirmed zero occurrences in the rendered HTML and the header markup has no leftover empty tags. `tsc --noEmit`, ESLint, the full Vitest suite (187 passed, 6 pre-existing skipped — this was a text/layout-only change, no new tests needed), and `next build` all clean.
+
+### Shipped — Fixed "Your Name"/"Your Email" vertical misalignment (structural, not a margin hack) + a real stale-auto-fill bug (Claude Code, 2026-08-06)
+Two related public-form fixes to Section 1 "Submitter details." **No browser automation tool was available in this environment for any prior session's work** (documented repeatedly throughout this file) — both of these needed real rendering/interaction to verify honestly, so this session installed Playwright + a headless Chromium build as a **temporary devDependency**, used it to drive the actual page, then fully uninstalled it and cleaned the browser cache afterward (`git diff package.json package-lock.json` confirms zero trace left behind). Human explicitly approved this before it happened.
+
+**Issue 1 — alignment.** `components/ui/Field.tsx`'s helper-text `<p>` was conditionally rendered (`{help ? <p>...</p> : null}`) — "Your Name" has help copy, "Your Email" doesn't, so in the two-column grid "Your Name"'s input started lower than "Your Email"'s. **Checked git history first, per instruction, rather than assuming**: `git log --all -- components/ui/Field.tsx` shows exactly **one commit total — the initial build (`a782956`)**. This was never fixed and never regressed; it simply never landed, full stop.
+- **Fix is structural, in the shared component, not a one-off margin hack**: the helper-text `<p>` is now *always* rendered (same element, every field, whether or not `help` is passed), falling back to a non-breaking-space placeholder and `invisible` (not `display:none`) when there's no real help text — so a real line box is always reserved at a fixed height. This fixes every current and future two-column field pairing in the app that mixes fields with/without helper text, not just this one spot — and won't drift again if the copy changes, since there's no hardcoded pixel margin anywhere to get out of sync.
+- **Verified with real pixel measurements, not "looks close”**: Playwright `boundingBox()` on both inputs. Before: name input top `353px`, email input top `331px` (**22px off**). After: both **exactly `353px`, 0px difference**. Screenshot of the rendered section attached to this session's work confirms it reads as a normal, intentional layout — no visible gap where the old conditional text used to not be.
+
+**Issue 2 — email auto-fill.** The brief's premise was that this auto-fill was *never wired up at all*. **Checked before assuming, per instruction**: `resolveAutoFillEmail()` / `handleStaffMatch()` / `onMatch` wiring **already existed**, already committed to `main` (commit `36b6291`), and read as correct on paper. Live Playwright testing (after discovering `/api/staff/search` genuinely takes 0.5–1.9s round-trip in this dev environment — Neon connection overhead, not a bug, but enough to make a naive short test-wait look like a false failure) found the **real** bug: switching the Name field to a *different* matched staff member never updated or cleared a previously auto-filled email — `resolveAutoFillEmail`'s old "never overwrite a non-empty field" guard couldn't tell a *stale auto-fill* apart from a *real manual edit*, so once anything had been auto-filled once, it was permanently stuck.
+- **Fix**: `lib/form/staff-email-autofill.ts`'s `resolveAutoFillEmail()` now takes a third argument — `lastAutoFilledEmail`, whatever it itself last wrote into the field (or `null`) — and returns a `{type: "fill"|"clear"|"none"}` action instead of a bare string. A field holding exactly what was last auto-filled is a safe-to-replace stale value; anything else (a real manual edit, or an `/edit/[token]` resubmit prefill) is left alone, full stop, even across a match change.
+- `PaymentAdviceForm.tsx`'s `handleStaffMatch()` now mirrors `RecommendingAuthorityField`'s existing `lastStaffId` ref pattern exactly (`lastMatchedStaffIdRef` — only acts on an actual identity change, not every redundant `onMatch` call) plus a new `lastAutoFilledEmailRef` tracking what it last wrote, per the design above.
+- **Verified live via Playwright against the real dev server + real Neon DB**, using real staff rows found by direct query: "Ganesh Mate" (has `ganeshm@mcciapune.com` on file), "Ziya Ahmad" (active, no email on file), "Abhishek Awate" (has an email, used to prove the *update-to-a-new-person's-email* path, not just clear-to-empty), and a nonexistent name. All 6 acceptance-criteria scenarios confirmed: fills on a match with an email; leaves blank with no error on a match with none; **updates to the new person's email when switching between two matches that both have one**; **clears when switching to a match with none, or to no match at all** (both previously stuck on the stale value — now fixed); a manual edit survives further unrelated keystrokes in the Name field untouched.
+- Tests: `lib/form/staff-email-autofill.test.ts` rewritten for the new 3-arg/action-returning signature, 10 cases (up from 5) covering every scenario above at the pure-logic level.
+- `tsc --noEmit`, ESLint, the full Vitest suite (192 passed, 6 pre-existing skipped), and `next build` all clean. Playwright fully uninstalled afterward — not a permanent addition to this repo's toolchain; see the note above.
+
 ## 4. Open Items (verify before building on top of these)
 
 Status legend: 🔴 unverified / high risk · 🟡 unverified / lower risk · 🟢 verified
@@ -460,6 +510,14 @@ Status legend: 🔴 unverified / high risk · 🟡 unverified / lower risk · �
 - ⬜ **4 more surfaces found with the same "Payment Advice"/serial_no-regardless-of-mode inconsistency, flagged not fixed, per the human's explicit "ask me, don't fix silently" instruction — awaiting an answer:** (1) `lib/advice/authority-token.ts`'s already-actioned-link messages, (2) the Bill-Passed-For-save route's already-approved 409 message, (3) the invalid/expired-link generic error pages on `/authority-approval/[token]` and `/edit/[token]`, (4) the public intake form's "Submit Payment Advice"/"Resubmit" button and the confirmation screen's "Submit another Payment Advice" link. See the "Shipped" entry above for exact file/line detail on each.
 - 🟢 **"Missing" `CASH/MCCIA/2026-27/0003` investigated and fully explained 2026-08-01 — expected, not a bug.** See the "Investigated" entry above for the complete reconciliation (all 5 numbers 0001–0005 accounted for) and the code-level proof that the two numbering series are independent. No code change.
 - ⬜ **A genuine, real live production Cash submission (payee "AMAZON .IN", `serial_no MCCIA/2026-27/0036`, `cash_voucher_no CASH/MCCIA/2026-27/0004`, submitted 2026-08-01 13:50:56) was discovered sitting in the dev DB during the investigation above, mixed in among this engagement's own test data.** Not touched, not part of any test cleanup — flagging only because it's a reminder that this "dev" database has real, live MCCIA usage in it, not just test rows: any future test-data cleanup in this database must positively identify test rows (e.g. by payee name/email pattern used in that session) rather than assuming everything present is disposable.
+- 🟢 **Stale authority-approval link investigated 2026-08-05 — expected, not a bug.** The human clicked an old link and got "This link is not valid." Confirmed via a real DB query: no `payment_advices` row has that token, and the advice it belonged to (id `6a5afff7-...`) plus its entire `audit_log` history no longer exist at all. Cross-referenced against this file's own 2026-08-05 Gmail SMTP verification entry, which explicitly notes test rows were deleted afterward — matches exactly (same advice id, same action sequence: approve → receive → verify → payment-done). `authority_token` is confirmed **not** single-use (stays live after approval, to render the approved/rejected banner) — "invalid" fires only when the token matches zero rows. No code change.
+- 🟢 **Provider-level email send failures now write a distinct `EMAIL_SEND_FAILED` audit_log row, visible per-advice in the admin Audit Trail — shipped and live-verified 2026-08-05.** See the "Shipped" entry above. The "no email on file" case (`notifyAuthorityApproval`'s `!to` branch) was confirmed to remain a separate, unaffected code path — still just a console.warn + preview fallback, correctly never writes this new audit row.
+- 🟢 **CLOSED SECURITY GAP (2026-08-06): `/authority-approval/[token]` no longer lets anyone with the link Approve/Send Back without confirming the authority's own email first.** See the "Shipped" entry above for the full risk writeup, the DB-backed (not in-memory) rate-limiting design, and the live verification (5 wrong attempts → 401 each + distinct audit rows → 6th attempt, even with the correct email, → 429; correct email on a fresh token → 200 + session cookie → reload shows Approve/Send Back with no re-prompt). This was true and unmitigated since the Approval Workflow shipped 2026-07-30 — flagging that history here for anyone auditing how long the gap existed, not just that it's fixed now.
+- ⬜ **`recommending_authorities.email` being nullable was a real, live, active blocker for this identity gate — not just a theoretical edge case.** "DG" had no email on file until this session (now `dg@mcciapune.com`, set by the human directly). If a new authority is ever added without an email, that authority's real approvals will hard-block at the identity-confirm step (fails closed, `503`, by design) until an email is added — worth remembering the next time a new Recommending Authority is created via `/admin/staff`.
+- 🟢 **Obsolete paper-form code `MCCIA/ACTT/PAD/013` removed from the app — 2026-08-06.** See the "Shipped" entry above for the full per-surface audit. Public form and Payment Advice PDF header fixed (PDF header's balance preserved via an invisible same-width spacer, not left with a gap); Cash Voucher PDF, admin detail page, authority-approval page, edit page, and all 5 emails confirmed to have never carried it. Still present in `README.md`/`SPEC.md`/this file's §1 as historical prose describing the old paper process — deliberately not touched, flagged for the human to decide.
+- 🟢 **"Your Name"/"Your Email" vertical misalignment fixed structurally, 2026-08-06 — confirmed via git blame this was never previously fixed (one commit total on `Field.tsx`, the initial build), not a regression.** See the "Shipped" entry above. Pixel-measured before (22px off) and after (0px, exact) via a temporary Playwright install, not eyeballed.
+- 🟢 **Real bug fixed 2026-08-06: a stale auto-filled "Your Email" never updated or cleared when the matched staff member changed on the public form.** See the "Shipped" entry above for the full root-cause (the old guard couldn't tell a stale auto-fill apart from a manual edit) and the fix (`resolveAutoFillEmail()` now takes a third `lastAutoFilledEmail` argument and returns a fill/clear/none action). Live-verified via a temporary Playwright install against real staff rows, including the previously-broken "switch to a different match" paths.
+- 🟡 **`/api/staff/search` genuinely takes 0.5–1.9s round-trip in this dev environment** (observed directly via Playwright + `curl` timing during the session above) — not investigated further, not asked about, just noting it here since it's exactly the kind of latency that makes an impatient manual test of the typeahead *look* broken when it isn't. Worth knowing if the human (or a future agent) is ever debugging "the dropdown doesn't seem to show up" — give it a couple of seconds before concluding it's broken.
 
 ## 5. Do Not Touch Without Asking
 
@@ -498,6 +556,8 @@ Status legend: 🔴 unverified / high risk · 🟡 unverified / lower risk · �
 - **`payment_advices.cash_voucher_no` is a separate, independent number from `serial_no` — never conflate or repoint one reader at the other.** `serial_no` (format `MCCIA/<FY>/NNNN`) stays the DB/audit-log/Excel identifier for every submission regardless of mode; `cash_voucher_no` (format `CASH/MCCIA/<FY>/NNNN`) exists only for Cash-mode submissions and is purely what prints on the Cash Voucher PDF's "No." field. Excel export deliberately does not include `cash_voucher_no` — see the open item above; don't add it without asking.
 - **`serial_counters` now has a composite primary key `(financial_year, series)`, not just `financial_year`.** `series` is `'PAYMENT_ADVICE'` or `'CASH_VOUCHER'` — both allocated through the exact same `allocateNumber()` gapless `SELECT ... FOR UPDATE` primitive in `lib/serial.ts` (still covered by the existing "don't touch `lib/serial.ts`" rule above). Don't add a third series without checking whether the composite-key shape still fits, and don't collapse the two series back into a shared counter — they must stay independently gapless per-FY.
 - **`lib/advice/document-identity.ts` (`documentLabelFor()`/`displayNoFor()`) is now the single source of truth for "what do we call this submission, and what number do we show as primary."** Every server-rendered page and every email call site uses it (2026-08-01 session). Don't hardcode "Payment Advice"/`serial_no` in a new surface, or reimplement the NEFT/CASH branching inline — that's exactly the class of bug this file exists to prevent from recurring. If you add a new user-facing surface that names the document type or shows its reference number, use these two functions.
+- **`lib/email/notify.ts`'s `send()` and all 5 `notify*()` functions now take an optional trailing `adviceId` param (2026-08-05), used only to write an `EMAIL_SEND_FAILED` audit_log row on a real provider failure.** It's optional, not required — a caller without a real advice id in scope (there are none today, but a future one might exist) can simply omit it; the send still happens and still fails safely, just without that audit row. Don't confuse `EMAIL_SEND_FAILED` with the benign "no email on file" case — that one is `notifyAuthorityApproval`'s `!to` branch, which never reaches `send()` and by design never writes this row. If you add a 6th `notify*()` function, thread `adviceId` through it the same way for consistency.
+- **The authority-approval identity gate (2026-08-06) is deliberately not a login system — don't turn it into one.** `/authority-approval/[token]` requires confirming the authority's own email (scoped to that specific advice's `recommendingAuthorityId`, never a global lookup) before Approve/Send Back show. The rate limiter is intentionally DB-backed (counts recent `AUTHORITY_IDENTITY_CHECK_FAILED` audit_log rows), not an in-memory map like the admin login route's — don't "simplify" it back to a Map, that would reintroduce the exact per-instance/cold-start weakness the login route's own comment already flags. The per-token session cookie (`mccia_authority_identity_{token}`) deliberately has no `Max-Age`/`Expires` — don't add persistence beyond "this browser session" without asking. Don't extend this same gate to `/edit/[token]` without being asked — explicitly out of scope this session.
 
 ## 6. Session Log
 
@@ -505,6 +565,117 @@ Append one entry per session, newest at the top. Keep entries short — this is 
 (Note: this header was accidentally dropped in an earlier edit and restored 2026-08-01 by Claude Code — no content was lost, only the heading line.)
 
 ```
+2026-08-06 — Claude Code — Fixed two public-form bugs in Section 1
+"Submitter details". (1) "Your Name"/"Your Email" vertical misalignment:
+Field.tsx's helper-text <p> was conditionally rendered, so a field with
+help copy (Name) started its input lower than one without (Email). git
+blame showed Field.tsx has exactly one commit ever (the initial build) --
+never fixed before, not a regression. Fixed structurally in the shared
+component (always render the <p>, invisible NBSP fallback when no help
+text) rather than a margin hack, so it can't drift again and fixes every
+other two-column field pairing with the same latent issue too. (2) Email
+auto-fill: the brief assumed this was never wired up, but it already was
+(committed on main). The real bug, found via live testing: switching the
+Name field to a DIFFERENT matched staff member never updated/cleared a
+previously auto-filled email -- the old guard couldn't tell "stale
+auto-fill, safe to replace" apart from "real manual edit, never touch."
+Fixed by having resolveAutoFillEmail() track what it itself last wrote
+(3rd arg, lastAutoFilledEmail) and return a fill/clear/none action;
+PaymentAdviceForm.tsx now mirrors RecommendingAuthorityField's existing
+lastStaffId-ref "only react on an actual identity change" pattern.
+Neither bug could be honestly verified without real rendering/interaction
+-- no browser automation was available in this environment (documented
+gap all session), so with the human's explicit approval, installed
+Playwright + headless Chromium as a TEMPORARY devDependency, used it to
+pixel-measure both inputs (22px off -> 0px after) and drive the actual
+typeahead against real staff rows (one with an email, one without, one
+with no match, and two-different-matches-both-with-emails to prove the
+update path, not just clear), then fully uninstalled it afterward --
+git diff on package.json/package-lock.json shows zero trace left. Also
+discovered /api/staff/search genuinely takes 0.5-1.9s round-trip in this
+dev environment (Neon latency, not a bug) -- explains why a quick manual
+test could look broken when it isn't; noted as an open item. tsc, ESLint,
+full Vitest suite (192 passed, 6 pre-existing skipped), and next build
+all clean.
+2026-08-06 — Claude Code — Removed the obsolete old-paper-form code
+MCCIA/ACTT/PAD/013 (no longer meaningful now the app has its own
+MCCIA/<FY>/NNNN and CASH/MCCIA/<FY>/NNNN numbering). Exhaustive grep
+(case-insensitive, "ACTT" and "PAD[ /_-]*013") found exactly 5
+occurrences codebase-wide: app/page.tsx (public form eyebrow text,
+removed clean, H1 becomes first line), lib/pdf/PaymentAdviceDocument.tsx
+(PDF header, top-right, removed but kept the same 92pt-wide element as an
+invisible spacer so the centered institutional title stays balanced
+against the logo -- confirmed by rendering and visually inspecting the
+PDF, not left with a gap), plus README.md/SPEC.md/this file's own §1
+(historical prose describing the old paper process -- left untouched,
+flagged for the human, out of the brief's stated scope). Verified, not
+assumed, that Cash Voucher PDF never had it (its masthead is a 2-part
+[logo][centered heading] layout, never had a 3rd right-side element to
+begin with) and that the admin detail page, authority-approval page, edit
+page, and all 5 emails never carried it either. Also checked the logo PNG
+itself isn't hiding it baked into pixels -- it isn't. Live-tested: fresh
+Payment Advice + Cash Voucher PDFs rendered and visually inspected (header
+crops), public form loaded from the real dev server and confirmed clean
+in the actual rendered HTML. tsc, ESLint, full Vitest suite (187 passed,
+6 pre-existing skipped -- text/layout-only change, no new tests needed),
+and next build all clean.
+
+2026-08-06 — Claude Code — Closed a real security gap on
+/authority-approval/[token]: the link's unguessable token was the ONLY
+protection on Approve/Send Back, and it's distributed by a single email —
+if forwarded or an inbox compromised, anyone with the link could approve
+real money movement, no identity check ever happened. Added a lightweight
+"confirm your email" gate (not a login system) that hides Approve/Send
+Back until the visitor types the email on file for THIS advice's specific
+recommending_authority (scoped per-advice, not a global lookup). Wrong
+email -> generic 401, no leak of the real email. Rate-limited: 5 wrong
+attempts within 15 minutes -> 6th request of any kind (even the correct
+email) gets 429 -- deliberately DB-backed via counting recent
+AUTHORITY_IDENTITY_CHECK_FAILED audit_log rows rather than an in-memory
+map, so unlike the admin login route's limiter this survives Vercel
+serverless cold starts. Every wrong attempt writes its own distinct
+audit_log row (actor "Unverified visitor", attempted email + IP in
+details). On success, sets a per-token HttpOnly/Secure session cookie (no
+Max-Age -- cleared on browser close) so the authority isn't re-prompted on
+that same link. Found a real live blocker before writing code, not after:
+"DG" (an active, currently-used authority) had no email on file, which
+would have permanently locked DG out -- asked the human directly rather
+than guessing fail-open vs fail-closed; human supplied DG's real email
+(dg@mcciapune.com), set directly in the real DB. Gate still fails closed
+(503, not counted as an attempt) for any future authority added without
+an email, so this can't silently reopen. New files:
+lib/advice/authority-identity.ts, two new test files (13 tests total).
+Verified live against the real dev server + real Neon DB, not just mocked
+tests: ran the actual 5-wrong-attempts-then-locked-out sequence including
+proving a 6th attempt with the CORRECT email still 429s; confirmed the raw
+page HTML shows no Approve/Send Back markup pre-confirmation; confirmed
+the real Set-Cookie header shape (Secure/HttpOnly/SameSite=lax, no
+Max-Age); confirmed a follow-up page load WITH that cookie renders
+Approve/Send Back directly. Test rows + audit rows deleted after. tsc,
+ESLint, full Vitest suite (187 passed, 6 pre-existing skipped), and next
+build all clean.
+
+2026-08-05 — Claude Code — Provider-level email send failures now write a
+distinct EMAIL_SEND_FAILED audit_log row per advice (visible in that
+advice's Audit Trail on /admin/advice/[id]), instead of only a
+console.error only visible in server logs. Triggered by the human asking
+whether a real infra failure (like the missing Gmail env vars earlier
+this session) would actually be noticed — it wouldn't have been. The
+"no email on file" case stays exactly as-is: still console.warn + preview
+fallback in notifyAuthorityApproval's `!to` branch, never reaches send(),
+never writes this new row — confirmed distinct on purpose. send() and all
+5 notify*() functions gained an optional adviceId param; all 7 call sites
+already had the advice id in scope. Verified live: forced a wrong
+GMAIL_APP_PASSWORD via a throwaway script (never touched real .env.local),
+got a real Google 535 auth rejection, confirmed the audit row landed with
+that exact error text against a real existing advice row, deleted the one
+test audit row afterward. Also investigated a separate report from the
+human — a stale authority-approval link showing "not valid" — and
+confirmed via real DB query it was old, deleted test data from the
+Gmail SMTP verification session below, not a bug; no code change for
+that. tsc/lint/tests clean (174 passed, 6 skipped, same skip set as
+always).
+
 2026-08-05 — Claude Code — Switched live email from Resend to Gmail SMTP
 (nodemailer, service:"gmail", GMAIL_USER/GMAIL_APP_PASSWORD) as an interim
 provider — mcciapune.com DNS verification in Resend is taking longer than

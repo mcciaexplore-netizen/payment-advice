@@ -1,8 +1,10 @@
+import { cookies } from "next/headers";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { paymentAdvices, attachments, recommendingAuthorities } from "@/lib/db/schema";
 import { AuthorityApprovalView } from "@/components/authority/AuthorityApprovalView";
 import { authorityActionError } from "@/lib/advice/authority-token";
+import { identityCookieName } from "@/lib/advice/authority-identity";
 import { displayNoFor, documentLabelFor } from "@/lib/advice/document-identity";
 import { PaymentMode } from "@/lib/validation/payment-advice";
 
@@ -67,6 +69,9 @@ export default async function AuthorityApprovalPage({
     (a) => a.docType === "TAX_INVOICE" || a.docType === "APPROVAL_BUDGET",
   );
 
+  const cookieStore = await cookies();
+  const identityConfirmed = cookieStore.get(identityCookieName(token))?.value === "1";
+
   return (
     <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-8 px-6 py-10">
       <header className="border-b border-gray-200 pb-6">
@@ -88,6 +93,7 @@ export default async function AuthorityApprovalPage({
       <AuthorityApprovalView
         token={token}
         authorityName={authority?.authorityName ?? "Recommending Authority"}
+        identityConfirmed={identityConfirmed}
         alreadyApproved={!!advice.authorityApprovedAt}
         alreadyRejected={!!advice.authorityRejectedAt}
         approvedAt={advice.authorityApprovedAt?.toISOString() ?? null}

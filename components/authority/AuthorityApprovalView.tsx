@@ -25,6 +25,7 @@ function formatDateTime(iso: string) {
 export function AuthorityApprovalView({
   token,
   authorityName,
+  identityConfirmed,
   alreadyApproved,
   alreadyRejected,
   approvedAt,
@@ -36,6 +37,7 @@ export function AuthorityApprovalView({
 }: {
   token: string;
   authorityName: string;
+  identityConfirmed: boolean;
   alreadyApproved: boolean;
   alreadyRejected: boolean;
   approvedAt: string | null;
@@ -52,6 +54,33 @@ export function AuthorityApprovalView({
   const [remarks, setRemarks] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  const [confirmed, setConfirmed] = useState(identityConfirmed);
+  const [emailInput, setEmailInput] = useState("");
+  const [identityError, setIdentityError] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState(false);
+
+  async function confirmIdentity() {
+    setIdentityError(null);
+    setConfirming(true);
+    try {
+      const res = await fetch(`/api/authority-approval/${token}/confirm-identity`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: emailInput }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setIdentityError(data.error ?? "Could not confirm your email.");
+        return;
+      }
+      setConfirmed(true);
+    } catch {
+      setIdentityError("Could not reach the server. Please try again.");
+    } finally {
+      setConfirming(false);
+    }
+  }
 
   async function approve() {
     setError(null);
@@ -169,57 +198,96 @@ export function AuthorityApprovalView({
         )}
       </section>
 
-      {error ? (
-        <div className="rounded-md border border-[#b3261e]/30 bg-[#b3261e]/5 px-4 py-3 text-sm font-medium text-[#b3261e]">
-          {error}
-        </div>
-      ) : null}
+      {confirmed ? (
+        <>
+          {error ? (
+            <div className="rounded-md border border-[#b3261e]/30 bg-[#b3261e]/5 px-4 py-3 text-sm font-medium text-[#b3261e]">
+              {error}
+            </div>
+          ) : null}
 
-      <div className="flex gap-3">
-        <button
-          type="button"
-          onClick={approve}
-          disabled={submitting}
-          className="rounded-md bg-[#2e8b57] px-6 py-2.5 text-sm font-medium text-white hover:bg-[#2e8b57]/90 disabled:opacity-50"
-        >
-          {submitting ? "Approving…" : "Approve"}
-        </button>
-        <button
-          type="button"
-          onClick={() => setShowReject((v) => !v)}
-          disabled={submitting}
-          className="rounded-md border border-gray-300 px-6 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-        >
-          Send Back
-        </button>
-      </div>
-
-      {showReject ? (
-        <div className="flex flex-col gap-3 rounded-md border border-gray-300 bg-gray-50 p-4">
-          <label className="text-sm font-medium text-[#0b1f3a]">
-            Remarks for {submittedByName}{" "}
-            <span className="text-xs font-normal text-[#b3261e]">Required</span>
-          </label>
-          <textarea
-            value={remarks}
-            onChange={(e) => setRemarks(e.target.value)}
-            rows={3}
-            className="admin-filter-input"
-          />
-          <div className="flex gap-2">
+          <div className="flex gap-3">
             <button
               type="button"
-              onClick={reject}
-              disabled={submitting || !remarks.trim()}
-              className="rounded-md bg-[#0b1f3a] px-4 py-2 text-sm font-medium text-white hover:bg-[#0b1f3a]/90 disabled:opacity-50"
+              onClick={approve}
+              disabled={submitting}
+              className="rounded-md bg-[#2e8b57] px-6 py-2.5 text-sm font-medium text-white hover:bg-[#2e8b57]/90 disabled:opacity-50"
             >
-              {submitting ? "Sending…" : "Submit & Send Back"}
+              {submitting ? "Approving…" : "Approve"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowReject((v) => !v)}
+              disabled={submitting}
+              className="rounded-md border border-gray-300 px-6 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            >
+              Send Back
+            </button>
+          </div>
+
+          {showReject ? (
+            <div className="flex flex-col gap-3 rounded-md border border-gray-300 bg-gray-50 p-4">
+              <label className="text-sm font-medium text-[#0b1f3a]">
+                Remarks for {submittedByName}{" "}
+                <span className="text-xs font-normal text-[#b3261e]">Required</span>
+              </label>
+              <textarea
+                value={remarks}
+                onChange={(e) => setRemarks(e.target.value)}
+                rows={3}
+                className="admin-filter-input"
+              />
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={reject}
+                  disabled={submitting || !remarks.trim()}
+                  className="rounded-md bg-[#0b1f3a] px-4 py-2 text-sm font-medium text-white hover:bg-[#0b1f3a]/90 disabled:opacity-50"
+                >
+                  {submitting ? "Sending…" : "Submit & Send Back"}
+                </button>
+              </div>
+            </div>
+          ) : null}
+
+          <p className="text-xs text-gray-500">Reviewing as {authorityName}.</p>
+        </>
+      ) : (
+        <div className="flex flex-col gap-3 rounded-md border border-gray-300 bg-gray-50 p-4">
+          <label className="text-sm font-medium text-[#0b1f3a]">
+            Confirm your email to continue
+          </label>
+          <p className="text-xs text-gray-500">
+            For security, please confirm the email address this approval was sent to before
+            reviewing or actioning it.
+          </p>
+          <input
+            type="email"
+            value={emailInput}
+            onChange={(e) => setEmailInput(e.target.value)}
+            placeholder="you@mcciapune.com"
+            className="admin-filter-input"
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && emailInput.trim() && !confirming) confirmIdentity();
+            }}
+          />
+          {identityError ? (
+            <div className="rounded-md border border-[#b3261e]/30 bg-[#b3261e]/5 px-4 py-3 text-sm font-medium text-[#b3261e]">
+              {identityError}
+            </div>
+          ) : null}
+          <div>
+            <button
+              type="button"
+              onClick={confirmIdentity}
+              disabled={confirming || !emailInput.trim()}
+              className="rounded-md bg-[#0b1f3a] px-6 py-2.5 text-sm font-medium text-white hover:bg-[#0b1f3a]/90 disabled:opacity-50"
+            >
+              {confirming ? "Confirming…" : "Continue"}
             </button>
           </div>
         </div>
-      ) : null}
-
-      <p className="text-xs text-gray-500">Reviewing as {authorityName}.</p>
+      )}
     </div>
   );
 }

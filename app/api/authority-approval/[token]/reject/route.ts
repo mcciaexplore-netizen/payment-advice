@@ -83,6 +83,7 @@ export async function POST(
       editLink: `${new URL(req.url).origin}/edit/${editToken}`,
     },
     advice.submittedByEmail,
+    advice.id,
   );
 
   return NextResponse.json({ ok: true });

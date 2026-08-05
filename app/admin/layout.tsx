@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { LogoutButton } from "@/components/admin/LogoutButton";
@@ -7,6 +8,19 @@ const ROLE_LABELS: Record<string, string> = {
   PAYMENT_ADVICE: "Payment Advice",
   CASH_VOUCHER: "Cash Voucher",
   ALL: "All Access",
+};
+
+// `absolute` bypasses the root layout's "%s · MCCIA Payment Advice" title
+// template entirely, so admin tabs read "MCCIA Finance Admin" rather than
+// "MCCIA Finance Admin · MCCIA Payment Advice" — the two sections need to
+// look unmistakably different in a browser's tab strip, not like one is a
+// sub-page of the other. The `template` here scopes any future per-page
+// admin titles (e.g. "Vendors · MCCIA Finance Admin") the same way.
+export const metadata: Metadata = {
+  title: {
+    absolute: "MCCIA Finance Admin",
+    template: "%s · MCCIA Finance Admin",
+  },
 };
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {

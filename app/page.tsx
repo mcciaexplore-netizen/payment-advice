@@ -26,9 +26,6 @@ export default async function HomePage() {
           className="h-14 w-auto"
         />
         <div>
-          <p className="text-xs font-medium tracking-wide text-gray-500">
-            MCCIA / ACTT / PAD / 013
-          </p>
           <h1 className="font-heading text-3xl text-[#0b1f3a]">
             Payment Advice
           </h1>

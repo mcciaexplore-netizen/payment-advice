@@ -99,6 +99,7 @@ describe("POST /api/authority-approval/[token]/reject", () => {
         editLink: expect.stringContaining("/edit/new-edit-token"),
       }),
       pending.submittedByEmail,
+      ADVICE_ID,
     );
   });
 });
