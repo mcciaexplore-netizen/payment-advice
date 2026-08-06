@@ -47,7 +47,7 @@ Design system: Navy `#0B1F3A`, Forest green `#2E8B57`, Amber `#E8A33D`. Headings
 
 ## 3. Current State (update this every session)
 
-**Last updated:** 6 August 2026, by Claude Code (fixed the "Your Name"/"Your Email" vertical misalignment structurally in the shared `Field` component, and fixed a real bug where a stale auto-filled email was never updated/cleared when the matched staff member changed — see below)
+**Last updated:** 6 August 2026, by Claude Code (restyled the app icons — white background + rounded-square shape, replacing the earlier navy hard-edged square — see below; this entry also retroactively documents the original icon setup, which shipped in an earlier session but was never logged here, a gap closed now)
 
 ### Shipped — Phase 1 baseline (Claude Code)
 - Public form `/` (no login): submitter, payee (vendor typeahead), bill/reference, payment mode (NEFT/Cash), enclosures, mandatory Tax Invoice + Approval/Budget PDF attachments
@@ -464,6 +464,18 @@ Two related public-form fixes to Section 1 "Submitter details." **No browser aut
 - Tests: `lib/form/staff-email-autofill.test.ts` rewritten for the new 3-arg/action-returning signature, 10 cases (up from 5) covering every scenario above at the pure-logic level.
 - `tsc --noEmit`, ESLint, the full Vitest suite (192 passed, 6 pre-existing skipped), and `next build` all clean. Playwright fully uninstalled afterward — not a permanent addition to this repo's toolchain; see the note above.
 
+### Shipped — Site icons (originally 2026-08-05, retroactively documented) + restyled white/rounded (Claude Code, 2026-08-06)
+**Retroactive note first, since this was never actually logged here despite shipping in an earlier session** — a real process gap, flagged plainly rather than quietly patched over: `public/icon-192.png`, `public/icon-512.png`, `public/apple-touch-icon.png`, `public/manifest.json`, and a regenerated `app/favicon.ico` were all added 2026-08-05, wired into `app/layout.tsx`'s `metadata.icons`/`manifest` and a new `viewport.themeColor`, plus a distinct `title` per section (`app/layout.tsx` → "MCCIA Payment Advice", `app/admin/layout.tsx` → "MCCIA Finance Admin" via `title.absolute` so it doesn't inherit the root's title template). None of that wiring changed in this session — this was a pure asset regeneration, per the brief's explicit scope.
+
+**This session's change — restyled from navy hard-edged square to white rounded square:**
+- All 4 icon files regenerated from the same source (`public/mccia-logo.png`, trimmed to its real content bbox first — the source PNG has transparent padding around the actual wordmark). White background (`#ffffff`, not the navy `#0B1F3A` used originally), rounded-square shape at ~21% corner radius (matches the brief's "20-22%, ~40px/192px, ~110px/512px" convention), logo centered with the same ~14-16% margin as before so it doesn't touch the rounded edges or corners.
+- **"Rounded square" means real transparency, not a white shape drawn on a white square** (which would be invisible) — `icon-192.png`/`icon-512.png`/`favicon.ico` are `RGBA` with the four corners at `alpha=0` outside a white rounded-rect drawn via `ImageDraw.rounded_rectangle`. Confirmed by reading a corner pixel directly (`(0,0)` alpha `0`) and by compositing onto a dark background to make the transparent rounding visually obvious — a plain white-on-white render would have hidden this.
+- **`apple-touch-icon.png` is deliberately the one exception — plain, fully opaque `RGB` (no alpha channel at all), hard-edged square, no pre-baked rounding.** This is Apple's own long-standing documented convention: iOS applies its own corner mask (and historically gloss/shadow effects) to home-screen icons, so shipping a pre-rounded or transparent source produces double-rounding/corner artifacts once iOS's mask is applied on top. Confirmed this is still correct practice before shipping it this way, per the brief's explicit instruction not to just assume.
+- `favicon.ico` got the same rounded treatment as the two PNG icons, at all 3 embedded sizes (16/32/48px) — rounding is visible at every size; the logo's own legibility at 16px is still poor (a blur, not readable as "mccia") **regardless of background/shape, exactly as flagged in the original icon session — not a new problem, not something fixable without a separate icon-only mark being designed.**
+- `public/manifest.json` needed zero content changes — filenames are unchanged, already correct; only re-confirmed it still points to the right files after regeneration.
+- **Confirmed nothing else changed**: `git diff` on `app/layout.tsx`/`app/admin/layout.tsx`/`public/manifest.json` is empty — this really was an asset-only change, per the brief's explicit acceptance criterion.
+- **Live-verified**: every generated PNG actually opened and visually inspected (not just trusted from the generation code) — `icon-512.png`/`icon-192.png` composited onto a dark background to confirm the rounded transparency is real and correctly shaped; `apple-touch-icon.png` confirmed `RGB` mode with a genuinely opaque white corner pixel; all 3 favicon sizes rendered and inspected. Dev server re-checked afterward: both `/` and `/admin/login`'s rendered `<head>` still show identical icon/manifest/theme-color links to before, and `/icon-512.png`, `/apple-touch-icon.png`, `/favicon.ico`, `/manifest.json` all still serve `200 OK` with the new content. `tsc --noEmit` and ESLint clean (no code touched, so no test/build re-run was substantively needed beyond that sanity check).
+
 ## 4. Open Items (verify before building on top of these)
 
 Status legend: 🔴 unverified / high risk · 🟡 unverified / lower risk · 🟢 verified
@@ -518,6 +530,7 @@ Status legend: 🔴 unverified / high risk · 🟡 unverified / lower risk · �
 - 🟢 **"Your Name"/"Your Email" vertical misalignment fixed structurally, 2026-08-06 — confirmed via git blame this was never previously fixed (one commit total on `Field.tsx`, the initial build), not a regression.** See the "Shipped" entry above. Pixel-measured before (22px off) and after (0px, exact) via a temporary Playwright install, not eyeballed.
 - 🟢 **Real bug fixed 2026-08-06: a stale auto-filled "Your Email" never updated or cleared when the matched staff member changed on the public form.** See the "Shipped" entry above for the full root-cause (the old guard couldn't tell a stale auto-fill apart from a manual edit) and the fix (`resolveAutoFillEmail()` now takes a third `lastAutoFilledEmail` argument and returns a fill/clear/none action). Live-verified via a temporary Playwright install against real staff rows, including the previously-broken "switch to a different match" paths.
 - 🟡 **`/api/staff/search` genuinely takes 0.5–1.9s round-trip in this dev environment** (observed directly via Playwright + `curl` timing during the session above) — not investigated further, not asked about, just noting it here since it's exactly the kind of latency that makes an impatient manual test of the typeahead *look* broken when it isn't. Worth knowing if the human (or a future agent) is ever debugging "the dropdown doesn't seem to show up" — give it a couple of seconds before concluding it's broken.
+- 🟢 **Site icons restyled white/rounded-square 2026-08-06 (previously navy hard-edged square) — retroactively documented, see the "Shipped" entry above; this also closes the gap that the original 2026-08-05 icon session was never logged in this file at all.** `apple-touch-icon.png` deliberately stayed a plain opaque square with no rounding (confirmed correct per Apple's own convention, not assumed). Icon-only change — `app/layout.tsx`/`app/admin/layout.tsx`/`manifest.json` wiring untouched, confirmed via `git diff`.
 
 ## 5. Do Not Touch Without Asking
 
@@ -565,6 +578,28 @@ Append one entry per session, newest at the top. Keep entries short — this is 
 (Note: this header was accidentally dropped in an earlier edit and restored 2026-08-01 by Claude Code — no content was lost, only the heading line.)
 
 ```
+2026-08-06 — Claude Code — Restyled the 4 app icon files (icon-192.png,
+icon-512.png, apple-touch-icon.png, favicon.ico) from navy hard-edged
+square to white rounded-square, per the human's request. Regenerated from
+public/mccia-logo.png (trimmed to its real content bbox), white RGBA
+background with a real rounded-rect + transparent corners (~21% radius,
+confirmed via a direct corner-pixel alpha check and by compositing onto a
+dark background to make the transparency visible, not just trusted from
+the generation code). apple-touch-icon.png deliberately kept as a plain
+opaque RGB square, no rounding -- this is Apple's own documented
+convention (iOS applies its own mask; a pre-rounded/transparent source
+double-rounds), confirmed correct before shipping it that way rather than
+assumed. favicon.ico got the same rounded treatment at all 3 embedded
+sizes; 16px legibility is still poor regardless of shape/background, same
+known limitation flagged in the original icon session, not new. Pure
+asset regeneration -- confirmed via git diff that layout.tsx/admin
+layout.tsx/manifest.json wiring is completely untouched, and re-checked
+live against the dev server that both sections' rendered <head> and every
+icon URL still serve correctly. Also retroactively logged the ORIGINAL
+icon setup in this file's Shipped section -- it shipped 2026-08-05 but
+was never actually written up here, a real gap, now closed. tsc and
+ESLint clean (no code changed, so no test/build re-run needed beyond
+that).
 2026-08-06 — Claude Code — Fixed two public-form bugs in Section 1
 "Submitter details". (1) "Your Name"/"Your Email" vertical misalignment:
 Field.tsx's helper-text <p> was conditionally rendered, so a field with
