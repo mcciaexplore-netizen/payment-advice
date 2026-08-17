@@ -161,6 +161,12 @@ export const paymentAdviceFormSchema = z
       .number()
       .positive("Amount must be greater than 0")
       .multipleOf(0.01, "Amount can have at most 2 decimal places"),
+    // Basic/GST split — NEFT only. Optional at the object-shape level since
+    // Cash never submits either; required/validated for NEFT specifically
+    // in the superRefine below (gstAmount may legitimately be 0, so it
+    // can't just be "truthy required").
+    basicAmount: z.number().multipleOf(0.01, "Basic Amount can have at most 2 decimal places").optional(),
+    gstAmount: z.number().multipleOf(0.01, "GST Amount can have at most 2 decimal places").optional(),
     natureOfExpenditure: optionalTrimmed(),
     cashVoucherItems: z.array(cashVoucherItemSchema).default([]),
 
@@ -213,6 +219,37 @@ export const paymentAdviceFormSchema = z
           message: "Beneficiary Name is required for NEFT",
         });
       }
+      if (data.basicAmount === undefined || data.basicAmount <= 0) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["basicAmount"],
+          message: "Basic Amount is required",
+        });
+      }
+      if (data.gstAmount === undefined) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["gstAmount"],
+          message: "GST Amount is required — enter 0 if GST is not applicable",
+        });
+      } else if (data.gstAmount < 0) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["gstAmount"],
+          message: "GST Amount cannot be negative",
+        });
+      }
+      if (data.basicAmount !== undefined && data.gstAmount !== undefined && data.gstAmount >= 0) {
+        const computedTotal =
+          (Math.round(data.basicAmount * 100) + Math.round(data.gstAmount * 100)) / 100;
+        if (Math.round(data.amount * 100) !== Math.round(computedTotal * 100)) {
+          ctx.addIssue({
+            code: "custom",
+            path: ["amount"],
+            message: "Total does not match Basic Amount + GST Amount",
+          });
+        }
+      }
     }
     if (data.paymentMode === "CASH") {
       if (data.cashVoucherItems.length === 0) {
@@ -251,6 +288,20 @@ export const billPassedForSchema = (amount: number) =>
     .number()
     .positive("Bill passed for Rs. must be greater than 0")
     .max(amount, "Bill passed for Rs. cannot exceed the billed amount");
+
+/**
+ * "Record a Payment" — NEFT only (see AGENT_HANDOFF.md's multi-part payment
+ * model). The upper-bound cap (remaining = bill_passed_for - total_paid) is
+ * DB-dependent and enforced in the route itself, not here, same reasoning
+ * as billPassedForSchema needing `amount` passed in from outside.
+ */
+export const paymentEntrySchema = z.object({
+  amount: z
+    .number()
+    .positive("Payment amount must be greater than 0")
+    .multipleOf(0.01, "Payment amount can have at most 2 decimal places"),
+  remarks: requiredTrimmed("Remarks are required for every payment entry"),
+});
 
 export const sendBackSchema = z.object({
   adminRemarks: requiredTrimmed("Remarks are required to send an entry back"),

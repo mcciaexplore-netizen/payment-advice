@@ -100,6 +100,8 @@ export function PaymentAdviceForm({
     () => watchedCashVoucherItems ?? [],
     [watchedCashVoucherItems],
   );
+  const basicAmount = useWatch({ control, name: "basicAmount" });
+  const gstAmount = useWatch({ control, name: "gstAmount" });
 
   useEffect(() => {
     if (paymentMode !== "CASH") return;
@@ -114,6 +116,17 @@ export function PaymentAdviceForm({
       shouldValidate: false,
     });
   }, [appendCashVoucherItem, cashVoucherItems, paymentMode, setValue]);
+
+  // Total (Rs.) is always Basic Amount + GST Amount for NEFT — auto-
+  // calculated, read-only, updates live as either field changes. Mirrors
+  // the Cash Voucher line-item total's existing useEffect pattern above.
+  const neftTotal =
+    (Number.isFinite(basicAmount) ? Number(basicAmount) : 0) +
+    (Number.isFinite(gstAmount) ? Number(gstAmount) : 0);
+  useEffect(() => {
+    if (paymentMode !== "NEFT") return;
+    setValue("amount", Math.round(neftTotal * 100) / 100, { shouldValidate: false });
+  }, [paymentMode, neftTotal, setValue]);
 
   // Mirrors applyVendor's "fill only what's on file" pattern below, plus
   // RecommendingAuthorityField's "only react when the matched identity
@@ -334,13 +347,40 @@ export function PaymentAdviceForm({
           </Field>
           {paymentMode === "NEFT" ? (
             <>
-              <Field label="Amount (Rs.)" required error={errors.amount?.message}>
+              <Field
+                label="Basic Amount (Rs.) (*Subject to TDS)"
+                required
+                error={errors.basicAmount?.message}
+              >
                 <Input
                   type="number"
                   step="0.01"
                   min="0.01"
-                  hasError={!!errors.amount}
-                  {...register("amount", { valueAsNumber: true })}
+                  hasError={!!errors.basicAmount}
+                  {...register("basicAmount", { valueAsNumber: true })}
+                />
+              </Field>
+              <Field
+                label="GST Amount (Rs.)"
+                required
+                error={errors.gstAmount?.message}
+                help="Enter 0 if GST is not applicable"
+              >
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  hasError={!!errors.gstAmount}
+                  {...register("gstAmount", { valueAsNumber: true })}
+                />
+              </Field>
+              <Field label="Total (Rs.)" error={errors.amount?.message}>
+                <Input
+                  type="text"
+                  readOnly
+                  disabled
+                  value={neftTotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                  className="bg-gray-50"
                 />
               </Field>
               <div className="sm:col-span-2">

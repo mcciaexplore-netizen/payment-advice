@@ -11,6 +11,14 @@ const ROLE_LABELS: Record<AdminRole, string> = {
   ALL: "an All-Access",
 };
 
+export type PaymentEntryDisplay = {
+  id: string;
+  amount: string;
+  remarks: string;
+  paidAt: string;
+  paidBy: string;
+};
+
 /** Whether the current session's role "owns" this submission's payment
  * mode — a UI-only default, not a backend authorization wall (per the
  * human's explicit decision, see AGENT_HANDOFF.md): the ALL-role account
@@ -20,6 +28,42 @@ function ownsSubmissionType(role: AdminRole, paymentMode: "NEFT" | "CASH"): bool
   if (role === "ALL") return true;
   if (role === "PAYMENT_ADVICE") return paymentMode === "NEFT";
   return paymentMode === "CASH";
+}
+
+function formatDateTime(iso: string): string {
+  return new Date(iso).toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+}
+
+function formatMoney(value: string | number): string {
+  return Number(value).toLocaleString("en-IN", { minimumFractionDigits: 2 });
+}
+
+/** Every past entry, date/amount/remarks/who — the audit trail Finance and
+ * anyone reviewing later needs. NEFT only; Cash never has any of these. */
+function PaymentEntriesList({ entries }: { entries: PaymentEntryDisplay[] }) {
+  if (entries.length === 0) return null;
+  return (
+    <div className="flex flex-col gap-2">
+      <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Payment History</p>
+      <ul className="flex flex-col gap-2">
+        {entries.map((entry) => (
+          <li key={entry.id} className="rounded-md border border-gray-200 p-3 text-sm">
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="font-medium text-[#0b1f3a]">₹ {formatMoney(entry.amount)}</span>
+              <span className="text-xs text-gray-500">
+                {formatDateTime(entry.paidAt)} · {entry.paidBy}
+              </span>
+            </div>
+            <p className="mt-1 text-gray-600">{entry.remarks}</p>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
 }
 
 export function AdviceActions({
@@ -39,6 +83,8 @@ export function AdviceActions({
   sanctionedBy,
   paymentDoneAt,
   paymentDoneBy,
+  totalPaid,
+  paymentEntries,
   currentUserFullName,
   currentUserRole,
 }: {
@@ -58,6 +104,10 @@ export function AdviceActions({
   sanctionedBy: string | null;
   paymentDoneAt: string | null;
   paymentDoneBy: string | null;
+  /** NEFT only — Cash never writes to total_paid, stays "0.00" forever. */
+  totalPaid: string;
+  /** NEFT only — Cash never has payment_entries rows. */
+  paymentEntries: PaymentEntryDisplay[];
   currentUserFullName: string;
   currentUserRole: AdminRole;
 }) {
@@ -82,8 +132,15 @@ export function AdviceActions({
   const [verifying, setVerifying] = useState(false);
   const [verifyError, setVerifyError] = useState<string | null>(null);
 
+  // Cash only — the single one-shot terminal action, unchanged.
   const [markingPaymentDone, setMarkingPaymentDone] = useState(false);
   const [paymentDoneError, setPaymentDoneError] = useState<string | null>(null);
+
+  // NEFT only — "Record a Payment" (multi-part).
+  const [entryAmount, setEntryAmount] = useState("");
+  const [entryRemarks, setEntryRemarks] = useState("");
+  const [recordingPayment, setRecordingPayment] = useState(false);
+  const [recordPaymentError, setRecordPaymentError] = useState<string | null>(null);
 
   const [showSendBack, setShowSendBack] = useState(false);
   const [remarks, setRemarks] = useState("");
@@ -92,6 +149,12 @@ export function AdviceActions({
 
   const [editToken, setEditToken] = useState(initialEditToken);
   const [copied, setCopied] = useState(false);
+
+  // Locked once ≥1 payment has been recorded (NEFT) — see
+  // POST /api/admin/advice/[id]/route.ts. Cash's totalPaid is always
+  // "0.00", so this is always false for Cash.
+  const billPassedForLocked = paymentMode === "NEFT" && Number(totalPaid) > 0;
+  const hasPaymentEntries = paymentMode === "NEFT" && paymentEntries.length > 0;
 
   async function saveBillPassedFor() {
     setBillPassedForError(null);
@@ -145,6 +208,7 @@ export function AdviceActions({
     }
   }
 
+  // Cash only.
   async function markPaymentDone() {
     setPaymentDoneError(null);
     setMarkingPaymentDone(true);
@@ -164,6 +228,32 @@ export function AdviceActions({
       router.refresh();
     } finally {
       setMarkingPaymentDone(false);
+    }
+  }
+
+  // NEFT only.
+  async function recordPayment() {
+    setRecordPaymentError(null);
+    setRecordingPayment(true);
+    try {
+      const res = await fetch(`/api/admin/advice/${adviceId}/payment-entries`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          amount: Number(entryAmount),
+          remarks: entryRemarks,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setRecordPaymentError(data.error ?? "Could not record payment.");
+        return;
+      }
+      setEntryAmount("");
+      setEntryRemarks("");
+      router.refresh();
+    } finally {
+      setRecordingPayment(false);
     }
   }
 
@@ -198,41 +288,57 @@ export function AdviceActions({
   }
 
   if (status === "APPROVED") {
-    // paymentDoneAt/By is the going-forward source; sanctionedAt/By is the
-    // fallback for rows that were approved before Sanction was retired (see
-    // AGENT_HANDOFF.md) — both are never set together by the same action.
-    const doneAt = paymentDoneAt ?? sanctionedAt;
-    const doneBy = paymentDoneBy ?? sanctionedBy;
-    return (
-      <div className="flex flex-col gap-2 rounded-md border border-gray-200 p-4">
-        <p className="text-sm font-medium text-[#0b1f3a]">
-          Bill passed for Rs. {initialBillPassedFor ?? "—"}
-        </p>
-        <p className="text-sm text-gray-600">
-          Payment Done{doneBy ? ` — ${doneBy}` : ""}
-          {doneAt
-            ? ` on ${new Date(doneAt).toLocaleDateString("en-IN", { day: "2-digit", month: "2-digit", year: "numeric" })}`
-            : ""}
-          .
-        </p>
-        {paymentMode === "CASH" ? (
+    if (paymentMode === "CASH") {
+      // Unchanged — Cash's single one-shot terminal action.
+      const doneAt = paymentDoneAt ?? sanctionedAt;
+      const doneBy = paymentDoneBy ?? sanctionedBy;
+      return (
+        <div className="flex flex-col gap-2 rounded-md border border-gray-200 p-4">
+          <p className="text-sm font-medium text-[#0b1f3a]">
+            Bill passed for Rs. {initialBillPassedFor ?? "—"}
+          </p>
+          <p className="text-sm text-gray-600">
+            Payment Done{doneBy ? ` — ${doneBy}` : ""}
+            {doneAt
+              ? ` on ${new Date(doneAt).toLocaleDateString("en-IN", { day: "2-digit", month: "2-digit", year: "numeric" })}`
+              : ""}
+            .
+          </p>
           <a
             href={`/api/admin/advice/${adviceId}/cash-voucher-pdf`}
             className="inline-block w-fit rounded-md bg-[#0b1f3a] px-4 py-2 text-sm font-medium text-white hover:bg-[#0b1f3a]/90"
           >
             Download Cash Payment Voucher
           </a>
-        ) : (
-          <a
-            href={`/api/admin/advice/${adviceId}/pdf`}
-            className="inline-block w-fit rounded-md bg-[#0b1f3a] px-4 py-2 text-sm font-medium text-white hover:bg-[#0b1f3a]/90"
-          >
-            Download Payment Advice PDF
-          </a>
-        )}
+        </div>
+      );
+    }
+
+    // NEFT terminal state — Fully Payment Settled, reached via the payment
+    // entry that brought total_paid to (or past) bill_passed_for.
+    return (
+      <div className="flex flex-col gap-4 rounded-md border border-gray-200 p-4">
+        <div>
+          <p className="text-sm font-medium text-[#0b1f3a]">
+            Bill passed for Rs. {initialBillPassedFor ?? "—"}
+          </p>
+          <p className="text-sm text-gray-600">
+            Fully Payment Settled — ₹ {formatMoney(totalPaid)} paid.
+          </p>
+        </div>
+        <PaymentEntriesList entries={paymentEntries} />
+        <a
+          href={`/api/admin/advice/${adviceId}/pdf`}
+          className="inline-block w-fit rounded-md bg-[#0b1f3a] px-4 py-2 text-sm font-medium text-white hover:bg-[#0b1f3a]/90"
+        >
+          Download Payment Advice PDF
+        </a>
       </div>
     );
   }
+
+  const remaining =
+    initialBillPassedFor != null ? Number(initialBillPassedFor) - Number(totalPaid) : null;
 
   return (
     <div className="flex flex-col gap-6 rounded-md border border-gray-200 p-4">
@@ -254,27 +360,36 @@ export function AdviceActions({
 
       <div className="flex flex-col gap-2">
         <label className="text-sm font-medium text-[#0b1f3a]">Bill passed for Rs.</label>
-        <div className="flex items-center gap-2">
-          <input
-            type="number"
-            step="0.01"
-            min="0.01"
-            value={billPassedFor}
-            onChange={(e) => setBillPassedFor(e.target.value)}
-            className="admin-filter-input w-40"
-          />
-          <button
-            type="button"
-            onClick={saveBillPassedFor}
-            disabled={savingBillPassedFor || !billPassedFor}
-            className="rounded-md border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-50 disabled:opacity-50"
-          >
-            {savingBillPassedFor ? "Saving…" : "Save"}
-          </button>
-        </div>
-        {billPassedForError ? (
-          <p className="text-sm font-medium text-[#b3261e]">{billPassedForError}</p>
-        ) : null}
+        {billPassedForLocked ? (
+          <p className="text-sm text-gray-600">
+            ₹ {formatMoney(initialBillPassedFor ?? "0")} — locked, a payment has already been
+            recorded against this advice.
+          </p>
+        ) : (
+          <>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                step="0.01"
+                min="0.01"
+                value={billPassedFor}
+                onChange={(e) => setBillPassedFor(e.target.value)}
+                className="admin-filter-input w-40"
+              />
+              <button
+                type="button"
+                onClick={saveBillPassedFor}
+                disabled={savingBillPassedFor || !billPassedFor}
+                className="rounded-md border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-50 disabled:opacity-50"
+              >
+                {savingBillPassedFor ? "Saving…" : "Save"}
+              </button>
+            </div>
+            {billPassedForError ? (
+              <p className="text-sm font-medium text-[#b3261e]">{billPassedForError}</p>
+            ) : null}
+          </>
+        )}
       </div>
 
       {editToken ? (
@@ -369,9 +484,9 @@ export function AdviceActions({
       ) : null}
 
       {/* "Ready for Payment" is automatic the moment verifiedAt is set — no
-          click required. Sanction no longer exists as an active step (see
-          AGENT_HANDOFF.md); Payment Done is the new terminal action. */}
-      {verifiedAt && !paymentDoneAt ? (
+          click required. Cash: unchanged single "Mark Payment Done" action.
+          NEFT: multi-part "Record a Payment" (see AGENT_HANDOFF.md). */}
+      {verifiedAt && paymentMode === "CASH" && !paymentDoneAt ? (
         <div className="flex flex-col gap-3 rounded-md border border-[#2e8b57]/30 bg-[#2e8b57]/5 p-4 text-sm">
           <p className="font-medium text-[#1e5c39]">Ready for Payment.</p>
           {ownsSubmissionType(currentUserRole, paymentMode) ? (
@@ -405,17 +520,95 @@ export function AdviceActions({
         </div>
       ) : null}
 
+      {verifiedAt && paymentMode === "NEFT" ? (
+        <div className="flex flex-col gap-4 rounded-md border border-[#2e8b57]/30 bg-[#2e8b57]/5 p-4 text-sm">
+          <div>
+            <p className="font-medium text-[#1e5c39]">
+              {Number(totalPaid) > 0 ? "Partial Payment Done." : "Ready for Payment."}
+            </p>
+            {remaining !== null ? (
+              <p className="mt-1 text-[#1e5c39]">
+                Paid so far: ₹ {formatMoney(totalPaid)} of ₹ {formatMoney(initialBillPassedFor ?? "0")}{" "}
+                — ₹ {formatMoney(remaining)} remaining.
+              </p>
+            ) : null}
+          </div>
+
+          <PaymentEntriesList entries={paymentEntries} />
+
+          {ownsSubmissionType(currentUserRole, paymentMode) ? (
+            !billPassedFor ? (
+              <p className="text-xs text-gray-500">
+                &quot;Bill passed for Rs.&quot; above must be saved before recording a payment.
+              </p>
+            ) : (
+              <div className="flex flex-col gap-2 rounded-md border border-[#2e8b57]/30 bg-white p-3">
+                <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                  Record a Payment
+                </p>
+                <label className="text-sm font-medium text-[#0b1f3a]">
+                  Amount (Rs.)
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0.01"
+                    max={remaining ?? undefined}
+                    value={entryAmount}
+                    onChange={(e) => setEntryAmount(e.target.value)}
+                    className="admin-filter-input mt-1 w-full"
+                  />
+                </label>
+                <label className="text-sm font-medium text-[#0b1f3a]">
+                  Remarks <span className="text-xs font-normal text-[#b3261e]">Required</span>
+                  <textarea
+                    value={entryRemarks}
+                    onChange={(e) => setEntryRemarks(e.target.value)}
+                    rows={2}
+                    className="admin-filter-input mt-1 w-full"
+                  />
+                </label>
+                {recordPaymentError ? (
+                  <p className="text-sm font-medium text-[#b3261e]">{recordPaymentError}</p>
+                ) : null}
+                <p className="text-xs text-gray-500">
+                  Will be recorded as paid by <span className="font-medium">{currentUserFullName}</span>.
+                </p>
+                <button
+                  type="button"
+                  onClick={recordPayment}
+                  disabled={recordingPayment || !entryAmount || !entryRemarks.trim()}
+                  className="w-fit rounded-md bg-[#2e8b57] px-4 py-2 text-sm font-medium text-white hover:bg-[#2e8b57]/90 disabled:opacity-50"
+                >
+                  {recordingPayment ? "Recording…" : "Record Payment"}
+                </button>
+              </div>
+            )
+          ) : (
+            <p className="text-xs text-gray-500">
+              Only {ROLE_LABELS.PAYMENT_ADVICE} account (or an All-Access account) can record a
+              payment.
+            </p>
+          )}
+        </div>
+      ) : null}
+
       <div className="flex gap-3">
-        <button
-          type="button"
-          onClick={() => setShowSendBack((v) => !v)}
-          className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-        >
-          Send Back
-        </button>
+        {hasPaymentEntries ? (
+          <p className="text-xs text-gray-500">
+            Send Back is unavailable once a payment has been recorded against this advice.
+          </p>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setShowSendBack((v) => !v)}
+            className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+          >
+            Send Back
+          </button>
+        )}
       </div>
 
-      {showSendBack ? (
+      {showSendBack && !hasPaymentEntries ? (
         <div className="flex flex-col gap-3 rounded-md border border-gray-300 bg-gray-50 p-4">
           <label className="text-sm font-medium text-[#0b1f3a]">
             Remarks for Submitter <span className="text-xs font-normal text-[#b3261e]">Required</span>

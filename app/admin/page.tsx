@@ -20,14 +20,18 @@ import { displayNoFor } from "@/lib/advice/document-identity";
 
 type SearchParamsRecord = Record<string, string | string[] | undefined>;
 
-// The 6 real pipeline-stage tabs (everything except "all") — also drives
+// The real pipeline-stage tabs (everything except "all") — also drives
 // the ALL-role account's summary dashboard cards, one per stage.
+// "partial_payment_done"/"fully_payment_settled" are NEFT-only; "payment_done"
+// is now CASH-only — see lib/admin/filters.ts.
 const DASHBOARD_STAGE_TABS: { tab: AdminTab; label: string }[] = [
   { tab: "waiting_authority", label: "Waiting on Authority" },
   { tab: "awaiting_finance", label: "Awaiting Finance Review" },
   { tab: "received_in_process", label: "Received & In Process" },
   { tab: "verified_ready_payment", label: "Verified — Ready for Payment" },
-  { tab: "payment_done", label: "Payment Done" },
+  { tab: "partial_payment_done", label: "Partial Payment Done" },
+  { tab: "fully_payment_settled", label: "Fully Payment Settled" },
+  { tab: "payment_done", label: "Payment Done (Cash)" },
   { tab: "sent_back", label: "Sent Back" },
 ];
 
@@ -113,6 +117,8 @@ export default async function AdminListPage({
     awaitingFinanceCount,
     receivedCount,
     verifiedCount,
+    partialPaymentDoneCount,
+    fullyPaymentSettledCount,
     paymentDoneCount,
     sentBackCount,
   ] = await Promise.all([
@@ -162,6 +168,14 @@ export default async function AdminListPage({
     db
       .select({ count: count(), sum: sum(paymentAdvices.amount) })
       .from(paymentAdvices)
+      .where(and(baseWhere, buildTabCondition("partial_payment_done"))),
+    db
+      .select({ count: count(), sum: sum(paymentAdvices.amount) })
+      .from(paymentAdvices)
+      .where(and(baseWhere, buildTabCondition("fully_payment_settled"))),
+    db
+      .select({ count: count(), sum: sum(paymentAdvices.amount) })
+      .from(paymentAdvices)
       .where(and(baseWhere, buildTabCondition("payment_done"))),
     db
       .select({ count: count(), sum: sum(paymentAdvices.amount) })
@@ -182,6 +196,14 @@ export default async function AdminListPage({
     verified_ready_payment: {
       count: verifiedCount[0]?.count ?? 0,
       sum: Number(verifiedCount[0]?.sum ?? 0),
+    },
+    partial_payment_done: {
+      count: partialPaymentDoneCount[0]?.count ?? 0,
+      sum: Number(partialPaymentDoneCount[0]?.sum ?? 0),
+    },
+    fully_payment_settled: {
+      count: fullyPaymentSettledCount[0]?.count ?? 0,
+      sum: Number(fullyPaymentSettledCount[0]?.sum ?? 0),
     },
     payment_done: {
       count: paymentDoneCount[0]?.count ?? 0,
@@ -227,7 +249,7 @@ export default async function AdminListPage({
       </div>
 
       {session?.adminRole === "ALL" ? (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8">
           {DASHBOARD_STAGE_TABS.map(({ tab: stageTab, label }) => (
             <Link
               key={stageTab}
@@ -274,7 +296,21 @@ export default async function AdminListPage({
           searchParams={sp}
         />
         <TabLink
-          label="Payment Done"
+          label="Partial Payment Done"
+          tab="partial_payment_done"
+          activeTab={tab}
+          count={partialPaymentDoneCount[0]?.count ?? 0}
+          searchParams={sp}
+        />
+        <TabLink
+          label="Fully Payment Settled"
+          tab="fully_payment_settled"
+          activeTab={tab}
+          count={fullyPaymentSettledCount[0]?.count ?? 0}
+          searchParams={sp}
+        />
+        <TabLink
+          label="Payment Done (Cash)"
           tab="payment_done"
           activeTab={tab}
           count={paymentDoneCount[0]?.count ?? 0}

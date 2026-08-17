@@ -226,6 +226,8 @@ export async function POST(
           billNo: values.billNo,
           billDate: values.billDate,
           amount: values.amount.toFixed(2),
+          basicAmount: values.paymentMode === "NEFT" ? values.basicAmount!.toFixed(2) : null,
+          gstAmount: values.paymentMode === "NEFT" ? values.gstAmount!.toFixed(2) : null,
           natureOfExpenditure:
             values.paymentMode === "CASH"
               ? values.cashVoucherItems.map((item) => item.description).join("; ")

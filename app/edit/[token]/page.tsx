@@ -101,6 +101,11 @@ export default async function EditPage({
           deliveryChallanNo: advice.deliveryChallanNo ?? undefined,
           deliveryChallanDate: advice.deliveryChallanDate ?? undefined,
           amount: Number(advice.amount),
+          // Old NEFT rows submitted before the Basic/GST split only have
+          // `amount` — leave these blank rather than guessing a split, so
+          // the submitter supplies real Basic/GST values on resubmit.
+          basicAmount: advice.basicAmount !== null ? Number(advice.basicAmount) : undefined,
+          gstAmount: advice.gstAmount !== null ? Number(advice.gstAmount) : undefined,
           natureOfExpenditure: advice.natureOfExpenditure,
           cashVoucherItems: voucherItems.map((item) => ({
             description: item.description,

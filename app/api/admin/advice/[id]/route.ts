@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { eq } from "drizzle-orm";
+import { count, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { paymentAdvices } from "@/lib/db/schema";
+import { paymentAdvices, paymentEntries } from "@/lib/db/schema";
 import { billPassedForSchema } from "@/lib/validation/payment-advice";
 
 export const runtime = "nodejs";
@@ -26,6 +26,26 @@ export async function PATCH(
   if (advice.status === "APPROVED") {
     return NextResponse.json(
       { error: "This Payment Advice is already approved and can no longer be edited." },
+      { status: 409 },
+    );
+  }
+  // Once Finance has recorded at least one payment entry against this
+  // advice (NEFT's multi-part payment model — see AGENT_HANDOFF.md),
+  // "Bill passed for Rs." becomes the fixed cap those entries were measured
+  // against; changing it after the fact could put total_paid above (or
+  // below, confusingly) a cap that already governed real money already
+  // paid out. Cash Voucher never records payment_entries, so this never
+  // affects Cash rows.
+  const [{ count: existingEntryCount }] = await db
+    .select({ count: count() })
+    .from(paymentEntries)
+    .where(eq(paymentEntries.paymentAdviceId, id));
+  if (existingEntryCount > 0) {
+    return NextResponse.json(
+      {
+        error:
+          "Bill passed for Rs. is locked once a payment has been recorded against this advice.",
+      },
       { status: 409 },
     );
   }

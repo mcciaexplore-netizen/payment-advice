@@ -120,6 +120,8 @@ function buildFormData(taxInvoiceFileName: string) {
   fd.set("billNo", "INV-101");
   fd.set("billDate", "2026-07-01");
   fd.set("amount", "1500.00");
+  fd.set("basicAmount", "1500.00");
+  fd.set("gstAmount", "0");
   fd.set("natureOfExpenditure", "Corrected on resubmission");
   fd.set("paymentMode", "NEFT");
   fd.set("bankAccountNo", "1234567890");

@@ -39,6 +39,75 @@ const baseCashSubmission = {
   ],
 };
 
+const baseNeftSubmission = {
+  submittedByName: "Priya Sharma",
+  submittedByEmail: "priya@example.com",
+  submittedByDepartment: "Accounts",
+  recommendingAuthorityId: "11111111-1111-4111-8111-111111111111",
+  payeeName: "Acme Supplies",
+  payeeAddress: "Pune",
+  billNo: "INV-1",
+  billDate: "2026-07-20",
+  formDate: "2026-07-21",
+  paymentMode: "NEFT" as const,
+  natureOfExpenditure: "Office supplies",
+  bankAccountNo: "123456789012",
+  bankIfsc: "HDFC0001234",
+  beneficiaryName: "Acme Supplies",
+  cashVoucherItems: [],
+  basicAmount: 1000,
+  gstAmount: 180,
+  amount: 1180,
+};
+
+describe("NEFT Basic/GST split validation", () => {
+  it("accepts a NEFT submission when basicAmount + gstAmount equals amount", () => {
+    expect(paymentAdviceFormSchema.safeParse(baseNeftSubmission).success).toBe(true);
+  });
+
+  it("accepts gstAmount of exactly 0 (GST not applicable)", () => {
+    const result = paymentAdviceFormSchema.safeParse({
+      ...baseNeftSubmission,
+      gstAmount: 0,
+      amount: 1000,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects a missing basicAmount", () => {
+    const rest: Record<string, unknown> = { ...baseNeftSubmission };
+    delete rest.basicAmount;
+    const result = paymentAdviceFormSchema.safeParse(rest);
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.some((issue) => issue.path.join(".") === "basicAmount")).toBe(true);
+    }
+  });
+
+  it("rejects a missing gstAmount — must be explicit, even when 0", () => {
+    const rest: Record<string, unknown> = { ...baseNeftSubmission };
+    delete rest.gstAmount;
+    const result = paymentAdviceFormSchema.safeParse(rest);
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.some((issue) => issue.path.join(".") === "gstAmount")).toBe(true);
+    }
+  });
+
+  it("rejects a negative gstAmount", () => {
+    const result = paymentAdviceFormSchema.safeParse({ ...baseNeftSubmission, gstAmount: -5 });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects a total that doesn't match basicAmount + gstAmount", () => {
+    const result = paymentAdviceFormSchema.safeParse({ ...baseNeftSubmission, amount: 999 });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.some((issue) => issue.path.join(".") === "amount")).toBe(true);
+    }
+  });
+});
+
 describe("Cash voucher validation", () => {
   it("sums item amounts in paise", () => {
     expect(calculateCashVoucherTotal(baseCashSubmission.cashVoucherItems)).toBe(150.5);

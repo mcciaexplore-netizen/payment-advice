@@ -23,6 +23,7 @@ vi.mock("@/lib/db", () => ({
 import {
   notifyAuthorityApproval,
   notifyPaymentDone,
+  notifyPaymentEntry,
   notifySentBack,
   notifySubmissionConfirmation,
   notifyVerified,
@@ -68,6 +69,20 @@ const paymentDoneData = {
   payeeName: "Acme Supplies",
   amount: "850.00",
   formDate: "30/07/2026",
+};
+
+const paymentEntryData = {
+  displayNo: "MCCIA/2026-27/0050",
+  submittedByName: "Priya Sharma",
+  documentLabel: "Payment Advice",
+  payeeName: "Acme Supplies",
+  entryAmount: "400.00",
+  remarks: "Basic Amount paid now",
+  isFinal: false,
+  totalPaid: "400.00",
+  billPassedFor: "1,000.00",
+  remaining: "600.00",
+  formDate: "01/08/2026",
 };
 
 const authorityApprovalData = {
@@ -123,6 +138,15 @@ describe("lib/email/notify.ts", () => {
       await notifyAuthorityApproval(authorityApprovalData, "authority@example.com");
       expect(mocks.gmailSendMail).not.toHaveBeenCalled();
       expect(mocks.resendSend).not.toHaveBeenCalled();
+    });
+
+    it("notifyPaymentEntry stays in preview mode by default too", async () => {
+      await notifyPaymentEntry(paymentEntryData, "submitter@example.com");
+      expect(mocks.gmailSendMail).not.toHaveBeenCalled();
+      expect(infoSpy).toHaveBeenCalledWith(
+        expect.stringContaining("[Email preview: payment entry (partial)]"),
+        expect.anything(),
+      );
     });
   });
 
@@ -198,6 +222,29 @@ describe("lib/email/notify.ts", () => {
         expect.objectContaining({
           to: "submitter@example.com",
           subject: "Payment Advice MCCIA/2026-27/0009 — Payment Done",
+        }),
+      );
+    });
+
+    it("notifyPaymentEntry sends a partial-payment subject when isFinal is false", async () => {
+      await notifyPaymentEntry(paymentEntryData, "submitter@example.com");
+      expect(mocks.gmailSendMail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          to: "submitter@example.com",
+          subject: "Payment Advice MCCIA/2026-27/0050 — Partial Payment Recorded",
+        }),
+      );
+    });
+
+    it("notifyPaymentEntry sends a final-payment subject when isFinal is true", async () => {
+      await notifyPaymentEntry(
+        { ...paymentEntryData, isFinal: true, totalPaid: "1,000.00", remaining: "0.00" },
+        "submitter@example.com",
+      );
+      expect(mocks.gmailSendMail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          to: "submitter@example.com",
+          subject: "Payment Advice MCCIA/2026-27/0050 — Payment Complete",
         }),
       );
     });

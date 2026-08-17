@@ -6,6 +6,7 @@ import {
   attachments,
   auditLog,
   cashVoucherItems,
+  paymentEntries,
   recommendingAuthorities,
 } from "@/lib/db/schema";
 import { StatusChip } from "@/components/admin/StatusChip";
@@ -82,27 +83,34 @@ export default async function AdviceDetailPage({
   ]);
   if (!advice) notFound();
 
-  const [authority, adviceAttachments, adviceAuditLog, voucherItems] = await Promise.all([
-    advice.recommendingAuthorityId
-      ? db
-          .select()
-          .from(recommendingAuthorities)
-          .where(eq(recommendingAuthorities.id, advice.recommendingAuthorityId))
-          .limit(1)
-          .then((rows) => rows[0])
-      : Promise.resolve(undefined),
-    db.select().from(attachments).where(eq(attachments.paymentAdviceId, id)),
-    db
-      .select()
-      .from(auditLog)
-      .where(eq(auditLog.paymentAdviceId, id))
-      .orderBy(desc(auditLog.createdAt)),
-    db
-      .select()
-      .from(cashVoucherItems)
-      .where(eq(cashVoucherItems.paymentAdviceId, id))
-      .orderBy(cashVoucherItems.sortOrder),
-  ]);
+  const [authority, adviceAttachments, adviceAuditLog, voucherItems, advicePaymentEntries] =
+    await Promise.all([
+      advice.recommendingAuthorityId
+        ? db
+            .select()
+            .from(recommendingAuthorities)
+            .where(eq(recommendingAuthorities.id, advice.recommendingAuthorityId))
+            .limit(1)
+            .then((rows) => rows[0])
+        : Promise.resolve(undefined),
+      db.select().from(attachments).where(eq(attachments.paymentAdviceId, id)),
+      db
+        .select()
+        .from(auditLog)
+        .where(eq(auditLog.paymentAdviceId, id))
+        .orderBy(desc(auditLog.createdAt)),
+      db
+        .select()
+        .from(cashVoucherItems)
+        .where(eq(cashVoucherItems.paymentAdviceId, id))
+        .orderBy(cashVoucherItems.sortOrder),
+      // NEFT only in practice — Cash never inserts here (see AGENT_HANDOFF.md).
+      db
+        .select()
+        .from(paymentEntries)
+        .where(eq(paymentEntries.paymentAdviceId, id))
+        .orderBy(paymentEntries.paidAt),
+    ]);
 
   return (
     <div className="flex flex-col gap-8">
@@ -149,7 +157,15 @@ export default async function AdviceDetailPage({
           </Section>
 
           <Section title="Money">
-            <Row label="Amount Rs." value={formatAmount(advice.amount)} />
+            {advice.basicAmount !== null && advice.gstAmount !== null ? (
+              <>
+                <Row label="Basic Amount Rs. (*Subject to TDS)" value={formatAmount(advice.basicAmount)} />
+                <Row label="GST Amount Rs." value={formatAmount(advice.gstAmount)} />
+                <Row label="Total Rs." value={formatAmount(advice.amount)} />
+              </>
+            ) : (
+              <Row label="Amount Rs." value={formatAmount(advice.amount)} />
+            )}
             <Row label="Bill passed for Rs." value={formatAmount(advice.billPassedFor)} />
           </Section>
 
@@ -318,6 +334,14 @@ export default async function AdviceDetailPage({
             sanctionedBy={advice.sanctionedBy}
             paymentDoneAt={advice.paymentDoneAt?.toISOString() ?? null}
             paymentDoneBy={advice.paymentDoneBy}
+            totalPaid={advice.totalPaid}
+            paymentEntries={advicePaymentEntries.map((entry) => ({
+              id: entry.id,
+              amount: entry.amount,
+              remarks: entry.remarks,
+              paidAt: entry.paidAt.toISOString(),
+              paidBy: entry.paidBy,
+            }))}
             currentUserFullName={session?.fullName ?? "Unknown"}
             currentUserRole={session?.adminRole ?? "ALL"}
           />

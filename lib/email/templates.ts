@@ -153,6 +153,55 @@ export function renderPaymentDoneEmail(data: PaymentDoneEmailData) {
   };
 }
 
+/**
+ * One email per payment_entries row — NEFT (Payment Advice) only, per the
+ * multi-part payment model (see AGENT_HANDOFF.md). Deliberately not a
+ * cumulative "payment summary" — each email is accurate only to the moment
+ * that specific entry was recorded, showing that entry's own amount and
+ * remarks, and stating plainly whether it was a partial payment (with the
+ * remaining balance) or the final, fully-settling one. Two payments on one
+ * advice send two separate emails.
+ */
+export interface PaymentEntryEmailData {
+  displayNo: string;
+  submittedByName: string;
+  documentLabel: string;
+  payeeName: string;
+  entryAmount: string | number;
+  remarks: string;
+  isFinal: boolean;
+  totalPaid: string | number;
+  billPassedFor: string | number;
+  remaining: string | number;
+  formDate: string;
+}
+
+const PAYMENT_ENTRY_TEMPLATE = shell("#2E8B57", `<tr><td style="padding:32px;"><p style="margin:0 0 4px;font-size:13px;color:#2E8B57;text-transform:uppercase;letter-spacing:.5px;font-weight:600;">{{status_label}}</p><h1 style="margin:0 0 20px;font-family:Georgia,'Times New Roman',serif;font-size:22px;color:#0B1F3A;">{{display_no}}</h1><p style="margin:0 0 20px;font-size:15px;line-height:1.6;color:#1F2937;">Dear {{submitted_by_name}}, a payment of <strong>₹ {{entry_amount}}</strong> has been recorded against your {{document_label}} {{display_no}}.{{status_sentence}}</p>${details([["Payee", "{{payee_name}}"], ["This Payment", "₹ {{entry_amount}}"], ["Remarks", "{{remarks}}"], ["Paid So Far", "₹ {{total_paid}} of ₹ {{bill_passed_for}}"], ["Balance Remaining", "₹ {{remaining}}"], ["Date", "{{form_date}}"]])}</td></tr>`);
+
+export function renderPaymentEntryEmail(data: PaymentEntryEmailData) {
+  const statusLabel = data.isFinal ? "Payment Complete" : "Partial Payment Recorded";
+  const statusSentence = data.isFinal
+    ? " This is the final payment — the full billed amount has now been settled."
+    : " This is a partial payment; ₹ {{remaining}} remains to be paid.";
+  return {
+    subject: `${data.documentLabel} ${data.displayNo} — ${statusLabel}`,
+    html: replaceTokens(PAYMENT_ENTRY_TEMPLATE, {
+      status_label: statusLabel,
+      status_sentence: statusSentence,
+      display_no: data.displayNo,
+      submitted_by_name: data.submittedByName,
+      document_label: data.documentLabel,
+      payee_name: data.payeeName,
+      entry_amount: data.entryAmount,
+      remarks: data.remarks,
+      total_paid: data.totalPaid,
+      bill_passed_for: data.billPassedFor,
+      remaining: data.remaining,
+      form_date: data.formDate,
+    }),
+  };
+}
+
 export function renderSubmissionConfirmationEmail(data: SubmissionConfirmationEmailData) {
   const paymentAdviceButton = data.paymentMode !== "CASH" && data.paymentAdvicePdfLink
     ? `<tr><td align="center">${button("{{payment_advice_pdf_link}}", "Download Payment Advice")}</td></tr>`

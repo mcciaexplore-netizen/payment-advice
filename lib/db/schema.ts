@@ -135,6 +135,25 @@ export const paymentAdvices = pgTable("payment_advices", {
   // Money
   amount: numeric("amount", { precision: 14, scale: 2 }).notNull(),
   billPassedFor: numeric("bill_passed_for", { precision: 14, scale: 2 }),
+  // Basic/GST split — NEFT-only (see AGENT_HANDOFF.md). Nullable: existing
+  // NEFT submissions from before this split only ever have `amount` (the
+  // Total); Cash Voucher never populates these at all. `amount` stays the
+  // auto-calculated Basic + GST sum for NEFT going forward — it remains the
+  // single source every other reader (PDF, Excel, bill_passed_for's <=
+  // check) uses, unchanged.
+  basicAmount: numeric("basic_amount", { precision: 14, scale: 2 }),
+  gstAmount: numeric("gst_amount", { precision: 14, scale: 2 }),
+  // Running total of payment_entries recorded against this advice — cached,
+  // not derived via SUM() at render time (same reasoning as every other
+  // derived-vs-cached decision in this schema: avoids an aggregate query on
+  // every list/tab render). Updated atomically, in the same transaction as
+  // each payment_entries insert. NEFT-only in practice: Cash's "Mark
+  // Payment Done" never touches this column, so it stays "0.00" forever for
+  // Cash rows — this is what lets the admin tabs tell a Cash-paid row and
+  // an NEFT-paid row apart without a separate flag (see lib/admin/filters.ts).
+  totalPaid: numeric("total_paid", { precision: 14, scale: 2 })
+    .notNull()
+    .default("0"),
 
   // Narrative
   natureOfExpenditure: text("nature_of_expenditure").notNull(),
@@ -273,6 +292,29 @@ export const cashVoucherItems = pgTable("cash_voucher_items", {
   createdAt: timestamp("created_at", { withTimezone: true })
     .defaultNow()
     .notNull(),
+});
+
+/**
+ * Multi-part payment tracking — NEFT (Payment Advice) only. Cash Voucher's
+ * single-action "Mark Payment Done" (POST .../payment-done) never inserts
+ * here; see AGENT_HANDOFF.md for the full model. One row per actual
+ * disbursement Finance records against an advice — e.g. Basic Amount paid
+ * now, GST portion paid weeks later once recovered via GST return. `amount`
+ * summed across all rows for an advice is mirrored, atomically, into
+ * payment_advices.total_paid.
+ */
+export const paymentEntries = pgTable("payment_entries", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  paymentAdviceId: uuid("payment_advice_id")
+    .notNull()
+    .references(() => paymentAdvices.id, { onDelete: "cascade" }),
+  amount: numeric("amount", { precision: 14, scale: 2 }).notNull(),
+  remarks: text("remarks").notNull(),
+  paidAt: timestamp("paid_at", { withTimezone: true }).notNull().defaultNow(),
+  // Auto-attributed from the logged-in admin session, same snapshot-not-FK
+  // pattern as verified_by/sanctioned_by/payment_done_by.
+  paidBy: text("paid_by").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 });
 
 /** One row per (financial year, series) pair. 'PAYMENT_ADVICE' is the

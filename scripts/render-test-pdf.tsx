@@ -24,6 +24,8 @@ async function main() {
         billNo: "INV-2026-311",
         billDate: "2026-07-20",
         amount: "125000.00",
+        basicAmount: "112000.00",
+        gstAmount: "13000.00",
         billPassedFor: "124500.00",
         natureOfExpenditure: longText,
         enclosures: "Tax invoice, approval letter, purchase order copy",

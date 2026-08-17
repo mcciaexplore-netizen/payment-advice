@@ -18,6 +18,11 @@ export type PaymentAdvicePdfData = {
   billNo: string;
   billDate: string;
   amount: string;
+  // Basic/GST split, NEFT only — null for Cash and for pre-split NEFT rows
+  // (see AGENT_HANDOFF.md). Both null/both set, never one without the
+  // other, since submission always writes them together.
+  basicAmount: string | null;
+  gstAmount: string | null;
   billPassedFor: string | null;
   natureOfExpenditure: string;
   enclosures: string | null;
@@ -220,10 +225,21 @@ export function PaymentAdviceDocument({ data }: { data: PaymentAdvicePdfData }) 
                   {data.billNo} / {formatDateOnly(data.billDate)}
                 </Text>
               </View>
-              <View>
-                <Text style={styles.cellLabel}>Amount Rs. :</Text>
-                <Text style={styles.cellValue}>{formatAmount(data.amount)}</Text>
-              </View>
+              {data.basicAmount !== null && data.gstAmount !== null ? (
+                <View>
+                  <Text style={styles.cellLabel}>Basic Amount Rs. (*Subject to TDS) :</Text>
+                  <Text style={styles.cellValue}>{formatAmount(data.basicAmount)}</Text>
+                  <Text style={[styles.cellLabel, { marginTop: 4 }]}>GST Amount Rs. :</Text>
+                  <Text style={styles.cellValue}>{formatAmount(data.gstAmount)}</Text>
+                  <Text style={[styles.cellLabel, { marginTop: 4 }]}>Total Rs. :</Text>
+                  <Text style={styles.cellValue}>{formatAmount(data.amount)}</Text>
+                </View>
+              ) : (
+                <View>
+                  <Text style={styles.cellLabel}>Amount Rs. :</Text>
+                  <Text style={styles.cellValue}>{formatAmount(data.amount)}</Text>
+                </View>
+              )}
             </View>
           </View>
 

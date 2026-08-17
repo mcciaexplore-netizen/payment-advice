@@ -9,6 +9,8 @@ export function str(formData: FormData, key: string): string | undefined {
 
 export function parsePaymentAdviceFormData(formData: FormData) {
   const rawAmount = str(formData, "amount");
+  const rawBasicAmount = str(formData, "basicAmount");
+  const rawGstAmount = str(formData, "gstAmount");
   const rawCashVoucherItems = str(formData, "cashVoucherItems");
   let cashVoucherItems: unknown = [];
   if (rawCashVoucherItems) {
@@ -38,6 +40,8 @@ export function parsePaymentAdviceFormData(formData: FormData) {
     deliveryChallanNo: str(formData, "deliveryChallanNo"),
     deliveryChallanDate: str(formData, "deliveryChallanDate"),
     amount: rawAmount ? Number(rawAmount) : undefined,
+    basicAmount: rawBasicAmount ? Number(rawBasicAmount) : undefined,
+    gstAmount: rawGstAmount ? Number(rawGstAmount) : undefined,
     natureOfExpenditure: str(formData, "natureOfExpenditure"),
     cashVoucherItems,
     paymentMode: str(formData, "paymentMode"),

@@ -5,6 +5,7 @@ import {
   renderSubmissionConfirmationEmail,
   renderVerifiedEmail,
   renderPaymentDoneEmail,
+  renderPaymentEntryEmail,
 } from "./templates";
 
 describe("email templates", () => {
@@ -245,5 +246,57 @@ describe("renderPaymentDoneEmail", () => {
     });
     expect(message.subject).toBe("Cash Payment Voucher CASH/MCCIA/2026-27/0012 — Payment Done");
     expect(message.html).toContain("CASH/MCCIA/2026-27/0012 has been paid");
+  });
+});
+
+describe("renderPaymentEntryEmail", () => {
+  const base = {
+    displayNo: "MCCIA/2026-27/0050",
+    submittedByName: "Priya Sharma",
+    documentLabel: "Payment Advice",
+    payeeName: "Acme Supplies",
+    entryAmount: "400.00",
+    remarks: "Basic Amount paid now",
+    totalPaid: "400.00",
+    billPassedFor: "1,000.00",
+    remaining: "600.00",
+    formDate: "01/08/2026",
+  };
+
+  it("labels a partial payment clearly, states the remaining balance, and never mentions 'Payment Complete'", () => {
+    const message = renderPaymentEntryEmail({ ...base, isFinal: false });
+    expect(message.subject).toBe("Payment Advice MCCIA/2026-27/0050 — Partial Payment Recorded");
+    expect(message.html).toContain("This is a partial payment");
+    expect(message.html).toContain("600.00");
+    expect(message.html).not.toContain("Payment Complete");
+  });
+
+  it("labels the final payment clearly and never claims a balance remains", () => {
+    const message = renderPaymentEntryEmail({
+      ...base,
+      entryAmount: "600.00",
+      totalPaid: "1,000.00",
+      remaining: "0.00",
+      isFinal: true,
+    });
+    expect(message.subject).toBe("Payment Advice MCCIA/2026-27/0050 — Payment Complete");
+    expect(message.html).toContain("full billed amount has now been settled");
+    expect(message.html).not.toContain("Partial Payment Recorded");
+  });
+
+  it("shows this entry's own amount and remarks, not a cumulative figure", () => {
+    const message = renderPaymentEntryEmail({ ...base, isFinal: false });
+    expect(message.html).toContain("₹ 400.00");
+    expect(message.html).toContain("Basic Amount paid now");
+  });
+
+  it("escapes HTML in remarks", () => {
+    const message = renderPaymentEntryEmail({
+      ...base,
+      remarks: "<script>alert(1)</script>",
+      isFinal: false,
+    });
+    expect(message.html).not.toContain("<script>alert(1)</script>");
+    expect(message.html).toContain("&lt;script&gt;");
   });
 });

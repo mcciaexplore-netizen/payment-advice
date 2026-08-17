@@ -71,6 +71,13 @@
       "when": 1785578955492,
       "tag": "0009_admin_users_and_payment_done",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1786951993413,
+      "tag": "0010_typical_albert_cleary",
+      "breakpoints": true
     }
   ]
 }

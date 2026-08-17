@@ -5,11 +5,13 @@ import { auditLog } from "@/lib/db/schema";
 import {
   type AuthorityApprovalEmailData,
   type PaymentDoneEmailData,
+  type PaymentEntryEmailData,
   type SentBackEmailData,
   type SubmissionConfirmationEmailData,
   type VerifiedEmailData,
   renderAuthorityApprovalEmail,
   renderPaymentDoneEmail,
+  renderPaymentEntryEmail,
   renderSentBackEmail,
   renderSubmissionConfirmationEmail,
   renderVerifiedEmail,
@@ -228,5 +230,15 @@ export async function notifyVerified(data: VerifiedEmailData, to: string, advice
 export async function notifyPaymentDone(data: PaymentDoneEmailData, to: string, adviceId?: string) {
   const message = renderPaymentDoneEmail(data);
   await send("payment done", to, message, adviceId);
+  return message;
+}
+
+// NEFT's multi-part payment model (see AGENT_HANDOFF.md) — one email per
+// payment_entries row, not a cumulative summary. Cash Voucher's single
+// notifyPaymentDone() above is untouched and still fires exactly as before
+// for Cash's one-shot "Mark Payment Done" action.
+export async function notifyPaymentEntry(data: PaymentEntryEmailData, to: string, adviceId?: string) {
+  const message = renderPaymentEntryEmail(data);
+  await send(data.isFinal ? "payment entry (final)" : "payment entry (partial)", to, message, adviceId);
   return message;
 }

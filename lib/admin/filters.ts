@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gte, ilike, isNotNull, isNull, lte, or, SQL } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, ilike, isNotNull, isNull, lte, or, SQL } from "drizzle-orm";
 import { paymentAdvices } from "@/lib/db/schema";
 import { statusSchema, paymentModeSchema } from "@/lib/validation/payment-advice";
 
@@ -113,12 +113,28 @@ export const ADMIN_LIST_PAGE_SIZE = 25;
  * Sanction" session); "Ready for Payment" is not a new column, it's the
  * exact same derived condition the old tab used (verified_at set), just
  * renamed/relabeled since there's no more Sanction stage to be "awaiting."
+ *
+ * NEFT's multi-part payment model (see AGENT_HANDOFF.md) replaced the old
+ * single "payment_done" tab's NEFT half with two new ones,
+ * "partial_payment_done" and "fully_payment_settled" — both keyed on
+ * `payment_mode = 'NEFT'` so they never pick up Cash rows. "payment_done"
+ * itself is now scoped to `payment_mode = 'CASH'` and its condition is
+ * otherwise byte-for-byte unchanged — Cash's single "Mark Payment Done"
+ * action still reaches it exactly as before. "verified_ready_payment" also
+ * gained a `total_paid = 0` condition so a NEFT row with a partial payment
+ * recorded (still `status = 'SUBMITTED'`, verified_at set, payment_done_at
+ * still null since NEFT never touches that column) correctly falls out of
+ * this tab into "partial_payment_done" instead — Cash rows always have
+ * total_paid = 0 (Cash never inserts payment_entries), so this is a no-op
+ * for them.
  */
 export const ADMIN_TABS = [
   "waiting_authority",
   "awaiting_finance",
   "received_in_process",
   "verified_ready_payment",
+  "partial_payment_done",
+  "fully_payment_settled",
   "payment_done",
   "sent_back",
   "all",
@@ -145,10 +161,21 @@ export function buildTabCondition(tab: AdminTab): SQL | undefined {
     return and(submitted, isNotNull(paymentAdvices.financeReceivedAt), isNull(paymentAdvices.verifiedAt));
   }
   if (tab === "verified_ready_payment") {
-    return and(submitted, isNotNull(paymentAdvices.verifiedAt), isNull(paymentAdvices.paymentDoneAt));
+    return and(
+      submitted,
+      isNotNull(paymentAdvices.verifiedAt),
+      isNull(paymentAdvices.paymentDoneAt),
+      eq(paymentAdvices.totalPaid, "0"),
+    );
+  }
+  if (tab === "partial_payment_done") {
+    return and(submitted, eq(paymentAdvices.paymentMode, "NEFT"), gt(paymentAdvices.totalPaid, "0"));
+  }
+  if (tab === "fully_payment_settled") {
+    return and(eq(paymentAdvices.status, "APPROVED"), eq(paymentAdvices.paymentMode, "NEFT"));
   }
   if (tab === "payment_done") {
-    return eq(paymentAdvices.status, "APPROVED");
+    return and(eq(paymentAdvices.status, "APPROVED"), eq(paymentAdvices.paymentMode, "CASH"));
   }
   if (tab === "sent_back") {
     return eq(paymentAdvices.status, "SENT_BACK");

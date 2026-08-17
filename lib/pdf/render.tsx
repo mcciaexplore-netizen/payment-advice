@@ -30,6 +30,8 @@ export async function renderPaymentAdvicePdf(
         billNo: advice.billNo,
         billDate: advice.billDate,
         amount: advice.amount,
+        basicAmount: advice.basicAmount,
+        gstAmount: advice.gstAmount,
         billPassedFor: advice.billPassedFor,
         natureOfExpenditure: advice.natureOfExpenditure,
         enclosures: advice.enclosures,
