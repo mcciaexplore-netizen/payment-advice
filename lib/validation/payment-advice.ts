@@ -98,6 +98,49 @@ export const sanctionerNameCorrectionSchema = z.object({
   sanctionedBy: sanctionerNameSchema,
 });
 
+/**
+ * Advance Payment's "Particulars" breakdown — a third top-level Payment
+ * Mode option (NEFT / Cash / Advance Payment), not a fourth payment_mode
+ * value (see AGENT_HANDOFF.md). Categories are the exact presets from the
+ * original paper form; "OTHER" is the stored value for "Others (please
+ * specify)", which requires otherDescription.
+ */
+export const ADVANCE_PARTICULAR_CATEGORIES = [
+  "CONVEYANCE",
+  "MEETING_EXPENSES",
+  "SNACKS_LUNCH",
+  "TRAVELING",
+  "FACULTY_FEES",
+  "OTHER",
+] as const;
+export const advanceParticularCategorySchema = z.enum(ADVANCE_PARTICULAR_CATEGORIES);
+export type AdvanceParticularCategory = z.infer<typeof advanceParticularCategorySchema>;
+
+export const ADVANCE_PARTICULAR_CATEGORY_LABELS: Record<AdvanceParticularCategory, string> = {
+  CONVEYANCE: "Conveyance",
+  MEETING_EXPENSES: "Meeting Expenses",
+  SNACKS_LUNCH: "Snacks / Lunch etc.",
+  TRAVELING: "Traveling",
+  FACULTY_FEES: "Faculty Fees",
+  OTHER: "Others (please specify)",
+};
+
+export const advanceParticularSchema = z.object({
+  category: advanceParticularCategorySchema,
+  otherDescription: optionalTrimmed(),
+  amount: z
+    .number()
+    .positive("Each particular's amount must be greater than 0")
+    .multipleOf(0.01, "Each particular's amount can have at most 2 decimal places"),
+});
+export type AdvanceParticular = z.infer<typeof advanceParticularSchema>;
+
+/** Sums currency using paise to avoid floating-point drift — same technique
+ * as calculateCashVoucherTotal. */
+export function calculateAdvanceParticularsTotal(items: AdvanceParticular[]): number {
+  return items.reduce((total, item) => total + Math.round(item.amount * 100), 0) / 100;
+}
+
 export const cashVoucherItemSchema = z.object({
   description: requiredTrimmed("Nature of expenditure is required"),
   amount: z
@@ -170,6 +213,22 @@ export const paymentAdviceFormSchema = z
     natureOfExpenditure: optionalTrimmed(),
     cashVoucherItems: z.array(cashVoucherItemSchema).default([]),
 
+    // Advance Payment — a secondary flag layered on top of paymentMode, not
+    // a third paymentMode value (see AGENT_HANDOFF.md). When true, the
+    // Basic/GST split, cashVoucherItems, and natureOfExpenditure inputs are
+    // all bypassed in favor of advanceParticulars + purposeOfAdvance below.
+    isAdvance: z.boolean().default(false),
+    purposeOfAdvance: optionalTrimmed(),
+    // Self-declared by the submitter, not system-verified (no Settlement
+    // tracking exists yet — explicitly out of scope). Defaults to 0;
+    // previousPendingAdvanceSince is only required when this is > 0.
+    previousPendingAdvanceAmount: z
+      .number()
+      .min(0, "Previous Pending Advance amount cannot be negative")
+      .default(0),
+    previousPendingAdvanceSince: optionalDateString(),
+    advanceParticulars: z.array(advanceParticularSchema).default([]),
+
     // Section 4 — payment mode
     paymentMode: paymentModeSchema,
     bankAccountNo: optionalTrimmed(),
@@ -190,14 +249,9 @@ export const paymentAdviceFormSchema = z
     formDate: pastOrTodayDateString("Form date cannot be in the future"),
   })
   .superRefine((data, ctx) => {
+    // Bank details are required for NEFT regardless of isAdvance — the
+    // money still needs a destination even when there's no invoice yet.
     if (data.paymentMode === "NEFT") {
-      if (!data.natureOfExpenditure) {
-        ctx.addIssue({
-          code: "custom",
-          path: ["natureOfExpenditure"],
-          message: "Nature of expenditure is required",
-        });
-      }
       if (!data.bankAccountNo) {
         ctx.addIssue({
           code: "custom",
@@ -219,60 +273,121 @@ export const paymentAdviceFormSchema = z
           message: "Beneficiary Name is required for NEFT",
         });
       }
-      if (data.basicAmount === undefined || data.basicAmount <= 0) {
+    }
+
+    if (data.isAdvance) {
+      // Advance Payment — Particulars breakdown + Purpose replace the
+      // normal Basic/GST split (NEFT) / line items (Cash) + Nature of
+      // Expenditure entirely, regardless of which sub-route it's on.
+      if (!data.purposeOfAdvance) {
         ctx.addIssue({
           code: "custom",
-          path: ["basicAmount"],
-          message: "Basic Amount is required",
+          path: ["purposeOfAdvance"],
+          message: "Purpose of Advance is required",
         });
       }
-      if (data.gstAmount === undefined) {
+      if (data.advanceParticulars.length === 0) {
         ctx.addIssue({
           code: "custom",
-          path: ["gstAmount"],
-          message: "GST Amount is required — enter 0 if GST is not applicable",
-        });
-      } else if (data.gstAmount < 0) {
-        ctx.addIssue({
-          code: "custom",
-          path: ["gstAmount"],
-          message: "GST Amount cannot be negative",
+          path: ["advanceParticulars"],
+          message: "Add at least one Particulars line item",
         });
       }
-      if (data.basicAmount !== undefined && data.gstAmount !== undefined && data.gstAmount >= 0) {
-        const computedTotal =
-          (Math.round(data.basicAmount * 100) + Math.round(data.gstAmount * 100)) / 100;
-        if (Math.round(data.amount * 100) !== Math.round(computedTotal * 100)) {
+      data.advanceParticulars.forEach((item, index) => {
+        if (item.category === "OTHER" && !item.otherDescription) {
           ctx.addIssue({
             code: "custom",
-            path: ["amount"],
-            message: "Total does not match Basic Amount + GST Amount",
+            path: ["advanceParticulars", index, "otherDescription"],
+            message: "Please specify a description for \"Others\"",
           });
         }
-      }
-    }
-    if (data.paymentMode === "CASH") {
-      if (data.cashVoucherItems.length === 0) {
-        ctx.addIssue({
-          code: "custom",
-          path: ["cashVoucherItems"],
-          message: "Add at least one expenditure line item",
-        });
-      }
-      const computedTotal = calculateCashVoucherTotal(data.cashVoucherItems);
+      });
+      const computedTotal = calculateAdvanceParticularsTotal(data.advanceParticulars);
       if (computedTotal <= 0) {
         ctx.addIssue({
           code: "custom",
-          path: ["cashVoucherItems"],
-          message: "Cash voucher total must be greater than 0",
+          path: ["advanceParticulars"],
+          message: "Particulars total must be greater than 0",
         });
       }
       if (Math.round(data.amount * 100) !== Math.round(computedTotal * 100)) {
         ctx.addIssue({
           code: "custom",
           path: ["amount"],
-          message: "Cash voucher total does not match the submitted amount",
+          message: "Particulars total does not match the submitted amount",
         });
+      }
+      if (data.previousPendingAdvanceAmount > 0 && !data.previousPendingAdvanceSince) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["previousPendingAdvanceSince"],
+          message: "\"Since\" date is required when a Previous Pending Advance amount is entered",
+        });
+      }
+    } else {
+      if (data.paymentMode === "NEFT") {
+        if (!data.natureOfExpenditure) {
+          ctx.addIssue({
+            code: "custom",
+            path: ["natureOfExpenditure"],
+            message: "Nature of expenditure is required",
+          });
+        }
+        if (data.basicAmount === undefined || data.basicAmount <= 0) {
+          ctx.addIssue({
+            code: "custom",
+            path: ["basicAmount"],
+            message: "Basic Amount is required",
+          });
+        }
+        if (data.gstAmount === undefined) {
+          ctx.addIssue({
+            code: "custom",
+            path: ["gstAmount"],
+            message: "GST Amount is required — enter 0 if GST is not applicable",
+          });
+        } else if (data.gstAmount < 0) {
+          ctx.addIssue({
+            code: "custom",
+            path: ["gstAmount"],
+            message: "GST Amount cannot be negative",
+          });
+        }
+        if (data.basicAmount !== undefined && data.gstAmount !== undefined && data.gstAmount >= 0) {
+          const computedTotal =
+            (Math.round(data.basicAmount * 100) + Math.round(data.gstAmount * 100)) / 100;
+          if (Math.round(data.amount * 100) !== Math.round(computedTotal * 100)) {
+            ctx.addIssue({
+              code: "custom",
+              path: ["amount"],
+              message: "Total does not match Basic Amount + GST Amount",
+            });
+          }
+        }
+      }
+      if (data.paymentMode === "CASH") {
+        if (data.cashVoucherItems.length === 0) {
+          ctx.addIssue({
+            code: "custom",
+            path: ["cashVoucherItems"],
+            message: "Add at least one expenditure line item",
+          });
+        }
+        const computedTotal = calculateCashVoucherTotal(data.cashVoucherItems);
+        if (computedTotal <= 0) {
+          ctx.addIssue({
+            code: "custom",
+            path: ["cashVoucherItems"],
+            message: "Cash voucher total must be greater than 0",
+          });
+        }
+        if (Math.round(data.amount * 100) !== Math.round(computedTotal * 100)) {
+          ctx.addIssue({
+            code: "custom",
+            path: ["amount"],
+            message: "Cash voucher total does not match the submitted amount",
+          });
+        }
       }
     }
   });

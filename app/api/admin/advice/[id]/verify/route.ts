@@ -33,6 +33,8 @@ export async function POST(
     .select({
       serialNo: paymentAdvices.serialNo,
       cashVoucherNo: paymentAdvices.cashVoucherNo,
+      isAdvance: paymentAdvices.isAdvance,
+      advanceNo: paymentAdvices.advanceNo,
       submittedByName: paymentAdvices.submittedByName,
       submittedByEmail: paymentAdvices.submittedByEmail,
       payeeName: paymentAdvices.payeeName,
@@ -77,10 +79,16 @@ export async function POST(
 
   await notifyVerified(
     {
-      displayNo: displayNoFor(advice.paymentMode as PaymentMode, advice.serialNo, advice.cashVoucherNo),
+      displayNo: displayNoFor(
+        advice.paymentMode as PaymentMode,
+        advice.serialNo,
+        advice.cashVoucherNo,
+        advice.isAdvance,
+        advice.advanceNo,
+      ),
       submittedByName: advice.submittedByName,
       verifiedBy,
-      documentLabel: documentLabelFor(advice.paymentMode as PaymentMode),
+      documentLabel: documentLabelFor(advice.paymentMode as PaymentMode, advice.isAdvance),
       payeeName: advice.payeeName,
       amount: Number(advice.amount).toLocaleString("en-IN", { minimumFractionDigits: 2 }),
       formDate: advice.formDate,

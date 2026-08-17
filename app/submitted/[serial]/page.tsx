@@ -8,6 +8,8 @@ import {
   subscribeToNothing,
   getServerSnapshot,
 } from "@/lib/submission-summary";
+import { documentLabelFor } from "@/lib/advice/document-identity";
+import type { PaymentMode } from "@/lib/validation/payment-advice";
 
 export default function SubmittedPage() {
   const params = useParams<{ serial: string }>();
@@ -33,12 +35,17 @@ export default function SubmittedPage() {
     <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-8 px-6 py-16">
       <div className="flex flex-col items-center gap-2 text-center">
         <p className="text-sm font-medium text-[#2e8b57]">
+          {summary?.isAdvance ? "Advance " : ""}
           {summary?.paymentMode === "CASH" ? "Cash Voucher submitted" : "Payment Advice submitted"}
         </p>
         <p className="font-heading text-4xl text-[#0b1f3a]">
-          {summary?.paymentMode === "CASH" ? (summary.cashVoucherNo ?? serial) : serial}
+          {summary?.isAdvance
+            ? (summary.advanceNo ?? serial)
+            : summary?.paymentMode === "CASH"
+              ? (summary.cashVoucherNo ?? serial)
+              : serial}
         </p>
-        {summary?.paymentMode === "CASH" ? (
+        {summary?.paymentMode === "CASH" || summary?.isAdvance ? (
           <p className="text-xs text-gray-500">Internal Ref.: {serial}</p>
         ) : null}
       </div>
@@ -56,7 +63,7 @@ export default function SubmittedPage() {
           <SummaryRow label="Department" value={summary.submittedByDepartment} />
           <div className="sm:col-span-2">
             <SummaryRow
-              label="Nature of Expenditure"
+              label={summary.isAdvance ? "Purpose of Advance" : "Nature of Expenditure"}
               value={summary.natureOfExpenditure}
             />
           </div>
@@ -93,7 +100,7 @@ export default function SubmittedPage() {
             <p>
               Share this link with <span className="font-medium">{summary.authorityName}</span>{" "}
               so they can review and approve this{" "}
-              {summary.paymentMode === "CASH" ? "Cash Payment Voucher" : "Payment Advice"}.
+              {documentLabelFor(summary.paymentMode as PaymentMode, summary.isAdvance)}.
             </p>
             <button
               type="button"

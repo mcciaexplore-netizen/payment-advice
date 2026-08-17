@@ -7,15 +7,21 @@ import {
   auditLog,
   cashVoucherItems,
   paymentEntries,
+  advanceParticulars,
   recommendingAuthorities,
 } from "@/lib/db/schema";
 import { StatusChip } from "@/components/admin/StatusChip";
 import { AdviceActions } from "@/components/admin/AdviceActions";
 import { BackLink } from "@/components/admin/BackLink";
 import { NameCorrectionAction } from "@/components/admin/NameCorrectionAction";
-import { PaymentMode, Status, SANCTIONER_NAMES } from "@/lib/validation/payment-advice";
+import {
+  ADVANCE_PARTICULAR_CATEGORY_LABELS,
+  PaymentMode,
+  Status,
+  SANCTIONER_NAMES,
+} from "@/lib/validation/payment-advice";
 import { getAdminSession } from "@/lib/admin-session";
-import { displayNoFor, documentLabelFor } from "@/lib/advice/document-identity";
+import { billPassedForLabelFor, displayNoFor, documentLabelFor } from "@/lib/advice/document-identity";
 
 export const dynamic = "force-dynamic";
 
@@ -84,7 +90,7 @@ export default async function AdviceDetailPage({
   ]);
   if (!advice) notFound();
 
-  const [authority, adviceAttachments, adviceAuditLog, voucherItems, advicePaymentEntries] =
+  const [authority, adviceAttachments, adviceAuditLog, voucherItems, advicePaymentEntries, particulars] =
     await Promise.all([
       advice.recommendingAuthorityId
         ? db
@@ -111,6 +117,12 @@ export default async function AdviceDetailPage({
         .from(paymentEntries)
         .where(eq(paymentEntries.paymentAdviceId, id))
         .orderBy(paymentEntries.paidAt),
+      // Advance Payment only — see AGENT_HANDOFF.md.
+      db
+        .select()
+        .from(advanceParticulars)
+        .where(eq(advanceParticulars.paymentAdviceId, id))
+        .orderBy(advanceParticulars.sortOrder),
     ]);
 
   return (
@@ -119,12 +131,18 @@ export default async function AdviceDetailPage({
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
-            {documentLabelFor(advice.paymentMode as PaymentMode)}
+            {documentLabelFor(advice.paymentMode as PaymentMode, advice.isAdvance)}
           </p>
           <h1 className="font-heading text-3xl text-[#0b1f3a]">
-            {displayNoFor(advice.paymentMode as PaymentMode, advice.serialNo, advice.cashVoucherNo)}
+            {displayNoFor(
+              advice.paymentMode as PaymentMode,
+              advice.serialNo,
+              advice.cashVoucherNo,
+              advice.isAdvance,
+              advice.advanceNo,
+            )}
           </h1>
-          {advice.paymentMode === "CASH" ? (
+          {advice.paymentMode === "CASH" || advice.isAdvance ? (
             <p className="mt-1 text-xs text-gray-500">Internal Ref.: {advice.serialNo}</p>
           ) : null}
         </div>
@@ -159,7 +177,9 @@ export default async function AdviceDetailPage({
           </Section>
 
           <Section title="Money">
-            {advice.basicAmount !== null && advice.gstAmount !== null ? (
+            {advice.isAdvance ? (
+              <Row label="Amount Rs. (Particulars Total)" value={formatAmount(advice.amount)} />
+            ) : advice.basicAmount !== null && advice.gstAmount !== null ? (
               <>
                 <Row label="Basic Amount Rs. (*Subject to TDS)" value={formatAmount(advice.basicAmount)} />
                 <Row label="GST Amount Rs." value={formatAmount(advice.gstAmount)} />
@@ -168,16 +188,57 @@ export default async function AdviceDetailPage({
             ) : (
               <Row label="Amount Rs." value={formatAmount(advice.amount)} />
             )}
-            <Row label="Bill passed for Rs." value={formatAmount(advice.billPassedFor)} />
+            <Row label={billPassedForLabelFor(advice.isAdvance)} value={formatAmount(advice.billPassedFor)} />
           </Section>
 
           <Section title="Narrative">
-            <Row label="Nature of Expenditure" value={advice.natureOfExpenditure} block />
+            <Row
+              label={advice.isAdvance ? "Purpose of Advance" : "Nature of Expenditure"}
+              value={advice.natureOfExpenditure}
+              block
+            />
             <Row label="Enclosures" value={advice.enclosures ?? "—"} block />
             <Row label="Special Remarks" value={advice.specialRemarks ?? "—"} block />
           </Section>
 
-          {advice.paymentMode === "CASH" ? (
+          {advice.isAdvance ? (
+            <Section title="Advance Details">
+              <Row
+                label="Previous Pending Advance"
+                value={
+                  advice.previousPendingAdvanceAmount && Number(advice.previousPendingAdvanceAmount) > 0
+                    ? `${formatAmount(advice.previousPendingAdvanceAmount)} (since ${formatDate(advice.previousPendingAdvanceSince)})`
+                    : "None"
+                }
+              />
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                  <thead className="border-b border-gray-200 text-xs uppercase tracking-wide text-gray-500">
+                    <tr>
+                      <th className="pb-2">Category</th>
+                      <th className="pb-2">Description</th>
+                      <th className="pb-2 text-right">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {particulars.map((item) => (
+                      <tr key={item.id} className="border-b border-gray-100 last:border-0">
+                        <td className="py-2">
+                          {ADVANCE_PARTICULAR_CATEGORY_LABELS[
+                            item.category as keyof typeof ADVANCE_PARTICULAR_CATEGORY_LABELS
+                          ] ?? item.category}
+                        </td>
+                        <td className="py-2">{item.category === "OTHER" ? item.otherDescription ?? "—" : "—"}</td>
+                        <td className="py-2 text-right">{formatAmount(item.amount)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Section>
+          ) : null}
+
+          {advice.paymentMode === "CASH" && !advice.isAdvance ? (
             <Section title="Cash Voucher Items">
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm">
@@ -191,7 +252,7 @@ export default async function AdviceDetailPage({
           ) : null}
 
           <Section title="Payment">
-            <Row label="Mode" value={advice.paymentMode} />
+            <Row label="Mode" value={advice.isAdvance ? `${advice.paymentMode} (Advance)` : advice.paymentMode} />
             {advice.paymentMode === "NEFT" ? (
               <>
                 <Row label="Bank A/c No." value={advice.bankAccountNo ?? "—"} />
@@ -325,6 +386,7 @@ export default async function AdviceDetailPage({
             initialBillPassedFor={advice.billPassedFor}
             initialEditToken={advice.editToken}
             paymentMode={advice.paymentMode as "NEFT" | "CASH"}
+            isAdvance={advice.isAdvance}
             authorityToken={advice.authorityToken}
             authorityName={authority?.authorityName ?? "Recommending Authority"}
             authorityApprovedAt={advice.authorityApprovedAt?.toISOString() ?? null}

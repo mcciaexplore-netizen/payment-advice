@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { paymentAdvices, auditLog } from "@/lib/db/schema";
 import { billPassedForSchema, PaymentMode } from "@/lib/validation/payment-advice";
-import { displayNoFor, documentLabelFor } from "@/lib/advice/document-identity";
+import { billPassedForLabelFor, displayNoFor, documentLabelFor } from "@/lib/advice/document-identity";
 import { getAdminSession } from "@/lib/admin-session";
 import { notifyPaymentDone } from "@/lib/email/notify";
 
@@ -52,6 +52,8 @@ export async function POST(
       status: paymentAdvices.status,
       serialNo: paymentAdvices.serialNo,
       cashVoucherNo: paymentAdvices.cashVoucherNo,
+      isAdvance: paymentAdvices.isAdvance,
+      advanceNo: paymentAdvices.advanceNo,
       submittedByName: paymentAdvices.submittedByName,
       submittedByEmail: paymentAdvices.submittedByEmail,
       payeeName: paymentAdvices.payeeName,
@@ -87,7 +89,7 @@ export async function POST(
         : undefined;
   if (billPassedForInput === undefined) {
     return NextResponse.json(
-      { error: "Bill passed for Rs. must be filled before marking Payment Done." },
+      { error: `${billPassedForLabelFor(advice.isAdvance)} must be filled before marking Payment Done.` },
       { status: 400 },
     );
   }
@@ -126,9 +128,15 @@ export async function POST(
 
   await notifyPaymentDone(
     {
-      displayNo: displayNoFor(advice.paymentMode as PaymentMode, advice.serialNo, advice.cashVoucherNo),
+      displayNo: displayNoFor(
+        advice.paymentMode as PaymentMode,
+        advice.serialNo,
+        advice.cashVoucherNo,
+        advice.isAdvance,
+        advice.advanceNo,
+      ),
       submittedByName: advice.submittedByName,
-      documentLabel: documentLabelFor(advice.paymentMode as PaymentMode),
+      documentLabel: documentLabelFor(advice.paymentMode as PaymentMode, advice.isAdvance),
       payeeName: advice.payeeName,
       amount: Number(advice.amount).toLocaleString("en-IN", { minimumFractionDigits: 2 }),
       formDate: advice.formDate,

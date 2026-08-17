@@ -4,6 +4,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { paymentAdvices, paymentEntries } from "@/lib/db/schema";
 import { billPassedForSchema } from "@/lib/validation/payment-advice";
+import { billPassedForLabelFor } from "@/lib/advice/document-identity";
 
 export const runtime = "nodejs";
 
@@ -16,7 +17,11 @@ export async function PATCH(
   const { id } = await params;
 
   const [advice] = await db
-    .select({ status: paymentAdvices.status, amount: paymentAdvices.amount })
+    .select({
+      status: paymentAdvices.status,
+      amount: paymentAdvices.amount,
+      isAdvance: paymentAdvices.isAdvance,
+    })
     .from(paymentAdvices)
     .where(eq(paymentAdvices.id, id))
     .limit(1);
@@ -43,8 +48,7 @@ export async function PATCH(
   if (existingEntryCount > 0) {
     return NextResponse.json(
       {
-        error:
-          "Bill passed for Rs. is locked once a payment has been recorded against this advice.",
+        error: `${billPassedForLabelFor(advice.isAdvance)} is locked once a payment has been recorded against this advice.`,
       },
       { status: 409 },
     );

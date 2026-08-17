@@ -3,8 +3,10 @@ import {
   financialYearFor,
   formatSerial,
   formatCashVoucherNo,
+  formatAdvanceNo,
   allocateSerialNumber,
   allocateCashVoucherNumber,
+  allocateAdvanceNumber,
 } from "./serial";
 
 describe("financialYearFor", () => {
@@ -48,6 +50,17 @@ describe("formatCashVoucherNo", () => {
 
   it("does not truncate a 5-digit sequence", () => {
     expect(formatCashVoucherNo("2026-27", 10000)).toBe("CASH/MCCIA/2026-27/10000");
+  });
+});
+
+describe("formatAdvanceNo", () => {
+  it("zero-pads the sequence to 4 digits, prefixed with ADV/MCCIA/", () => {
+    expect(formatAdvanceNo("2026-27", 1)).toBe("ADV/MCCIA/2026-27/0001");
+    expect(formatAdvanceNo("2026-27", 42)).toBe("ADV/MCCIA/2026-27/0042");
+  });
+
+  it("does not truncate a 5-digit sequence", () => {
+    expect(formatAdvanceNo("2026-27", 10000)).toBe("ADV/MCCIA/2026-27/10000");
   });
 });
 
@@ -189,6 +202,24 @@ describe.skipIf(!testDbUrl)("allocateSerialNumber / allocateCashVoucherNumber (i
           ),
         );
       expect(rows).toHaveLength(0);
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it("keeps the Advance series independent of both the main and Cash Voucher series — one shared ADVANCE counter regardless of NEFT/Cash sub-route", async () => {
+    const financialYear = financialYearFor(TEST_DATE);
+    const { db, pool } = await freshTestDb([financialYear]);
+    try {
+      await db.transaction((tx) => allocateSerialNumber(tx, TEST_DATE));
+      await db.transaction((tx) => allocateCashVoucherNumber(tx, financialYear));
+
+      // A NEFT-routed advance and a Cash-routed advance both draw from the
+      // same ADVANCE counter — not two separate series.
+      const firstAdvanceNo = await db.transaction((tx) => allocateAdvanceNumber(tx, financialYear));
+      const secondAdvanceNo = await db.transaction((tx) => allocateAdvanceNumber(tx, financialYear));
+      expect(firstAdvanceNo).toBe(`ADV/MCCIA/${financialYear}/0001`);
+      expect(secondAdvanceNo).toBe(`ADV/MCCIA/${financialYear}/0002`);
     } finally {
       await pool.end();
     }

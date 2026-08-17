@@ -76,16 +76,22 @@ export default async function AuthorityApprovalPage({
     <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-8 px-6 py-10">
       <header className="border-b border-gray-200 pb-6">
         <p className="text-xs font-medium tracking-wide text-gray-500">
-          {displayNoFor(advice.paymentMode as PaymentMode, advice.serialNo, advice.cashVoucherNo)}
-          {advice.paymentMode === "CASH" ? ` (Internal Ref. ${advice.serialNo})` : ""} · Submitted by{" "}
+          {displayNoFor(
+            advice.paymentMode as PaymentMode,
+            advice.serialNo,
+            advice.cashVoucherNo,
+            advice.isAdvance,
+            advice.advanceNo,
+          )}
+          {advice.paymentMode === "CASH" || advice.isAdvance ? ` (Internal Ref. ${advice.serialNo})` : ""} · Submitted by{" "}
           {advice.submittedByName} on {formatDate(advice.formDate)}
         </p>
         <h1 className="font-heading text-3xl text-[#0b1f3a]">
-          {documentLabelFor(advice.paymentMode as PaymentMode)} Approval Request
+          {documentLabelFor(advice.paymentMode as PaymentMode, advice.isAdvance)} Approval Request
         </h1>
         <p className="mt-2 text-sm text-gray-600">
           You&apos;ve been selected as the Recommending Authority for this{" "}
-          {documentLabelFor(advice.paymentMode as PaymentMode)}. Please review the details below
+          {documentLabelFor(advice.paymentMode as PaymentMode, advice.isAdvance)}. Please review the details below
           and approve or send it back with remarks.
         </p>
       </header>

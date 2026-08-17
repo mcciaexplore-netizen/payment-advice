@@ -8,6 +8,7 @@ type Executor = Pick<Database, "execute">;
 
 const PAYMENT_ADVICE_SERIES = "PAYMENT_ADVICE";
 const CASH_VOUCHER_SERIES = "CASH_VOUCHER";
+const ADVANCE_SERIES = "ADVANCE";
 
 /**
  * Indian financial year runs 1 April -> 31 March.
@@ -27,6 +28,10 @@ export function formatSerial(financialYear: string, number: number): string {
 
 export function formatCashVoucherNo(financialYear: string, number: number): string {
   return `CASH/MCCIA/${financialYear}/${String(number).padStart(4, "0")}`;
+}
+
+export function formatAdvanceNo(financialYear: string, number: number): string {
+  return `ADV/MCCIA/${financialYear}/${String(number).padStart(4, "0")}`;
 }
 
 /**
@@ -85,4 +90,16 @@ export async function allocateCashVoucherNumber(
 ): Promise<string> {
   const nextNumber = await allocateNumber(tx, financialYear, CASH_VOUCHER_SERIES);
   return formatCashVoucherNo(financialYear, nextNumber);
+}
+
+/** Allocates the next Advance number (ADV/MCCIA/<FY>/NNNN) — isAdvance = true
+ * submissions only, one shared counter regardless of whether the advance
+ * routes to NEFT or Cash (not two separate ADV series). Independent from
+ * both the main serial number and the Cash Voucher number. */
+export async function allocateAdvanceNumber(
+  tx: Executor,
+  financialYear: string,
+): Promise<string> {
+  const nextNumber = await allocateNumber(tx, financialYear, ADVANCE_SERIES);
+  return formatAdvanceNo(financialYear, nextNumber);
 }

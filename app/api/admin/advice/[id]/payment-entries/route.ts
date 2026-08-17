@@ -3,7 +3,7 @@ import { eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { paymentAdvices, paymentEntries, auditLog } from "@/lib/db/schema";
 import { paymentEntrySchema } from "@/lib/validation/payment-advice";
-import { displayNoFor, documentLabelFor } from "@/lib/advice/document-identity";
+import { billPassedForLabelFor, displayNoFor, documentLabelFor } from "@/lib/advice/document-identity";
 import { getAdminSession } from "@/lib/admin-session";
 import { notifyPaymentEntry } from "@/lib/email/notify";
 
@@ -65,6 +65,8 @@ export async function POST(
       paymentMode: paymentAdvices.paymentMode,
       serialNo: paymentAdvices.serialNo,
       cashVoucherNo: paymentAdvices.cashVoucherNo,
+      isAdvance: paymentAdvices.isAdvance,
+      advanceNo: paymentAdvices.advanceNo,
       submittedByName: paymentAdvices.submittedByName,
       submittedByEmail: paymentAdvices.submittedByEmail,
       payeeName: paymentAdvices.payeeName,
@@ -125,7 +127,7 @@ export async function POST(
       return {
         ok: false,
         status: 400,
-        error: "Bill passed for Rs. must be saved before recording a payment.",
+        error: `${billPassedForLabelFor(advice.isAdvance)} must be saved before recording a payment.`,
       };
     }
 
@@ -193,9 +195,15 @@ export async function POST(
 
   await notifyPaymentEntry(
     {
-      displayNo: displayNoFor("NEFT", advice.serialNo, advice.cashVoucherNo),
+      displayNo: displayNoFor(
+        "NEFT",
+        advice.serialNo,
+        advice.cashVoucherNo,
+        advice.isAdvance,
+        advice.advanceNo,
+      ),
       submittedByName: advice.submittedByName,
-      documentLabel: documentLabelFor("NEFT"),
+      documentLabel: documentLabelFor("NEFT", advice.isAdvance),
       payeeName: advice.payeeName,
       entryAmount: money(parsed.data.amount),
       remarks: parsed.data.remarks,

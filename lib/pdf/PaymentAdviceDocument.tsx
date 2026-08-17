@@ -2,9 +2,13 @@ import { Document, Page, View, Text, Image, StyleSheet } from "@react-pdf/render
 import fs from "node:fs";
 import path from "node:path";
 import { Stamp } from "@/lib/pdf/Stamp";
+import { billPassedForLabelFor } from "@/lib/advice/document-identity";
+import { ADVANCE_PARTICULAR_CATEGORY_LABELS } from "@/lib/validation/payment-advice";
 
 export type PaymentAdvicePdfData = {
-  serialNo: string;
+  // Resolved primary document number — serial_no normally, or advance_no
+  // when isAdvance (per lib/advice/document-identity.ts's displayNoFor()).
+  displayNo: string;
   formDate: string; // YYYY-MM-DD
   payeeName: string;
   payeeAddress: string;
@@ -45,6 +49,16 @@ export type PaymentAdvicePdfData = {
   authorityApprovedAt: string | null;
   approvedAt: string | null; // ISO timestamp
   approvedByName: string | null;
+  // Advance Payment fields — all null/empty for a regular submission. See
+  // AGENT_HANDOFF.md. purposeOfAdvance is also mirrored into
+  // natureOfExpenditure above (same dual-representation the Cash Voucher's
+  // line items already use), so the "Nature of Expenditure" cell reads
+  // correctly either way — these are for the advance-specific additions
+  // (Particulars table, Previous Pending Advance line) only.
+  isAdvance: boolean;
+  previousPendingAdvanceAmount: string | null;
+  previousPendingAdvanceSince: string | null; // YYYY-MM-DD
+  particulars: { category: string; otherDescription: string | null; amount: string }[];
 };
 
 const BORDER = "1pt solid #000000";
@@ -89,6 +103,22 @@ const styles = StyleSheet.create({
   },
   cellLabel: { fontFamily: "Helvetica-Bold", fontSize: 8.5, marginBottom: 2 },
   cellSubRow: { marginBottom: 4 },
+  sectionHeading: { fontFamily: "Helvetica-Bold", fontSize: 9, marginTop: 10, marginBottom: 4 },
+  particularsTable: { borderTop: BORDER, borderLeft: BORDER },
+  particularsRow: { flexDirection: "row" },
+  particularsHeaderCell: {
+    fontFamily: "Helvetica-Bold",
+    fontSize: 8,
+    padding: 4,
+    borderRight: BORDER,
+    borderBottom: BORDER,
+  },
+  particularsCell: { fontSize: 8.5, padding: 4, borderRight: BORDER, borderBottom: BORDER },
+  particularsCategory: { width: "45%" },
+  particularsDescription: { width: "35%" },
+  particularsAmount: { width: "20%", textAlign: "right" },
+  particularsTotalLabel: { fontFamily: "Helvetica-Bold" },
+  previousPendingText: { fontSize: 9, marginTop: 6 },
   cellValue: { fontSize: 9 },
   footerTable: { flexDirection: "row", borderTop: BORDER, borderLeft: BORDER, marginTop: 14 },
   footerCell: {
@@ -117,6 +147,13 @@ function formatDateOnly(dateStr: string | null): string {
   if (!dateStr) return "";
   const [y, m, d] = dateStr.split("-");
   return `${d}/${m}/${y}`;
+}
+
+function particularCategoryLabel(category: string): string {
+  return (
+    ADVANCE_PARTICULAR_CATEGORY_LABELS[category as keyof typeof ADVANCE_PARTICULAR_CATEGORY_LABELS] ??
+    category
+  );
 }
 
 function formatAmount(value: string | null): string {
@@ -173,7 +210,7 @@ export function PaymentAdviceDocument({ data }: { data: PaymentAdvicePdfData }) 
         </View>
 
         <View style={styles.serialRow}>
-          <Text style={styles.serialText}>{data.serialNo}</Text>
+          <Text style={styles.serialText}>{data.displayNo}</Text>
         </View>
 
         <View style={styles.dateRow}>
@@ -245,14 +282,21 @@ export function PaymentAdviceDocument({ data }: { data: PaymentAdvicePdfData }) 
 
           <View style={styles.tableRow}>
             <View style={styles.cell}>
-              <Text style={styles.cellLabel}>Nature of Expenditure :</Text>
+              {/* "Purpose of Advance" reuses this same cell/column — same
+                  underlying natureOfExpenditure value (mirrored server-side
+                  from purposeOfAdvance), just relabeled, per the "Bill
+                  passed for Rs. -> Amount Sanctioned" precedent. Avoids
+                  printing the purpose text twice under two labels. */}
+              <Text style={styles.cellLabel}>
+                {data.isAdvance ? "Purpose of Advance :" : "Nature of Expenditure :"}
+              </Text>
               <Text style={{ fontSize: autoFontSize(data.natureOfExpenditure) }}>
                 {data.natureOfExpenditure}
               </Text>
             </View>
             <View style={styles.cell}>
               <View style={styles.cellSubRow}>
-                <Text style={styles.cellLabel}>Bill passed for Rs. :</Text>
+                <Text style={styles.cellLabel}>{billPassedForLabelFor(data.isAdvance)} :</Text>
                 <Text style={styles.cellValue}>
                   {data.billPassedFor ? formatAmount(data.billPassedFor) : ""}
                 </Text>
@@ -279,6 +323,58 @@ export function PaymentAdviceDocument({ data }: { data: PaymentAdvicePdfData }) 
             </View>
           </View>
         </View>
+
+        {data.isAdvance ? (
+          <View>
+            <Text style={styles.sectionHeading}>Particulars</Text>
+            <View style={styles.particularsTable}>
+              <View style={styles.particularsRow}>
+                <Text style={[styles.particularsHeaderCell, styles.particularsCategory]}>Category</Text>
+                <Text style={[styles.particularsHeaderCell, styles.particularsDescription]}>
+                  Description
+                </Text>
+                <Text style={[styles.particularsHeaderCell, styles.particularsAmount]}>Amount Rs.</Text>
+              </View>
+              {data.particulars.map((item, index) => (
+                <View style={styles.particularsRow} key={index}>
+                  <Text style={[styles.particularsCell, styles.particularsCategory]}>
+                    {particularCategoryLabel(item.category)}
+                  </Text>
+                  <Text style={[styles.particularsCell, styles.particularsDescription]}>
+                    {item.category === "OTHER" ? item.otherDescription ?? "" : ""}
+                  </Text>
+                  <Text style={[styles.particularsCell, styles.particularsAmount]}>
+                    {formatAmount(item.amount)}
+                  </Text>
+                </View>
+              ))}
+              <View style={styles.particularsRow}>
+                <Text
+                  style={[
+                    styles.particularsCell,
+                    styles.particularsCategory,
+                    styles.particularsDescription,
+                    styles.particularsTotalLabel,
+                    { width: "80%" },
+                  ]}
+                >
+                  Total
+                </Text>
+                <Text
+                  style={[styles.particularsCell, styles.particularsAmount, styles.particularsTotalLabel]}
+                >
+                  {formatAmount(data.amount)}
+                </Text>
+              </View>
+            </View>
+            <Text style={styles.previousPendingText}>
+              Previous Pending Advance :{" "}
+              {data.previousPendingAdvanceAmount && Number(data.previousPendingAdvanceAmount) > 0
+                ? `Rs. ${formatAmount(data.previousPendingAdvanceAmount)} (since ${formatDateOnly(data.previousPendingAdvanceSince)})`
+                : "None"}
+            </Text>
+          </View>
+        ) : null}
 
         <View style={styles.footerTable}>
           <View style={styles.footerCell}>

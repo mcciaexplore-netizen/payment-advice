@@ -1,10 +1,13 @@
 import { renderToBuffer } from "@react-pdf/renderer";
-import { cashVoucherItems, paymentAdvices } from "@/lib/db/schema";
+import { advanceParticulars, cashVoucherItems, paymentAdvices } from "@/lib/db/schema";
 import { PaymentAdviceDocument } from "@/lib/pdf/PaymentAdviceDocument";
 import { CashVoucherDocument } from "@/lib/pdf/CashVoucherDocument";
+import { displayNoFor } from "@/lib/advice/document-identity";
+import { ADVANCE_PARTICULAR_CATEGORY_LABELS, type PaymentMode } from "@/lib/validation/payment-advice";
 
 type PaymentAdviceRow = typeof paymentAdvices.$inferSelect;
 type CashVoucherItemRow = typeof cashVoucherItems.$inferSelect;
+type AdvanceParticularRow = typeof advanceParticulars.$inferSelect;
 
 /** Shared by the admin (approval-gated) and public (pre-approval, for
  * physical signing) PDF routes so the advice-row -> PDF-data mapping only
@@ -12,11 +15,18 @@ type CashVoucherItemRow = typeof cashVoucherItems.$inferSelect;
 export async function renderPaymentAdvicePdf(
   advice: PaymentAdviceRow,
   recommendingAuthorityName: string,
+  particulars: AdvanceParticularRow[] = [],
 ): Promise<Buffer> {
   return renderToBuffer(
     <PaymentAdviceDocument
       data={{
-        serialNo: advice.serialNo,
+        displayNo: displayNoFor(
+          advice.paymentMode as PaymentMode,
+          advice.serialNo,
+          advice.cashVoucherNo,
+          advice.isAdvance,
+          advice.advanceNo,
+        ),
         formDate: advice.formDate,
         payeeName: advice.payeeName,
         payeeAddress: advice.payeeAddress,
@@ -49,37 +59,67 @@ export async function renderPaymentAdvicePdf(
         authorityApprovedAt: advice.authorityApprovedAt ? advice.authorityApprovedAt.toISOString() : null,
         approvedAt: advice.approvedAt ? advice.approvedAt.toISOString() : null,
         approvedByName: advice.approvedByName,
+        isAdvance: advice.isAdvance,
+        previousPendingAdvanceAmount: advice.previousPendingAdvanceAmount,
+        previousPendingAdvanceSince: advice.previousPendingAdvanceSince,
+        particulars: particulars.map((p) => ({
+          category: p.category,
+          otherDescription: p.otherDescription,
+          amount: p.amount,
+        })),
       }}
     />,
   );
 }
 
-export function pdfFilename(serialNo: string): string {
-  return `${serialNo.replace(/\//g, "-")}.pdf`;
+export function pdfFilename(displayNo: string): string {
+  return `${displayNo.replace(/\//g, "-")}.pdf`;
 }
 
 export async function renderCashVoucherPdf(
   advice: PaymentAdviceRow,
   items: CashVoucherItemRow[],
   recommendingAuthorityName: string,
+  particulars: AdvanceParticularRow[] = [],
 ): Promise<Buffer> {
+  const displayNo = displayNoFor(
+    advice.paymentMode as PaymentMode,
+    advice.serialNo,
+    advice.cashVoucherNo,
+    advice.isAdvance,
+    advice.advanceNo,
+  );
   return renderToBuffer(
     <CashVoucherDocument
       data={{
-        cashVoucherNo: advice.cashVoucherNo ?? advice.serialNo,
+        displayNo,
         formDate: advice.formDate,
         payeeName: advice.payeeName,
-        items: items.map((item) => ({ description: item.description, amount: item.amount })),
+        items: advice.isAdvance
+          ? particulars.map((p) => ({
+              description:
+                p.category === "OTHER"
+                  ? `${ADVANCE_PARTICULAR_CATEGORY_LABELS.OTHER}${p.otherDescription ? ` — ${p.otherDescription}` : ""}`
+                  : ADVANCE_PARTICULAR_CATEGORY_LABELS[
+                      p.category as keyof typeof ADVANCE_PARTICULAR_CATEGORY_LABELS
+                    ] ?? p.category,
+              amount: p.amount,
+            }))
+          : items.map((item) => ({ description: item.description, amount: item.amount })),
         submittedByName: advice.submittedByName,
         submittedAt: advice.submittedAt.toISOString(),
         recommendingAuthorityName,
         authorityApprovedAt: advice.authorityApprovedAt ? advice.authorityApprovedAt.toISOString() : null,
         sanctionedBy: advice.sanctionedBy,
+        isAdvance: advice.isAdvance,
+        purposeOfAdvance: advice.purposeOfAdvance,
+        previousPendingAdvanceAmount: advice.previousPendingAdvanceAmount,
+        previousPendingAdvanceSince: advice.previousPendingAdvanceSince,
       }}
     />,
   );
 }
 
-export function cashVoucherPdfFilename(cashVoucherNo: string): string {
-  return `Cash-Voucher-${cashVoucherNo.replace(/\//g, "-")}.pdf`;
+export function cashVoucherPdfFilename(displayNo: string): string {
+  return `Cash-Voucher-${displayNo.replace(/\//g, "-")}.pdf`;
 }

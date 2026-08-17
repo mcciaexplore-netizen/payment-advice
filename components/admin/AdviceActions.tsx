@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Status } from "@/lib/validation/payment-advice";
 import { AdminRole } from "@/lib/auth";
+import { billPassedForLabelFor } from "@/lib/advice/document-identity";
 
 const ROLE_LABELS: Record<AdminRole, string> = {
   PAYMENT_ADVICE: "a Payment Advice",
@@ -72,6 +73,7 @@ export function AdviceActions({
   initialBillPassedFor,
   initialEditToken,
   paymentMode,
+  isAdvance,
   authorityToken,
   authorityName,
   authorityApprovedAt,
@@ -93,6 +95,7 @@ export function AdviceActions({
   initialBillPassedFor: string | null;
   initialEditToken: string | null;
   paymentMode: "NEFT" | "CASH";
+  isAdvance: boolean;
   authorityToken: string | null;
   authorityName: string;
   authorityApprovedAt: string | null;
@@ -112,6 +115,9 @@ export function AdviceActions({
   currentUserRole: AdminRole;
 }) {
   const router = useRouter();
+  // Same underlying billPassedFor field/column, just conditional label text
+  // for advances — "Amount Sanctioned" instead of "Bill passed for Rs.".
+  const billPassedForLabel = billPassedForLabelFor(isAdvance);
   const [authorityLinkCopied, setAuthorityLinkCopied] = useState(false);
 
   function copyAuthorityLink() {
@@ -295,7 +301,7 @@ export function AdviceActions({
       return (
         <div className="flex flex-col gap-2 rounded-md border border-gray-200 p-4">
           <p className="text-sm font-medium text-[#0b1f3a]">
-            Bill passed for Rs. {initialBillPassedFor ?? "—"}
+            {billPassedForLabel} {initialBillPassedFor ?? "—"}
           </p>
           <p className="text-sm text-gray-600">
             Payment Done{doneBy ? ` — ${doneBy}` : ""}
@@ -320,7 +326,7 @@ export function AdviceActions({
       <div className="flex flex-col gap-4 rounded-md border border-gray-200 p-4">
         <div>
           <p className="text-sm font-medium text-[#0b1f3a]">
-            Bill passed for Rs. {initialBillPassedFor ?? "—"}
+            {billPassedForLabel} {initialBillPassedFor ?? "—"}
           </p>
           <p className="text-sm text-gray-600">
             Fully Payment Settled — ₹ {formatMoney(totalPaid)} paid.
@@ -359,7 +365,7 @@ export function AdviceActions({
       )}
 
       <div className="flex flex-col gap-2">
-        <label className="text-sm font-medium text-[#0b1f3a]">Bill passed for Rs.</label>
+        <label className="text-sm font-medium text-[#0b1f3a]">{billPassedForLabel}</label>
         {billPassedForLocked ? (
           <p className="text-sm text-gray-600">
             ₹ {formatMoney(initialBillPassedFor ?? "0")} — locked, a payment has already been
@@ -496,7 +502,7 @@ export function AdviceActions({
               </p>
               {!billPassedFor ? (
                 <p className="text-xs text-gray-500">
-                  &quot;Bill passed for Rs.&quot; above must be saved before marking Payment Done.
+                  &quot;{billPassedForLabel}&quot; above must be saved before marking Payment Done.
                 </p>
               ) : null}
               {paymentDoneError ? (
@@ -539,7 +545,7 @@ export function AdviceActions({
           {ownsSubmissionType(currentUserRole, paymentMode) ? (
             !billPassedFor ? (
               <p className="text-xs text-gray-500">
-                &quot;Bill passed for Rs.&quot; above must be saved before recording a payment.
+                &quot;{billPassedForLabel}&quot; above must be saved before recording a payment.
               </p>
             ) : (
               <div className="flex flex-col gap-2 rounded-md border border-[#2e8b57]/30 bg-white p-3">

@@ -24,6 +24,8 @@ export async function POST(
       status: paymentAdvices.status,
       serialNo: paymentAdvices.serialNo,
       cashVoucherNo: paymentAdvices.cashVoucherNo,
+      isAdvance: paymentAdvices.isAdvance,
+      advanceNo: paymentAdvices.advanceNo,
       paymentMode: paymentAdvices.paymentMode,
       submittedByName: paymentAdvices.submittedByName,
       submittedByEmail: paymentAdvices.submittedByEmail,
@@ -38,7 +40,9 @@ export async function POST(
   }
   if (advice.status === "APPROVED") {
     return NextResponse.json(
-      { error: `An approved ${documentLabelFor(advice.paymentMode as PaymentMode)} cannot be sent back.` },
+      {
+        error: `An approved ${documentLabelFor(advice.paymentMode as PaymentMode, advice.isAdvance)} cannot be sent back.`,
+      },
       { status: 409 },
     );
   }
@@ -82,8 +86,14 @@ export async function POST(
 
   await notifySentBack(
     {
-      displayNo: displayNoFor(advice.paymentMode as PaymentMode, advice.serialNo, advice.cashVoucherNo),
-      documentLabel: documentLabelFor(advice.paymentMode as PaymentMode),
+      displayNo: displayNoFor(
+        advice.paymentMode as PaymentMode,
+        advice.serialNo,
+        advice.cashVoucherNo,
+        advice.isAdvance,
+        advice.advanceNo,
+      ),
+      documentLabel: documentLabelFor(advice.paymentMode as PaymentMode, advice.isAdvance),
       submittedByName: advice.submittedByName,
       sentBackBy: "Admin",
       remarks: parsed.data.adminRemarks,

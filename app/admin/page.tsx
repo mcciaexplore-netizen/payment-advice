@@ -127,6 +127,8 @@ export default async function AdminListPage({
         id: paymentAdvices.id,
         serialNo: paymentAdvices.serialNo,
         cashVoucherNo: paymentAdvices.cashVoucherNo,
+        isAdvance: paymentAdvices.isAdvance,
+        advanceNo: paymentAdvices.advanceNo,
         formDate: paymentAdvices.formDate,
         payeeName: paymentAdvices.payeeName,
         amount: paymentAdvices.amount,
@@ -403,12 +405,21 @@ export default async function AdminListPage({
               rows.map((row) => (
                 <tr key={row.id} className="border-b border-gray-100 last:border-0 hover:bg-gray-50">
                   <td className="whitespace-nowrap px-4 py-3 font-medium text-[#0b1f3a]">
-                    {displayNoFor(row.paymentMode as PaymentMode, row.serialNo, row.cashVoucherNo)}
+                    {displayNoFor(
+                      row.paymentMode as PaymentMode,
+                      row.serialNo,
+                      row.cashVoucherNo,
+                      row.isAdvance,
+                      row.advanceNo,
+                    )}
                   </td>
                   <td className="whitespace-nowrap px-4 py-3">{formatDate(row.formDate)}</td>
                   <td className="px-4 py-3">{row.payeeName}</td>
                   <td className="whitespace-nowrap px-4 py-3 text-right">₹ {formatAmount(row.amount)}</td>
-                  <td className="whitespace-nowrap px-4 py-3">{row.paymentMode}</td>
+                  <td className="whitespace-nowrap px-4 py-3">
+                    {row.paymentMode}
+                    {row.isAdvance ? " (Advance)" : ""}
+                  </td>
                   <td className="px-4 py-3">{row.submittedByName}</td>
                   <td className="px-4 py-3">{row.submittedByDepartment}</td>
                   <td className="whitespace-nowrap px-4 py-3"><StatusChip status={row.status as Status} /></td>

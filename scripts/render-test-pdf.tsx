@@ -10,7 +10,7 @@ async function main() {
   const buffer = await renderToBuffer(
     <PaymentAdviceDocument
       data={{
-        serialNo: "MCCIA/2026-27/0001",
+        displayNo: "MCCIA/2026-27/0001",
         formDate: "2026-07-28",
         payeeName: "Acme Test Pvt Ltd",
         payeeAddress: "123 Test Street, Shivajinagar, Pune 411005, Maharashtra",
@@ -43,6 +43,10 @@ async function main() {
         authorityApprovedAt: "2026-07-29T14:00:00.000Z",
         approvedAt: "2026-07-30T09:00:00.000Z",
         approvedByName: "Suresh Patil",
+        isAdvance: false,
+        previousPendingAdvanceAmount: null,
+        previousPendingAdvanceSince: null,
+        particulars: [],
       }}
     />,
   );

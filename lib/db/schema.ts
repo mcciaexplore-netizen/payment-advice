@@ -160,6 +160,34 @@ export const paymentAdvices = pgTable("payment_advices", {
   enclosures: text("enclosures"),
   specialRemarks: text("special_remarks"),
 
+  // Advance Payment — a third top-level option on the public form, but NOT
+  // a third payment_mode value: an advance still routes to the existing
+  // NEFT (Payment Advice) or CASH (Cash Voucher) pipeline/dashboard exactly
+  // as a regular submission would, just flagged. See AGENT_HANDOFF.md.
+  // Settlement (reconciling actual spend against the advance afterward) is
+  // explicitly a separate future feature — nothing here supports it yet.
+  isAdvance: boolean("is_advance").default(false).notNull(),
+  // Own gapless series (ADV/MCCIA/<FY>/NNNN via serial_counters' ADVANCE
+  // row), allocated only when isAdvance = true, regardless of NEFT/CASH
+  // sub-route — one shared counter, not two. Becomes the primary display
+  // number wherever this advance is shown, superseding serial_no/
+  // cash_voucher_no the same way cash_voucher_no supersedes serial_no for
+  // Cash — see lib/advice/document-identity.ts.
+  advanceNo: text("advance_no"),
+  // Free-text overall reason for the advance — distinct from the itemized
+  // advance_particulars breakdown below (which categorizes *what* by preset
+  // type; this captures *why*). Mirrored into nature_of_expenditure (same
+  // dual-representation pattern cash_voucher_items already uses) so every
+  // existing reader of that NOT NULL column keeps working unchanged.
+  purposeOfAdvance: text("purpose_of_advance"),
+  // Self-declared by the submitter, not system-verified — no Settlement
+  // tracking exists yet to verify against (explicitly out of scope).
+  previousPendingAdvanceAmount: numeric("previous_pending_advance_amount", {
+    precision: 14,
+    scale: 2,
+  }),
+  previousPendingAdvanceSince: date("previous_pending_advance_since"),
+
   // Payment
   paymentMode: text("payment_mode").notNull(), // 'NEFT' | 'CASH'
   bankAccountNo: text("bank_account_no"),
@@ -294,6 +322,23 @@ export const cashVoucherItems = pgTable("cash_voucher_items", {
     .notNull(),
 });
 
+/** Itemised Particulars breakdown for Advance Payment submissions only
+ * (isAdvance = true), regardless of NEFT/CASH sub-route — mirrors the
+ * cash_voucher_items pattern. `category` is one of the 6 preset dropdown
+ * values (see ADVANCE_PARTICULAR_CATEGORIES in lib/validation/payment-advice.ts);
+ * `otherDescription` is only populated when category = 'OTHER'. */
+export const advanceParticulars = pgTable("advance_particulars", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  paymentAdviceId: uuid("payment_advice_id")
+    .notNull()
+    .references(() => paymentAdvices.id, { onDelete: "cascade" }),
+  category: text("category").notNull(),
+  otherDescription: text("other_description"),
+  amount: numeric("amount", { precision: 14, scale: 2 }).notNull(),
+  sortOrder: integer("sort_order").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+});
+
 /**
  * Multi-part payment tracking — NEFT (Payment Advice) only. Cash Voucher's
  * single-action "Mark Payment Done" (POST .../payment-done) never inserts
@@ -320,8 +365,12 @@ export const paymentEntries = pgTable("payment_entries", {
 /** One row per (financial year, series) pair. 'PAYMENT_ADVICE' is the
  * original series (MCCIA/<FY>/NNNN, every submission); 'CASH_VOUCHER' is the
  * independent series (CASH/MCCIA/<FY>/NNNN, CASH-mode submissions only).
- * Both allocated via the same SELECT ... FOR UPDATE gapless pattern in
- * lib/serial.ts — this is one mechanism serving two series, not two. */
+ * 'ADVANCE' (ADV/MCCIA/<FY>/NNNN) is a third independent series for
+ * isAdvance = true submissions — one shared counter regardless of whether
+ * the advance routes to NEFT or Cash, not two separate ADV series. All
+ * three allocated via the same SELECT ... FOR UPDATE gapless pattern in
+ * lib/serial.ts — this is one mechanism serving three series, not three
+ * copies of it. */
 export const serialCounters = pgTable(
   "serial_counters",
   {

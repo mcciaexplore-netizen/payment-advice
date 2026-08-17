@@ -2,11 +2,18 @@ import { NextRequest, NextResponse } from "next/server";
 import { and, eq } from "drizzle-orm";
 import { put, del } from "@vercel/blob";
 import { db } from "@/lib/db";
-import { paymentAdvices, attachments, auditLog, cashVoucherItems, recommendingAuthorities } from "@/lib/db/schema";
+import {
+  paymentAdvices,
+  attachments,
+  auditLog,
+  cashVoucherItems,
+  advanceParticulars,
+  recommendingAuthorities,
+} from "@/lib/db/schema";
 import { notifyAuthorityApproval } from "@/lib/email/notify";
 import { generateAuthorityToken } from "@/lib/advice/authority-token";
 import { displayNoFor, documentLabelFor } from "@/lib/advice/document-identity";
-import { allocateCashVoucherNumber } from "@/lib/serial";
+import { allocateAdvanceNumber, allocateCashVoucherNumber } from "@/lib/serial";
 import { parsePaymentAdviceFormData } from "@/lib/form-data";
 import {
   paymentAdviceFormSchema,
@@ -123,8 +130,11 @@ export async function POST(
     existingByDocType.set(docType, list);
   }
 
+  // Tax Invoice is not required for advances — see app/api/submit/route.ts.
   const hasTaxInvoice =
-    byDocType.TAX_INVOICE.length === 1 || (existingByDocType.get("TAX_INVOICE")?.length ?? 0) > 0;
+    values.isAdvance ||
+    byDocType.TAX_INVOICE.length === 1 ||
+    (existingByDocType.get("TAX_INVOICE")?.length ?? 0) > 0;
   const hasApprovalBudget =
     byDocType.APPROVAL_BUDGET.length === 1 ||
     (existingByDocType.get("APPROVAL_BUDGET")?.length ?? 0) > 0;
@@ -188,6 +198,13 @@ export async function POST(
         ? advice.cashVoucherNo ??
           (await db.transaction((tx) => allocateCashVoucherNumber(tx, advice.financialYear)))
         : null;
+    // Same pattern for the Advance series — independent of the NEFT/Cash
+    // sub-route, allocated once (first time isAdvance becomes true on this
+    // row) and nulled out if a resubmission flips isAdvance back to false.
+    const advanceNo = values.isAdvance
+      ? advice.advanceNo ??
+        (await db.transaction((tx) => allocateAdvanceNumber(tx, advice.financialYear)))
+      : null;
 
     await db.transaction(async (tx) => {
       await tx
@@ -226,16 +243,32 @@ export async function POST(
           billNo: values.billNo,
           billDate: values.billDate,
           amount: values.amount.toFixed(2),
-          basicAmount: values.paymentMode === "NEFT" ? values.basicAmount!.toFixed(2) : null,
-          gstAmount: values.paymentMode === "NEFT" ? values.gstAmount!.toFixed(2) : null,
-          natureOfExpenditure:
-            values.paymentMode === "CASH"
+          basicAmount:
+            values.paymentMode === "NEFT" && !values.isAdvance
+              ? values.basicAmount!.toFixed(2)
+              : null,
+          gstAmount:
+            values.paymentMode === "NEFT" && !values.isAdvance
+              ? values.gstAmount!.toFixed(2)
+              : null,
+          natureOfExpenditure: values.isAdvance
+            ? values.purposeOfAdvance ?? ""
+            : values.paymentMode === "CASH"
               ? values.cashVoucherItems.map((item) => item.description).join("; ")
               : values.natureOfExpenditure ?? "",
           enclosures: values.enclosures ?? null,
           specialRemarks: values.specialRemarks ?? null,
           paymentMode: values.paymentMode,
           cashVoucherNo,
+          isAdvance: values.isAdvance,
+          advanceNo,
+          purposeOfAdvance: values.isAdvance ? values.purposeOfAdvance ?? null : null,
+          previousPendingAdvanceAmount: values.isAdvance
+            ? values.previousPendingAdvanceAmount.toFixed(2)
+            : null,
+          previousPendingAdvanceSince: values.isAdvance
+            ? values.previousPendingAdvanceSince ?? null
+            : null,
           bankAccountNo: values.bankAccountNo ?? null,
           bankIfsc: values.bankIfsc ?? null,
           beneficiaryName: values.beneficiaryName ?? null,
@@ -264,11 +297,26 @@ export async function POST(
       await tx
         .delete(cashVoucherItems)
         .where(eq(cashVoucherItems.paymentAdviceId, advice.id));
-      if (values.paymentMode === "CASH") {
+      if (values.paymentMode === "CASH" && !values.isAdvance) {
         await tx.insert(cashVoucherItems).values(
           values.cashVoucherItems.map((item, sortOrder) => ({
             paymentAdviceId: advice.id,
             description: item.description,
+            amount: item.amount.toFixed(2),
+            sortOrder,
+          })),
+        );
+      }
+
+      await tx
+        .delete(advanceParticulars)
+        .where(eq(advanceParticulars.paymentAdviceId, advice.id));
+      if (values.isAdvance) {
+        await tx.insert(advanceParticulars).values(
+          values.advanceParticulars.map((item, sortOrder) => ({
+            paymentAdviceId: advice.id,
+            category: item.category,
+            otherDescription: item.category === "OTHER" ? item.otherDescription ?? null : null,
             amount: item.amount.toFixed(2),
             sortOrder,
           })),
@@ -308,14 +356,21 @@ export async function POST(
     const authorityName = authority?.authorityName ?? "MCCIA Finance & Accounts";
     await notifyAuthorityApproval(
       {
-        displayNo: displayNoFor(values.paymentMode, advice.serialNo, cashVoucherNo),
-        documentLabel: documentLabelFor(values.paymentMode),
+        displayNo: displayNoFor(
+          values.paymentMode,
+          advice.serialNo,
+          cashVoucherNo,
+          values.isAdvance,
+          advanceNo,
+        ),
+        documentLabel: documentLabelFor(values.paymentMode, values.isAdvance),
         authorityName,
         submittedByName: values.submittedByName,
         payeeName: values.payeeName,
         amount: values.amount.toLocaleString("en-IN", { minimumFractionDigits: 2 }),
-        natureOfExpenditure:
-          values.paymentMode === "CASH"
+        natureOfExpenditure: values.isAdvance
+          ? values.purposeOfAdvance ?? ""
+          : values.paymentMode === "CASH"
             ? values.cashVoucherItems.map((item) => item.description).join("; ")
             : values.natureOfExpenditure ?? "",
         billReference: values.billNo,
@@ -330,6 +385,7 @@ export async function POST(
     return NextResponse.json({
       serialNo: advice.serialNo,
       cashVoucherNo,
+      advanceNo,
       id: advice.id,
       authorityToken,
       authorityName,

@@ -25,6 +25,8 @@ export async function POST(
       id: paymentAdvices.id,
       serialNo: paymentAdvices.serialNo,
       cashVoucherNo: paymentAdvices.cashVoucherNo,
+      isAdvance: paymentAdvices.isAdvance,
+      advanceNo: paymentAdvices.advanceNo,
       paymentMode: paymentAdvices.paymentMode,
       submittedByName: paymentAdvices.submittedByName,
       submittedByEmail: paymentAdvices.submittedByEmail,
@@ -73,8 +75,14 @@ export async function POST(
 
   await notifySentBack(
     {
-      displayNo: displayNoFor(advice.paymentMode as PaymentMode, advice.serialNo, advice.cashVoucherNo),
-      documentLabel: documentLabelFor(advice.paymentMode as PaymentMode),
+      displayNo: displayNoFor(
+        advice.paymentMode as PaymentMode,
+        advice.serialNo,
+        advice.cashVoucherNo,
+        advice.isAdvance,
+        advice.advanceNo,
+      ),
+      documentLabel: documentLabelFor(advice.paymentMode as PaymentMode, advice.isAdvance),
       submittedByName: advice.submittedByName,
       sentBackBy: authorityName,
       remarks: parsed.data.remarks,

@@ -2,11 +2,18 @@ import { NextRequest, NextResponse } from "next/server";
 import { put, del } from "@vercel/blob";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { paymentAdvices, attachments, auditLog, cashVoucherItems, recommendingAuthorities } from "@/lib/db/schema";
+import {
+  paymentAdvices,
+  attachments,
+  auditLog,
+  cashVoucherItems,
+  advanceParticulars,
+  recommendingAuthorities,
+} from "@/lib/db/schema";
 import { notifyAuthorityApproval, notifySubmissionConfirmation } from "@/lib/email/notify";
 import { generateAuthorityToken } from "@/lib/advice/authority-token";
 import { displayNoFor, documentLabelFor } from "@/lib/advice/document-identity";
-import { allocateCashVoucherNumber, allocateSerialNumber } from "@/lib/serial";
+import { allocateAdvanceNumber, allocateCashVoucherNumber, allocateSerialNumber } from "@/lib/serial";
 import { parsePaymentAdviceFormData } from "@/lib/form-data";
 import {
   paymentAdviceFormSchema,
@@ -30,9 +37,13 @@ function clientIp(req: NextRequest): string | null {
 
 type AttachmentInput = { docType: DocType; file: File };
 
-/** Validates presence/count rules and, for every file, size + real PDF content. */
+/** Validates presence/count rules and, for every file, size + real PDF content.
+ * Tax Invoice is not required for advances (isAdvance = true) — no invoice
+ * exists before money is spent. Approval / Budget Letter stays mandatory
+ * regardless. */
 async function validateAttachments(
   formData: FormData,
+  isAdvance: boolean,
 ): Promise<{ error: string } | { attachments: AttachmentInput[] }> {
   const taxInvoice = formData.getAll("attachment_TAX_INVOICE") as File[];
   const approvalBudget = formData.getAll("attachment_APPROVAL_BUDGET") as File[];
@@ -40,7 +51,10 @@ async function validateAttachments(
   const deliveryChallan = formData.getAll("attachment_DELIVERY_CHALLAN") as File[];
   const other = formData.getAll("attachment_OTHER") as File[];
 
-  if (taxInvoice.length !== 1) {
+  if (taxInvoice.length > 1) {
+    return { error: "Only one Tax Invoice file is allowed." };
+  }
+  if (!isAdvance && taxInvoice.length !== 1) {
     return { error: "Tax Invoice is a mandatory attachment (exactly one PDF)." };
   }
   if (approvalBudget.length !== 1) {
@@ -89,7 +103,7 @@ export async function POST(req: NextRequest) {
   }
   const values = parsed.data;
 
-  const attachmentResult = await validateAttachments(formData);
+  const attachmentResult = await validateAttachments(formData, values.isAdvance);
   if ("error" in attachmentResult) {
     return NextResponse.json({ error: attachmentResult.error }, { status: 400 });
   }
@@ -99,14 +113,21 @@ export async function POST(req: NextRequest) {
   let serialNo: string;
   let financialYear: string;
   let cashVoucherNo: string | null;
+  let advanceNo: string | null;
   try {
-    ({ serialNo, financialYear, cashVoucherNo } = await db.transaction(async (tx) => {
+    ({ serialNo, financialYear, cashVoucherNo, advanceNo } = await db.transaction(async (tx) => {
       const allocated = await allocateSerialNumber(tx, now);
       const voucherNo =
         values.paymentMode === "CASH"
           ? await allocateCashVoucherNumber(tx, allocated.financialYear)
           : null;
-      return { ...allocated, cashVoucherNo: voucherNo };
+      // One shared ADVANCE series regardless of NEFT/Cash sub-route —
+      // allocated alongside whichever underlying number also gets
+      // allocated, same dual-numbering precedent as Cash Voucher.
+      const advNo = values.isAdvance
+        ? await allocateAdvanceNumber(tx, allocated.financialYear)
+        : null;
+      return { ...allocated, cashVoucherNo: voucherNo, advanceNo: advNo };
     }));
   } catch (err) {
     console.error("Failed to allocate serial number", err);
@@ -154,6 +175,15 @@ export async function POST(req: NextRequest) {
           serialNo,
           financialYear,
           cashVoucherNo,
+          isAdvance: values.isAdvance,
+          advanceNo,
+          purposeOfAdvance: values.isAdvance ? values.purposeOfAdvance ?? null : null,
+          previousPendingAdvanceAmount: values.isAdvance
+            ? values.previousPendingAdvanceAmount.toFixed(2)
+            : null,
+          previousPendingAdvanceSince: values.isAdvance
+            ? values.previousPendingAdvanceSince ?? null
+            : null,
           status: "SUBMITTED",
           authorityToken,
           authorityTokenExpiresAt,
@@ -173,10 +203,20 @@ export async function POST(req: NextRequest) {
           billNo: values.billNo,
           billDate: values.billDate,
           amount: values.amount.toFixed(2),
-          basicAmount: values.paymentMode === "NEFT" ? values.basicAmount!.toFixed(2) : null,
-          gstAmount: values.paymentMode === "NEFT" ? values.gstAmount!.toFixed(2) : null,
-          natureOfExpenditure:
-            values.paymentMode === "CASH"
+          basicAmount:
+            values.paymentMode === "NEFT" && !values.isAdvance
+              ? values.basicAmount!.toFixed(2)
+              : null,
+          gstAmount:
+            values.paymentMode === "NEFT" && !values.isAdvance
+              ? values.gstAmount!.toFixed(2)
+              : null,
+          // Mirrored into this NOT NULL column so every existing reader
+          // (PDF, Excel, authority-approval email) keeps working unchanged
+          // — same dual-representation pattern cash_voucher_items uses.
+          natureOfExpenditure: values.isAdvance
+            ? values.purposeOfAdvance ?? ""
+            : values.paymentMode === "CASH"
               ? values.cashVoucherItems.map((item) => item.description).join("; ")
               : values.natureOfExpenditure ?? "",
           enclosures: values.enclosures ?? null,
@@ -204,11 +244,23 @@ export async function POST(req: NextRequest) {
         })),
       );
 
-      if (values.paymentMode === "CASH") {
+      if (values.paymentMode === "CASH" && !values.isAdvance) {
         await tx.insert(cashVoucherItems).values(
           values.cashVoucherItems.map((item, sortOrder) => ({
             paymentAdviceId: advice.id,
             description: item.description,
+            amount: item.amount.toFixed(2),
+            sortOrder,
+          })),
+        );
+      }
+
+      if (values.isAdvance) {
+        await tx.insert(advanceParticulars).values(
+          values.advanceParticulars.map((item, sortOrder) => ({
+            paymentAdviceId: advice.id,
+            category: item.category,
+            otherDescription: item.category === "OTHER" ? item.otherDescription ?? null : null,
             amount: item.amount.toFixed(2),
             sortOrder,
           })),
@@ -233,8 +285,8 @@ export async function POST(req: NextRequest) {
       .limit(1);
     const origin = new URL(req.url).origin;
     const authorityName = authority?.authorityName ?? "MCCIA Finance & Accounts";
-    const displayNo = displayNoFor(values.paymentMode, serialNo, cashVoucherNo);
-    const documentLabel = documentLabelFor(values.paymentMode);
+    const displayNo = displayNoFor(values.paymentMode, serialNo, cashVoucherNo, values.isAdvance, advanceNo);
+    const documentLabel = documentLabelFor(values.paymentMode, values.isAdvance);
     await notifySubmissionConfirmation(
       {
         displayNo,
@@ -276,7 +328,14 @@ export async function POST(req: NextRequest) {
       adviceId,
     );
 
-    return NextResponse.json({ serialNo, cashVoucherNo, id: adviceId, authorityToken, authorityName });
+    return NextResponse.json({
+      serialNo,
+      cashVoucherNo,
+      advanceNo,
+      id: adviceId,
+      authorityToken,
+      authorityName,
+    });
   } catch (err) {
     console.error("Submit failed after blob upload, cleaning up", err);
     await Promise.allSettled(uploadedPathnames.map((p) => del(p)));

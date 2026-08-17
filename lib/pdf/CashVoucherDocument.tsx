@@ -4,9 +4,15 @@ import path from "node:path";
 import { Stamp, StampColor } from "@/lib/pdf/Stamp";
 
 export type CashVoucherPdfData = {
-  cashVoucherNo: string;
+  // Resolved primary document number — cash_voucher_no normally, or
+  // advance_no when isAdvance (per lib/advice/document-identity.ts).
+  displayNo: string;
   formDate: string;
   payeeName: string;
+  // For an advance, this is fed from advance_particulars (category label,
+  // plus " — {otherDescription}" when category is OTHER) rather than
+  // cash_voucher_items — reuses this same table/column instead of adding a
+  // second one, per AGENT_HANDOFF.md.
   items: { description: string; amount: string }[];
   submittedByName: string;
   submittedAt: string; // ISO timestamp — drives the Submitted stamp's date
@@ -15,6 +21,11 @@ export type CashVoucherPdfData = {
   // the Recommending Authority actually approves.
   authorityApprovedAt: string | null;
   sanctionedBy: string | null;
+  // Advance Payment fields — all null/empty for a regular Cash Voucher.
+  isAdvance: boolean;
+  purposeOfAdvance: string | null;
+  previousPendingAdvanceAmount: string | null;
+  previousPendingAdvanceSince: string | null; // YYYY-MM-DD
 };
 
 const NAVY = "#0B1F3A";
@@ -95,7 +106,7 @@ export function CashVoucherDocument({ data }: { data: CashVoucherPdfData }) {
         <View style={styles.titleRule} />
 
         <View style={styles.metadata}>
-          <View style={styles.metadataItem}><Text style={styles.metadataLabel}>No.</Text><Text style={styles.metadataValue}>{data.cashVoucherNo}</Text></View>
+          <View style={styles.metadataItem}><Text style={styles.metadataLabel}>No.</Text><Text style={styles.metadataValue}>{data.displayNo}</Text></View>
           <View style={styles.metadataItem}><Text style={styles.metadataLabel}>Date</Text><Text style={styles.metadataValue}>{formatDate(data.formDate)}</Text></View>
         </View>
 
@@ -104,9 +115,26 @@ export function CashVoucherDocument({ data }: { data: CashVoucherPdfData }) {
           <Text style={styles.payeeValue}>{data.payeeName}</Text>
         </View>
 
+        {data.isAdvance ? (
+          <View style={styles.payee}>
+            <Text style={styles.payeeLabel}>Purpose of Advance</Text>
+            <Text style={[styles.payeeValue, { fontSize: 9 }]}>{data.purposeOfAdvance ?? ""}</Text>
+            <Text style={{ fontSize: 8, color: "#536275", marginTop: 6 }}>
+              Previous Pending Advance :{" "}
+              {data.previousPendingAdvanceAmount && Number(data.previousPendingAdvanceAmount) > 0
+                ? `Rs. ${formatAmount(data.previousPendingAdvanceAmount)} (since ${
+                    data.previousPendingAdvanceSince ? formatDate(data.previousPendingAdvanceSince) : ""
+                  })`
+                : "None"}
+            </Text>
+          </View>
+        ) : null}
+
         <View style={styles.table}>
           <View style={styles.row}>
-            <Text style={[styles.headerCell, styles.description]}>NATURE OF EXPENDITURE</Text>
+            <Text style={[styles.headerCell, styles.description]}>
+              {data.isAdvance ? "PARTICULARS" : "NATURE OF EXPENDITURE"}
+            </Text>
             <Text style={[styles.headerCell, styles.amount]}>AMOUNT (RS.)</Text>
           </View>
           {data.items.map((item, index) => (

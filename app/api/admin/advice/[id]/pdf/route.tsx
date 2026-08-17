@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { eq } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { paymentAdvices, auditLog, recommendingAuthorities } from "@/lib/db/schema";
+import { advanceParticulars, paymentAdvices, auditLog, recommendingAuthorities } from "@/lib/db/schema";
 import { renderPaymentAdvicePdf, pdfFilename } from "@/lib/pdf/render";
+import { displayNoFor } from "@/lib/advice/document-identity";
+import type { PaymentMode } from "@/lib/validation/payment-advice";
 
 export const runtime = "nodejs";
 
@@ -32,13 +34,23 @@ export async function GET(
     );
   }
 
-  const [authority] = await db
-    .select({ authorityName: recommendingAuthorities.authorityName })
-    .from(recommendingAuthorities)
-    .where(eq(recommendingAuthorities.id, advice.recommendingAuthorityId))
-    .limit(1);
+  const [authority, particulars] = await Promise.all([
+    db
+      .select({ authorityName: recommendingAuthorities.authorityName })
+      .from(recommendingAuthorities)
+      .where(eq(recommendingAuthorities.id, advice.recommendingAuthorityId))
+      .limit(1)
+      .then((rows) => rows[0]),
+    advice.isAdvance
+      ? db
+          .select()
+          .from(advanceParticulars)
+          .where(eq(advanceParticulars.paymentAdviceId, advice.id))
+          .orderBy(asc(advanceParticulars.sortOrder))
+      : Promise.resolve([]),
+  ]);
 
-  const buffer = await renderPaymentAdvicePdf(advice, authority?.authorityName ?? "");
+  const buffer = await renderPaymentAdvicePdf(advice, authority?.authorityName ?? "", particulars);
 
   await db.insert(auditLog).values({
     paymentAdviceId: advice.id,
@@ -48,11 +60,18 @@ export async function GET(
     details: { serialNo: advice.serialNo },
   });
 
+  const displayNo = displayNoFor(
+    advice.paymentMode as PaymentMode,
+    advice.serialNo,
+    advice.cashVoucherNo,
+    advice.isAdvance,
+    advice.advanceNo,
+  );
   return new NextResponse(new Uint8Array(buffer), {
     status: 200,
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `attachment; filename="${pdfFilename(advice.serialNo)}"`,
+      "Content-Disposition": `attachment; filename="${pdfFilename(displayNo)}"`,
     },
   });
 }

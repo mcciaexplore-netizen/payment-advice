@@ -20,6 +20,17 @@ export function parsePaymentAdviceFormData(formData: FormData) {
       cashVoucherItems = undefined;
     }
   }
+  const rawIsAdvance = str(formData, "isAdvance");
+  const rawPreviousPendingAdvanceAmount = str(formData, "previousPendingAdvanceAmount");
+  const rawAdvanceParticulars = str(formData, "advanceParticulars");
+  let advanceParticulars: unknown = [];
+  if (rawAdvanceParticulars) {
+    try {
+      advanceParticulars = JSON.parse(rawAdvanceParticulars);
+    } catch {
+      advanceParticulars = undefined;
+    }
+  }
   return {
     submittedByName: str(formData, "submittedByName"),
     submittedByEmail: str(formData, "submittedByEmail"),
@@ -44,6 +55,13 @@ export function parsePaymentAdviceFormData(formData: FormData) {
     gstAmount: rawGstAmount ? Number(rawGstAmount) : undefined,
     natureOfExpenditure: str(formData, "natureOfExpenditure"),
     cashVoucherItems,
+    isAdvance: rawIsAdvance === "true",
+    purposeOfAdvance: str(formData, "purposeOfAdvance"),
+    previousPendingAdvanceAmount: rawPreviousPendingAdvanceAmount
+      ? Number(rawPreviousPendingAdvanceAmount)
+      : undefined,
+    previousPendingAdvanceSince: str(formData, "previousPendingAdvanceSince"),
+    advanceParticulars,
     paymentMode: str(formData, "paymentMode"),
     bankAccountNo: str(formData, "bankAccountNo"),
     bankIfsc: str(formData, "bankIfsc"),

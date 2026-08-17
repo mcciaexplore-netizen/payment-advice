@@ -1,8 +1,14 @@
-import { eq } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { paymentAdvices, attachments, recommendingAuthorities, cashVoucherItems } from "@/lib/db/schema";
+import {
+  paymentAdvices,
+  attachments,
+  recommendingAuthorities,
+  cashVoucherItems,
+  advanceParticulars,
+} from "@/lib/db/schema";
 import { PaymentAdviceForm } from "@/components/form/PaymentAdviceForm";
-import { DocType, PaymentMode } from "@/lib/validation/payment-advice";
+import { ADVANCE_PARTICULAR_CATEGORIES, DocType, PaymentMode } from "@/lib/validation/payment-advice";
 import { displayNoFor, documentLabelFor } from "@/lib/advice/document-identity";
 
 export const dynamic = "force-dynamic";
@@ -38,7 +44,7 @@ export default async function EditPage({
     );
   }
 
-  const [authorities, adviceAttachments, voucherItems] = await Promise.all([
+  const [authorities, adviceAttachments, voucherItems, particulars] = await Promise.all([
     db
       .select({
         id: recommendingAuthorities.id,
@@ -52,6 +58,11 @@ export default async function EditPage({
       .from(cashVoucherItems)
       .where(eq(cashVoucherItems.paymentAdviceId, advice.id))
       .orderBy(cashVoucherItems.sortOrder),
+    db
+      .select()
+      .from(advanceParticulars)
+      .where(eq(advanceParticulars.paymentAdviceId, advice.id))
+      .orderBy(asc(advanceParticulars.sortOrder)),
   ]);
 
   const existingAttachments: Partial<Record<DocType, string[]>> = {};
@@ -64,11 +75,17 @@ export default async function EditPage({
     <main className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-8 px-6 py-10">
       <header className="border-b border-gray-200 pb-6">
         <p className="text-xs font-medium tracking-wide text-gray-500">
-          {displayNoFor(advice.paymentMode as PaymentMode, advice.serialNo, advice.cashVoucherNo)}
-          {advice.paymentMode === "CASH" ? ` (Internal Ref. ${advice.serialNo})` : ""}
+          {displayNoFor(
+            advice.paymentMode as PaymentMode,
+            advice.serialNo,
+            advice.cashVoucherNo,
+            advice.isAdvance,
+            advice.advanceNo,
+          )}
+          {advice.paymentMode === "CASH" || advice.isAdvance ? ` (Internal Ref. ${advice.serialNo})` : ""}
         </p>
         <h1 className="font-heading text-3xl text-[#0b1f3a]">
-          Correct and Resubmit {documentLabelFor(advice.paymentMode as PaymentMode)}
+          Correct and Resubmit {documentLabelFor(advice.paymentMode as PaymentMode, advice.isAdvance)}
         </h1>
       </header>
 
@@ -109,6 +126,18 @@ export default async function EditPage({
           natureOfExpenditure: advice.natureOfExpenditure,
           cashVoucherItems: voucherItems.map((item) => ({
             description: item.description,
+            amount: Number(item.amount),
+          })),
+          isAdvance: advice.isAdvance,
+          purposeOfAdvance: advice.purposeOfAdvance ?? undefined,
+          previousPendingAdvanceAmount:
+            advice.previousPendingAdvanceAmount !== null
+              ? Number(advice.previousPendingAdvanceAmount)
+              : undefined,
+          previousPendingAdvanceSince: advice.previousPendingAdvanceSince ?? undefined,
+          advanceParticulars: particulars.map((item) => ({
+            category: item.category as (typeof ADVANCE_PARTICULAR_CATEGORIES)[number],
+            otherDescription: item.otherDescription ?? undefined,
             amount: Number(item.amount),
           })),
           paymentMode: advice.paymentMode as PaymentMode,

@@ -20,6 +20,9 @@ import {
   MAX_OTHER_ATTACHMENTS,
   DocType,
   calculateCashVoucherTotal,
+  calculateAdvanceParticularsTotal,
+  ADVANCE_PARTICULAR_CATEGORIES,
+  ADVANCE_PARTICULAR_CATEGORY_LABELS,
 } from "@/lib/validation/payment-advice";
 
 type RecommendingAuthority = {
@@ -68,12 +71,20 @@ export function PaymentAdviceForm({
       formDate: today,
       paymentMode: "NEFT",
       cashVoucherItems: [],
+      isAdvance: false,
+      previousPendingAdvanceAmount: 0,
+      advanceParticulars: [],
       ...prefill,
     },
   });
 
   const { fields: cashVoucherFields, append: appendCashVoucherItem, remove: removeCashVoucherItem } =
     useFieldArray({ control, name: "cashVoucherItems" });
+  const {
+    fields: advanceParticularFields,
+    append: appendAdvanceParticular,
+    remove: removeAdvanceParticular,
+  } = useFieldArray({ control, name: "advanceParticulars" });
 
   const [matchedStaff, setMatchedStaff] = useState<StaffSearchResult | null>(null);
   // Same "only react on an actual identity change" pattern
@@ -102,9 +113,17 @@ export function PaymentAdviceForm({
   );
   const basicAmount = useWatch({ control, name: "basicAmount" });
   const gstAmount = useWatch({ control, name: "gstAmount" });
+  const isAdvance = useWatch({ control, name: "isAdvance" }) ?? false;
+  const watchedAdvanceParticulars = useWatch({ control, name: "advanceParticulars" });
+  const advanceParticulars = useMemo(
+    () => watchedAdvanceParticulars ?? [],
+    [watchedAdvanceParticulars],
+  );
+  const previousPendingAdvanceAmount =
+    useWatch({ control, name: "previousPendingAdvanceAmount" }) ?? 0;
 
   useEffect(() => {
-    if (paymentMode !== "CASH") return;
+    if (isAdvance || paymentMode !== "CASH") return;
     if (cashVoucherItems.length === 0) {
       appendCashVoucherItem({ description: "", amount: 0 });
       return;
@@ -115,7 +134,7 @@ export function PaymentAdviceForm({
     setValue("amount", calculateCashVoucherTotal(completeItems), {
       shouldValidate: false,
     });
-  }, [appendCashVoucherItem, cashVoucherItems, paymentMode, setValue]);
+  }, [appendCashVoucherItem, cashVoucherItems, isAdvance, paymentMode, setValue]);
 
   // Total (Rs.) is always Basic Amount + GST Amount for NEFT — auto-
   // calculated, read-only, updates live as either field changes. Mirrors
@@ -124,9 +143,26 @@ export function PaymentAdviceForm({
     (Number.isFinite(basicAmount) ? Number(basicAmount) : 0) +
     (Number.isFinite(gstAmount) ? Number(gstAmount) : 0);
   useEffect(() => {
-    if (paymentMode !== "NEFT") return;
+    if (isAdvance || paymentMode !== "NEFT") return;
     setValue("amount", Math.round(neftTotal * 100) / 100, { shouldValidate: false });
-  }, [paymentMode, neftTotal, setValue]);
+  }, [isAdvance, paymentMode, neftTotal, setValue]);
+
+  // Advance Payment's Particulars total — same live-summed-total mechanic
+  // as the Cash Voucher line items above, but applies regardless of
+  // NEFT/Cash sub-route once isAdvance is set.
+  useEffect(() => {
+    if (!isAdvance) return;
+    if (advanceParticulars.length === 0) {
+      appendAdvanceParticular({ category: "CONVEYANCE", amount: 0 });
+      return;
+    }
+    const completeItems = advanceParticulars.filter(
+      (item) => Number.isFinite(item?.amount) && item.amount > 0,
+    );
+    setValue("amount", calculateAdvanceParticularsTotal(completeItems), {
+      shouldValidate: false,
+    });
+  }, [advanceParticulars, appendAdvanceParticular, isAdvance, setValue]);
 
   // Mirrors applyVendor's "fill only what's on file" pattern below, plus
   // RecommendingAuthorityField's "only react when the matched identity
@@ -168,13 +204,19 @@ export function PaymentAdviceForm({
   async function onSubmit(values: PaymentAdviceFormValues) {
     setSubmitError(null);
 
+    // Tax Invoice is not required for advances — no invoice exists before
+    // money is spent. Approval / Budget Letter stays required regardless.
     const hasTaxInvoice =
-      taxInvoice.length === 1 || (existingAttachments?.TAX_INVOICE?.length ?? 0) > 0;
+      values.isAdvance ||
+      taxInvoice.length === 1 ||
+      (existingAttachments?.TAX_INVOICE?.length ?? 0) > 0;
     const hasApprovalBudget =
       approvalBudget.length === 1 || (existingAttachments?.APPROVAL_BUDGET?.length ?? 0) > 0;
     if (!hasTaxInvoice || !hasApprovalBudget) {
       setAttachmentError(
-        "Tax Invoice and Approval / Budget Letter are both mandatory attachments.",
+        values.isAdvance
+          ? "Approval / Budget Letter is a mandatory attachment."
+          : "Tax Invoice and Approval / Budget Letter are both mandatory attachments.",
       );
       window.scrollTo({ top: 0, behavior: "smooth" });
       return;
@@ -184,10 +226,11 @@ export function PaymentAdviceForm({
     const formData = new FormData();
     for (const [key, value] of Object.entries(values)) {
       if (value === undefined || value === null) continue;
-      if (key === "cashVoucherItems") continue;
+      if (key === "cashVoucherItems" || key === "advanceParticulars") continue;
       formData.append(key, String(value));
     }
     formData.append("cashVoucherItems", JSON.stringify(values.cashVoucherItems));
+    formData.append("advanceParticulars", JSON.stringify(values.advanceParticulars));
     if (editToken) formData.append("editToken", editToken);
 
     taxInvoice.forEach((f) => formData.append("attachment_TAX_INVOICE", f));
@@ -212,14 +255,17 @@ export function PaymentAdviceForm({
         id: data.id,
         serialNo: data.serialNo,
         cashVoucherNo: data.cashVoucherNo ?? null,
+        isAdvance: values.isAdvance,
+        advanceNo: data.advanceNo ?? null,
         payeeName: values.payeeName,
         amount: values.amount,
         billNo: values.billNo,
         paymentMode: values.paymentMode,
         submittedByName: values.submittedByName,
         submittedByDepartment: values.submittedByDepartment,
-        natureOfExpenditure:
-          values.paymentMode === "CASH"
+        natureOfExpenditure: values.isAdvance
+          ? values.purposeOfAdvance ?? ""
+          : values.paymentMode === "CASH"
             ? values.cashVoucherItems.map((item) => item.description).join("; ")
             : values.natureOfExpenditure ?? "",
         authorityToken: data.authorityToken,
@@ -345,7 +391,145 @@ export function PaymentAdviceForm({
           <Field label="Delivery Challan Date" error={errors.deliveryChallanDate?.message}>
             <Input type="date" hasError={!!errors.deliveryChallanDate} {...register("deliveryChallanDate")} />
           </Field>
-          {paymentMode === "NEFT" ? (
+          {isAdvance ? (
+            <div className="sm:col-span-2 flex flex-col gap-6">
+              <div className="rounded-md border border-[#0b1f3a]/20 bg-[#0b1f3a]/[0.02] p-4">
+                <div className="mb-3 flex items-baseline justify-between gap-4">
+                  <div>
+                    <p className="text-sm font-medium text-[#0b1f3a]">
+                      Particulars <span className="text-xs text-[#b3261e]">Required</span>
+                    </p>
+                    <p className="mt-1 text-xs text-gray-600">
+                      Add every category this advance covers and its amount.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => appendAdvanceParticular({ category: "CONVEYANCE", amount: 0 })}
+                    className="rounded-md border border-[#0b1f3a] px-3 py-1.5 text-sm font-medium text-[#0b1f3a] hover:bg-[#0b1f3a]/5"
+                  >
+                    Add row
+                  </button>
+                </div>
+                {errors.advanceParticulars?.message ? (
+                  <p className="mb-2 text-sm font-medium text-[#b3261e]">
+                    {errors.advanceParticulars.message}
+                  </p>
+                ) : null}
+                <div className="flex flex-col gap-2">
+                  {advanceParticularFields.map((field, index) => {
+                    const category = advanceParticulars[index]?.category;
+                    return (
+                      <div key={field.id} className="flex flex-col gap-2 sm:flex-row sm:items-start">
+                        <div className="w-full sm:w-56">
+                          <select
+                            className="admin-filter-input w-full"
+                            {...register(`advanceParticulars.${index}.category`)}
+                          >
+                            {ADVANCE_PARTICULAR_CATEGORIES.map((value) => (
+                              <option key={value} value={value}>
+                                {ADVANCE_PARTICULAR_CATEGORY_LABELS[value]}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        {category === "OTHER" ? (
+                          <div className="w-full sm:flex-1">
+                            <Input
+                              placeholder="Please specify"
+                              hasError={!!errors.advanceParticulars?.[index]?.otherDescription}
+                              {...register(`advanceParticulars.${index}.otherDescription`)}
+                            />
+                            {errors.advanceParticulars?.[index]?.otherDescription ? (
+                              <p className="mt-1 text-xs font-medium text-[#b3261e]">
+                                {errors.advanceParticulars[index]?.otherDescription?.message}
+                              </p>
+                            ) : null}
+                          </div>
+                        ) : null}
+                        <div className="w-full sm:w-36">
+                          <Input
+                            type="number"
+                            step="0.01"
+                            min="0.01"
+                            placeholder="Amount"
+                            hasError={!!errors.advanceParticulars?.[index]?.amount}
+                            {...register(`advanceParticulars.${index}.amount`, { valueAsNumber: true })}
+                          />
+                          {errors.advanceParticulars?.[index]?.amount ? (
+                            <p className="mt-1 text-xs font-medium text-[#b3261e]">
+                              {errors.advanceParticulars[index]?.amount?.message}
+                            </p>
+                          ) : null}
+                        </div>
+                        <button
+                          type="button"
+                          disabled={advanceParticularFields.length === 1}
+                          onClick={() => removeAdvanceParticular(index)}
+                          className="self-start rounded-md px-2 py-2 text-sm text-[#b3261e] hover:bg-[#b3261e]/5 disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="mt-4 flex justify-end border-t border-[#0b1f3a]/15 pt-3 text-base font-semibold text-[#0b1f3a]">
+                  Total: ₹{" "}
+                  {calculateAdvanceParticularsTotal(
+                    advanceParticulars.filter(
+                      (item) => Number.isFinite(item?.amount) && item.amount > 0,
+                    ),
+                  ).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                </div>
+              </div>
+
+              <Field
+                label="Purpose of Advance"
+                required
+                error={errors.purposeOfAdvance?.message}
+                help="The overall reason for this advance, even if the Particulars above are a single general item."
+              >
+                <Textarea
+                  rows={2}
+                  hasError={!!errors.purposeOfAdvance}
+                  {...register("purposeOfAdvance")}
+                />
+              </Field>
+
+              <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                <Field
+                  label="Previous Pending Advance (Rs.)"
+                  required
+                  error={errors.previousPendingAdvanceAmount?.message}
+                  help="Self-declared. Enter 0 if none."
+                >
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    hasError={!!errors.previousPendingAdvanceAmount}
+                    {...register("previousPendingAdvanceAmount", { valueAsNumber: true })}
+                  />
+                </Field>
+                {previousPendingAdvanceAmount > 0 ? (
+                  <Field
+                    label="Previous Pending Advance — Since"
+                    required
+                    error={errors.previousPendingAdvanceSince?.message}
+                  >
+                    <Input
+                      type="date"
+                      max={today}
+                      hasError={!!errors.previousPendingAdvanceSince}
+                      {...register("previousPendingAdvanceSince")}
+                    />
+                  </Field>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+          {!isAdvance && paymentMode === "NEFT" ? (
             <>
               <Field
                 label="Basic Amount (Rs.) (*Subject to TDS)"
@@ -390,7 +574,7 @@ export function PaymentAdviceForm({
               </div>
             </>
           ) : null}
-          {paymentMode === "CASH" ? (
+          {!isAdvance && paymentMode === "CASH" ? (
             <div className="sm:col-span-2 rounded-md border border-[#0b1f3a]/20 bg-[#0b1f3a]/[0.02] p-4">
               <div className="mb-3 flex items-baseline justify-between gap-4">
                 <div>
@@ -455,15 +639,60 @@ export function PaymentAdviceForm({
           <Field label="Mode" required error={errors.paymentMode?.message}>
             <div className="flex gap-6">
               <label className="flex items-center gap-2 text-sm">
-                <input type="radio" value="NEFT" {...register("paymentMode")} />
+                <input
+                  type="radio"
+                  checked={!isAdvance && paymentMode === "NEFT"}
+                  onChange={() => {
+                    setValue("isAdvance", false);
+                    setValue("paymentMode", "NEFT", { shouldValidate: true });
+                  }}
+                />
                 NEFT
               </label>
               <label className="flex items-center gap-2 text-sm">
-                <input type="radio" value="CASH" {...register("paymentMode")} />
+                <input
+                  type="radio"
+                  checked={!isAdvance && paymentMode === "CASH"}
+                  onChange={() => {
+                    setValue("isAdvance", false);
+                    setValue("paymentMode", "CASH", { shouldValidate: true });
+                  }}
+                />
                 Cash
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="radio"
+                  checked={isAdvance}
+                  onChange={() => setValue("isAdvance", true, { shouldValidate: true })}
+                />
+                Advance Payment
               </label>
             </div>
           </Field>
+
+          {isAdvance ? (
+            <Field label="Advance routes via" required>
+              <div className="flex gap-6">
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="radio"
+                    checked={paymentMode === "NEFT"}
+                    onChange={() => setValue("paymentMode", "NEFT", { shouldValidate: true })}
+                  />
+                  NEFT
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="radio"
+                    checked={paymentMode === "CASH"}
+                    onChange={() => setValue("paymentMode", "CASH", { shouldValidate: true })}
+                  />
+                  Cash
+                </label>
+              </div>
+            </Field>
+          ) : null}
 
           {paymentMode === "NEFT" && (
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
@@ -505,7 +734,7 @@ export function PaymentAdviceForm({
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
           <FileUploadSlot
             label="Tax Invoice"
-            required
+            required={!isAdvance}
             maxFiles={1}
             files={taxInvoice}
             onChange={setTaxInvoice}
