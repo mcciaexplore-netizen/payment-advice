@@ -47,7 +47,7 @@ Design system: Navy `#0B1F3A`, Forest green `#2E8B57`, Amber `#E8A33D`. Headings
 
 ## 3. Current State (update this every session)
 
-**Last updated:** 17 August 2026, by Claude Code (added a "← Back" link to every admin sub-page, real browser-history-based so tab/filter state survives — see below)
+**Last updated:** 17 August 2026, by Claude Code (Payment Advice PDF's "Recommended by" stamp now correctly reads "RECOMMENDED" instead of "APPROVED" — see below)
 
 ### Shipped — Phase 1 baseline (Claude Code)
 - Public form `/` (no login): submitter, payee (vendor typeahead), bill/reference, payment mode (NEFT/Cash), enclosures, mandatory Tax Invoice + Approval/Budget PDF attachments
@@ -543,6 +543,13 @@ All test data (2 advices, 4 attachments + their real Vercel Blob uploads, 1 thro
 
 `tsc --noEmit`, ESLint, the full Vitest suite (229 passing, unaffected by this UI-only change), and `next build` all clean.
 
+### Shipped — Payment Advice PDF: "Recommended by" stamp text corrected (Claude Code, 2026-08-17)
+Small, isolated wording fix. `lib/pdf/PaymentAdviceDocument.tsx`'s "Recommended by" signature box (rendered once `authority_approved_at` is set) was stamping the word **"APPROVED"**, inconsistent with its own box label — "Submitted by" correctly stamps "SUBMITTED" and "Verified by" correctly stamps "VERIFIED". Changed the `<Stamp label="...">` value for that one box to **"RECOMMENDED"**. Nothing else about that stamp changed — same render condition (`data.authorityApprovedAt` set), same name/date/color. `Stamp.tsx`'s box has a fixed `width: 68`pt with no `nowrap`, so the longer word (11 chars vs. "APPROVED"'s 8) still fits on one line — confirmed by actually rendering and reading the PDF, not assumed from the CSS (per the existing "Do Not Touch" note on `Stamp.tsx` about re-rendering before trusting a layout change).
+
+**Found, not fixed, flagged per this repo's standing "ask/report rather than patch silently" convention**: `lib/pdf/CashVoucherDocument.tsx`'s own "Recommended by" stamp (line ~136) has the **exact same "APPROVED" vs. "Recommended by" mismatch** — this session's brief was explicitly scoped to the Payment Advice PDF only, so the Cash Voucher PDF was left untouched. If the human wants the same correction there, it's the identical one-line change in `CashVoucherDocument.tsx`'s `Signature` stamp prop.
+
+**Verified live**: rendered the sample script (`npx tsx scripts/render-test-pdf.tsx`) and visually confirmed "RECOMMENDED" fits cleanly in the stamp with no overflow/wrapping issue. Also downloaded the real Payment Advice PDF for an actual pre-existing, already-approved production row (`MCCIA/2026-27/0042`, via `GET /api/admin/advice/[id]/pdf` with a throwaway admin login, read-only — no data mutated) and visually confirmed "RECOMMENDED" with the correct name ("Neeraj Thakur") and date, while "SUBMITTED"/"VERIFIED" render unchanged. Throwaway `admin_users` test row deleted afterward. `tsc --noEmit`, ESLint, the full Vitest suite (229 passing, unaffected — no test asserted the old "APPROVED" stamp text), and `next build` all clean.
+
 ## 4. Open Items (verify before building on top of these)
 
 Status legend: 🔴 unverified / high risk · 🟡 unverified / lower risk · 🟢 verified
@@ -603,6 +610,8 @@ Status legend: 🔴 unverified / high risk · 🟡 unverified / lower risk · �
 - ⬜ **Undecided (needs human decision):** should the admin queue's `all` tab, or the per-advice detail page, show `total_paid`/remaining balance as its own sortable/filterable column for NEFT rows, beyond what's already visible on the detail page's "Record a Payment" panel? Not built — the brief's acceptance criteria were satisfied by the detail-page summary + history list; a queue-level column wasn't asked for.
 - 🟡 **The new "Bill passed for Rs. is locked once a payment has been recorded" and "advice already has a payment recorded, can no longer be sent back" guards (2026-08-17) are judgment calls, not literally requested by the brief** — flagged explicitly in the "Shipped" entry above and here per the human's own "tell me what you find rather than patching around it silently" instruction. Both are scoped so Cash rows (which never have `payment_entries`) are provably unaffected (see the live-test section). If the human wants either behavior relaxed (e.g. allow editing `bill_passed_for` with a warning instead of a hard lock), that's a small, isolated change — both guards are single `if` blocks in their respective routes.
 - 🟡 **`NAME_EMAIL_LIST`/`admin_users`-style per-person attribution for `payment_entries.paid_by` reuses the exact same snapshot-not-FK pattern as `verified_by`/`payment_done_by`/`sanctioned_by`** — a name string, not a real FK to `admin_users`. Same known limitation as those older fields: renaming/deactivating an admin user later never retroactively changes what's printed on a historical entry. Not new to this session, just noting it applies here too.
+- 🟢 **Payment Advice PDF's "Recommended by" stamp fixed 2026-08-17 — corrected from "APPROVED" to "RECOMMENDED", matching the box's own label.** See the "Shipped" entry above for the fix and live verification against a real approved production row.
+- ⬜ **Found, not fixed (2026-08-17, out of that session's explicit scope): `CashVoucherDocument.tsx`'s own "Recommended by" stamp has the identical "APPROVED" wording mismatch.** The Payment Advice PDF fix above did not touch it. Flagged, not silently extended — say the word if you want the same one-line correction there.
 
 ## 5. Do Not Touch Without Asking
 
@@ -654,6 +663,18 @@ Append one entry per session, newest at the top. Keep entries short — this is 
 (Note: this header was accidentally dropped in an earlier edit and restored 2026-08-01 by Claude Code — no content was lost, only the heading line.)
 
 ```
+2026-08-17 — Claude Code — Fixed the Payment Advice PDF's "Recommended
+by" signature-box stamp, which read "APPROVED" (inconsistent with its
+own label) — now reads "RECOMMENDED", matching "Submitted by"/
+"SUBMITTED" and "Verified by"/"VERIFIED". One-line change in
+lib/pdf/PaymentAdviceDocument.tsx; condition/name/date/color all
+unchanged. Confirmed the longer word still fits the stamp's fixed-
+width box by actually rendering, not assumed. Found but deliberately
+did not fix the identical mismatch in CashVoucherDocument.tsx (out of
+this session's scope, flagged as an open item). Live-verified by
+downloading the real PDF for an existing approved production
+submission (MCCIA/2026-27/0042) via the real admin route, read-only.
+tsc/ESLint/Vitest/next build all clean.
 2026-08-17 — Claude Code — Added a "← Back" link (new shared BackLink
 component, router.back()-based) to every admin sub-page one level deep
 from a list view: advice detail ("Back to Submissions"), vendor

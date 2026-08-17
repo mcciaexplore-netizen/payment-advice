@@ -300,7 +300,7 @@ export function PaymentAdviceDocument({ data }: { data: PaymentAdvicePdfData }) 
             <Text style={styles.footerLine}>Signature :</Text>
             {data.authorityApprovedAt ? (
               <Stamp
-                label="APPROVED"
+                label="RECOMMENDED"
                 name={data.recommendingAuthorityName}
                 date={formatDMY(data.authorityApprovedAt)}
                 color="green"
