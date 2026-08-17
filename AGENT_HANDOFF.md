@@ -47,7 +47,7 @@ Design system: Navy `#0B1F3A`, Forest green `#2E8B57`, Amber `#E8A33D`. Headings
 
 ## 3. Current State (update this every session)
 
-**Last updated:** 17 August 2026, by Claude Code (Basic/GST amount split + multi-part payment tracking for NEFT — see below; Cash Voucher untouched)
+**Last updated:** 17 August 2026, by Claude Code (added a "← Back" link to every admin sub-page, real browser-history-based so tab/filter state survives — see below)
 
 ### Shipped — Phase 1 baseline (Claude Code)
 - Public form `/` (no login): submitter, payee (vendor typeahead), bill/reference, payment mode (NEFT/Cash), enclosures, mandatory Tax Invoice + Approval/Budget PDF attachments
@@ -527,6 +527,22 @@ All test data (2 advices, 4 attachments + their real Vercel Blob uploads, 1 thro
 
 `tsc --noEmit`, ESLint, the full Vitest suite (229 passing, 6 pre-existing skipped), and `next build` all clean.
 
+### Shipped — "← Back" links on every admin sub-page, real browser-history-based (Claude Code, 2026-08-17)
+**The problem**: sub-pages in the admin area had no in-page way to return to the list/dashboard view — only the browser's own back button, not discoverable for non-technical users. Pure UX fix, no data-model changes.
+
+- New shared client component `components/admin/BackLink.tsx` (`"use client"`, the same small-component pattern `LogoutButton.tsx` already used) — calls `router.back()` on click, falling back to a supplied `fallbackHref` only when `window.history.length <= 1` (i.e. this page was opened directly, with nothing real to go back to). **Deliberately real browser-history navigation, not a hardcoded `<Link href="/admin">`** — this is what naturally preserves whatever tab/filter/page state the list view was in when Admin drilled into a sub-page, with zero state serialization needed. Rendered as plain text (`← {label}`, no button chrome), consistent placement immediately above the page's `<h1>` on every page it's used.
+- **Full audit of every page under `app/admin/`, not assumed** — 9 total `page.tsx` files. `app/admin/page.tsx` (the list itself) and `app/admin/login/page.tsx` (the entry point) need no back link. `app/admin/vendors/page.tsx` and `app/admin/staff/page.tsx` are themselves top-level list views (reached via the persistent header nav's "Vendors"/"Staff & Authorities" links, same as "Submissions") — not sub-pages of a list, so no back link added there either. The remaining 5 are genuine one-level-deep sub-pages and all got the link: `app/admin/advice/[id]/page.tsx` ("← Back to Submissions"), `app/admin/vendors/[id]/page.tsx` and `app/admin/vendors/new/page.tsx` ("← Back to Vendors"), `app/admin/staff/[id]/page.tsx` and `app/admin/staff/new/page.tsx` ("← Back to Staff & Authorities").
+- The pre-existing persistent header nav (`app/admin/layout.tsx`'s "Submissions"/"Vendors"/"Staff & Authorities" links) was **not** repurposed for this — those always reset to the default unfiltered view, which is exactly the behavior this task needed to avoid for the advice detail page. `BackLink` is a separate, additional affordance.
+
+**Verified live**, via a **temporary Playwright install** (`npm install --no-save -D playwright`, uninstalled afterward — `git diff package.json package-lock.json` confirmed empty, same "temporary, not a permanent toolchain addition" convention the 2026-08-06 "Your Name"/"Your Email" session established; Chromium binary was already cached from that earlier install) against the real dev server + real Neon DB, using one throwaway `admin_users` login and one throwaway test `payment_advices` row:
+- Applied a real filter (typed "BackLinkTestPayee" into the Payee field, submitted the form) on the `all` tab → the resulting URL carried the full filter query string → opened the test row's detail page → clicked "← Back to Submissions" → **landed back on the exact same filtered URL, byte-for-byte** (confirmed via string equality, not just "some filter present") → confirmed the Payee input still showed the applied value.
+- Repeated for `?tab=waiting_authority` (no other filters) → same exact-URL-match result after clicking Back — confirming this isn't specific to query-string filters, tab selection survives identically.
+- Confirmed the Back link's exact label text on `/admin/advice/[id]`, `/admin/vendors/[id]`, `/admin/vendors/new`, `/admin/staff/[id]`, `/admin/staff/new` (5/5) and that clicking it from `/admin/vendors/new`/`/admin/staff/new` (reached via their real "New Vendor"/"New Staff Member" links) correctly returns to `/admin/vendors`/`/admin/staff`.
+- Screenshotted all three page types (advice detail, vendor edit, staff edit) and visually confirmed identical placement/styling — plain gray text, `←` prefix, directly above the `<h1>`, no button chrome.
+- All test data (1 `payment_advices` row + its `audit_log` rows, 1 throwaway `admin_users` login) deleted afterward; Playwright fully uninstalled, confirmed via empty `git diff` on `package.json`/`package-lock.json`.
+
+`tsc --noEmit`, ESLint, the full Vitest suite (229 passing, unaffected by this UI-only change), and `next build` all clean.
+
 ## 4. Open Items (verify before building on top of these)
 
 Status legend: 🔴 unverified / high risk · 🟡 unverified / lower risk · 🟢 verified
@@ -638,6 +654,21 @@ Append one entry per session, newest at the top. Keep entries short — this is 
 (Note: this header was accidentally dropped in an earlier edit and restored 2026-08-01 by Claude Code — no content was lost, only the heading line.)
 
 ```
+2026-08-17 — Claude Code — Added a "← Back" link (new shared BackLink
+component, router.back()-based) to every admin sub-page one level deep
+from a list view: advice detail ("Back to Submissions"), vendor
+edit/new ("Back to Vendors"), staff/authority edit/new ("Back to Staff
+& Authorities"). Audited all 9 app/admin page.tsx files first — the
+list pages themselves (Submissions, Vendors, Staff & Authorities,
+already reachable via the persistent header nav) and the login page
+correctly got no link. Uses real browser history, not a hardcoded
+href, specifically so whatever tab/filter state was active on the
+Submissions list survives a round trip through a detail page — live-
+verified via a temporary Playwright install (uninstalled after,
+package.json/lock diff confirmed empty): applied a Payee filter,
+opened a detail page, clicked Back, confirmed the exact same filtered
+URL and input value came back, not a reset /admin. tsc/ESLint/Vitest/
+next build all clean.
 2026-08-17 — Claude Code — Basic Amount + GST Amount split (NEFT only,
 replacing the single "Amount (Rs.)" field, with a live-computed read-only
 Total) plus a new payment_entries table + "Record a Payment" multi-part

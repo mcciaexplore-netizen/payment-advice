@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { vendors } from "@/lib/db/schema";
 import { VendorForm } from "@/components/admin/VendorForm";
+import { BackLink } from "@/components/admin/BackLink";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +18,7 @@ export default async function EditVendorPage({
 
   return (
     <div className="flex max-w-2xl flex-col gap-6">
+      <BackLink label="Back to Vendors" fallbackHref="/admin/vendors" />
       <h1 className="font-heading text-3xl text-[#0b1f3a]">Edit Vendor</h1>
       <VendorForm
         vendorId={vendor.id}

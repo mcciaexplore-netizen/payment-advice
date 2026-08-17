@@ -2,6 +2,7 @@ import { asc } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { recommendingAuthorities } from "@/lib/db/schema";
 import { StaffForm } from "@/components/admin/StaffForm";
+import { BackLink } from "@/components/admin/BackLink";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +14,7 @@ export default async function NewStaffPage() {
 
   return (
     <div className="flex max-w-2xl flex-col gap-6">
+      <BackLink label="Back to Staff & Authorities" fallbackHref="/admin/staff" />
       <h1 className="font-heading text-3xl text-[#0b1f3a]">New Staff Member</h1>
       <StaffForm allAuthorities={authorities} />
     </div>

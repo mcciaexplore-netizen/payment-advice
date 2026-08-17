@@ -11,6 +11,7 @@ import {
 } from "@/lib/db/schema";
 import { StatusChip } from "@/components/admin/StatusChip";
 import { AdviceActions } from "@/components/admin/AdviceActions";
+import { BackLink } from "@/components/admin/BackLink";
 import { NameCorrectionAction } from "@/components/admin/NameCorrectionAction";
 import { PaymentMode, Status, SANCTIONER_NAMES } from "@/lib/validation/payment-advice";
 import { getAdminSession } from "@/lib/admin-session";
@@ -114,6 +115,7 @@ export default async function AdviceDetailPage({
 
   return (
     <div className="flex flex-col gap-8">
+      <BackLink label="Back to Submissions" fallbackHref="/admin" />
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
