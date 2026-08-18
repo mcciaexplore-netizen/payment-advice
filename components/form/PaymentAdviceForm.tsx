@@ -34,11 +34,19 @@ type RecommendingAuthority = {
 const today = format(new Date(), "yyyy-MM-dd");
 
 export function PaymentAdviceForm({
+  mode,
   recommendingAuthorities,
   prefill,
   editToken,
   existingAttachments,
 }: {
+  /** Fixed per page, never toggled at runtime — "standard" is the plain
+   * NEFT/Cash Payment Advice / Cash Voucher form at "/", "advance" is the
+   * dedicated Advance Payment Request form at "/advance". Both render this
+   * same component so the shared field logic (submitter/payee auto-fill,
+   * Particulars, attachments) only ever lives in one place; only which
+   * sections render, and whether isAdvance itself is true, differ. */
+  mode: "standard" | "advance";
   recommendingAuthorities: RecommendingAuthority[];
   /** When set, this is a resubmission via /edit/[token] — pre-fill everything. */
   prefill?: Partial<PaymentAdviceFormInput> & { formDate?: string };
@@ -48,6 +56,7 @@ export function PaymentAdviceForm({
    * replaces these; leaving the slot empty keeps them. */
   existingAttachments?: Partial<Record<DocType, string[]>>;
 }) {
+  const isAdvance = mode === "advance";
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -72,9 +81,15 @@ export function PaymentAdviceForm({
       formDate: today,
       paymentMode: "NEFT",
       cashVoucherItems: [],
-      isAdvance: false,
+      isAdvance,
       previousPendingAdvanceAmount: 0,
-      advanceParticulars: [],
+      // Seeded directly here (not via a useEffect that appends when empty)
+      // since isAdvance is now fixed from the very first render for the
+      // dedicated /advance page — an effect-based "append if empty" runs
+      // during initial mount, which React Strict Mode's dev-only
+      // double-invocation would run twice against the same stale closure,
+      // silently seeding two rows instead of one.
+      advanceParticulars: isAdvance ? [{ category: "CONVEYANCE", amount: 0 }] : [],
       ...prefill,
     },
   });
@@ -115,7 +130,6 @@ export function PaymentAdviceForm({
   );
   const basicAmount = useWatch({ control, name: "basicAmount" });
   const gstAmount = useWatch({ control, name: "gstAmount" });
-  const isAdvance = useWatch({ control, name: "isAdvance" }) ?? false;
   const watchedAdvanceParticulars = useWatch({ control, name: "advanceParticulars" });
   const advanceParticulars = useMemo(
     () => watchedAdvanceParticulars ?? [],
@@ -150,21 +164,18 @@ export function PaymentAdviceForm({
   }, [isAdvance, paymentMode, neftTotal, setValue]);
 
   // Advance Payment's Particulars total — same live-summed-total mechanic
-  // as the Cash Voucher line items above, but applies regardless of
-  // NEFT/Cash sub-route once isAdvance is set.
+  // as the Cash Voucher line items above. The first row is seeded via
+  // defaultValues (see above), and "Remove" is disabled at 1 remaining row,
+  // so this never needs to re-seed an empty array itself.
   useEffect(() => {
     if (!isAdvance) return;
-    if (advanceParticulars.length === 0) {
-      appendAdvanceParticular({ category: "CONVEYANCE", amount: 0 });
-      return;
-    }
     const completeItems = advanceParticulars.filter(
       (item) => Number.isFinite(item?.amount) && item.amount > 0,
     );
     setValue("amount", calculateAdvanceParticularsTotal(completeItems), {
       shouldValidate: false,
     });
-  }, [advanceParticulars, appendAdvanceParticular, isAdvance, setValue]);
+  }, [advanceParticulars, isAdvance, setValue]);
 
   // Advance Payment's payee IS the submitter — they're receiving the
   // advance themselves, not paying a vendor — so the vendor typeahead is
@@ -422,9 +433,9 @@ export function PaymentAdviceForm({
         </div>
       </Section>
 
-      <Section title="3. Bill & reference">
+      <Section title={isAdvance ? "3. Advance details" : "3. Bill & reference"}>
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-          {!isAdvance ? (
+          {mode === "standard" ? (
             <>
               <Field label="Bill No." required error={errors.billNo?.message}>
                 <Input hasError={!!errors.billNo} {...register("billNo")} />
@@ -450,7 +461,7 @@ export function PaymentAdviceForm({
               </Field>
             </>
           ) : null}
-          {isAdvance ? (
+          {mode === "advance" ? (
             <div className="sm:col-span-2 flex flex-col gap-6">
               <div className="rounded-md border border-[#0b1f3a]/20 bg-[#0b1f3a]/[0.02] p-4">
                 <div className="mb-3 flex items-baseline justify-between gap-4">
@@ -700,58 +711,21 @@ export function PaymentAdviceForm({
               <label className="flex items-center gap-2 text-sm">
                 <input
                   type="radio"
-                  checked={!isAdvance && paymentMode === "NEFT"}
-                  onChange={() => {
-                    setValue("isAdvance", false);
-                    setValue("paymentMode", "NEFT", { shouldValidate: true });
-                  }}
+                  checked={paymentMode === "NEFT"}
+                  onChange={() => setValue("paymentMode", "NEFT", { shouldValidate: true })}
                 />
                 NEFT
               </label>
               <label className="flex items-center gap-2 text-sm">
                 <input
                   type="radio"
-                  checked={!isAdvance && paymentMode === "CASH"}
-                  onChange={() => {
-                    setValue("isAdvance", false);
-                    setValue("paymentMode", "CASH", { shouldValidate: true });
-                  }}
+                  checked={paymentMode === "CASH"}
+                  onChange={() => setValue("paymentMode", "CASH", { shouldValidate: true })}
                 />
                 Cash
               </label>
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="radio"
-                  checked={isAdvance}
-                  onChange={() => setValue("isAdvance", true, { shouldValidate: true })}
-                />
-                Advance Payment
-              </label>
             </div>
           </Field>
-
-          {isAdvance ? (
-            <Field label="Advance routes via" required>
-              <div className="flex gap-6">
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="radio"
-                    checked={paymentMode === "NEFT"}
-                    onChange={() => setValue("paymentMode", "NEFT", { shouldValidate: true })}
-                  />
-                  NEFT
-                </label>
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="radio"
-                    checked={paymentMode === "CASH"}
-                    onChange={() => setValue("paymentMode", "CASH", { shouldValidate: true })}
-                  />
-                  Cash
-                </label>
-              </div>
-            </Field>
-          ) : null}
 
           {paymentMode === "NEFT" && (
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
@@ -805,14 +779,16 @@ export function PaymentAdviceForm({
           </div>
         ) : null}
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-          <FileUploadSlot
-            label="Tax Invoice"
-            required={!isAdvance}
-            maxFiles={1}
-            files={taxInvoice}
-            onChange={setTaxInvoice}
-            existingFileNames={existingAttachments?.TAX_INVOICE}
-          />
+          {mode === "standard" ? (
+            <FileUploadSlot
+              label="Tax Invoice"
+              required
+              maxFiles={1}
+              files={taxInvoice}
+              onChange={setTaxInvoice}
+              existingFileNames={existingAttachments?.TAX_INVOICE}
+            />
+          ) : null}
           <FileUploadSlot
             label="Approval / Budget Letter"
             required
@@ -852,7 +828,13 @@ export function PaymentAdviceForm({
           disabled={submitting}
           className="rounded-md bg-[#0b1f3a] px-6 py-3 text-base font-medium text-white shadow-sm transition hover:bg-[#0b1f3a]/90 disabled:opacity-50"
         >
-          {submitting ? "Submitting…" : editToken ? "Resubmit" : "Submit Payment Advice"}
+          {submitting
+            ? "Submitting…"
+            : editToken
+              ? "Resubmit"
+              : isAdvance
+                ? "Submit Advance Payment Request"
+                : "Submit Payment Advice"}
         </button>
       </div>
     </form>

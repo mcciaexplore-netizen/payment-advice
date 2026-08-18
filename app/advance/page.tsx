@@ -7,7 +7,7 @@ import { PaymentAdviceForm } from "@/components/form/PaymentAdviceForm";
 
 export const dynamic = "force-dynamic";
 
-export default async function HomePage() {
+export default async function AdvancePage() {
   const authorities = await db
     .select({
       id: recommendingAuthorities.id,
@@ -28,7 +28,7 @@ export default async function HomePage() {
         />
         <div>
           <h1 className="font-heading text-3xl text-[#0b1f3a]">
-            Payment Advice
+            Advance Payment Request
           </h1>
           <p className="text-sm text-gray-600">
             Finance &amp; Accounts Department — Mahratta Chamber of Commerce,
@@ -38,25 +38,21 @@ export default async function HomePage() {
       </header>
 
       <p className="rounded-md bg-[#0b1f3a]/5 px-4 py-3 text-sm text-[#0b1f3a]">
-        Fill this form to request a payment. Fields marked <b>Required</b>{" "}
-        must be completed. After submitting, you&apos;ll get a serial number
-        and can download a summary — the finance team will review it and let
-        you know if anything needs correcting.
+        Use this form to request money in hand before you spend it — the
+        advance is paid to you, the requester. Fields marked <b>Required</b>{" "}
+        must be completed. After submitting, you&apos;ll get an advance
+        number and can download a summary — the finance team will review it
+        and let you know if anything needs correcting.
       </p>
 
-      <div className="flex flex-col gap-1 rounded-md border border-[#e8a33d]/40 bg-[#e8a33d]/10 px-4 py-3 text-sm text-[#8a5a12]">
-        <p className="font-medium">Need an advance instead of a regular payment?</p>
-        <p>
-          If you need money in hand before you spend it — travel, event
-          expenses, etc. — use the dedicated{" "}
-          <Link href="/advance" className="font-medium underline underline-offset-2 hover:text-[#0b1f3a]">
-            Advance Payment Request form →
-          </Link>{" "}
-          instead of this one.
-        </p>
-      </div>
+      <p className="text-sm text-gray-600">
+        Requesting payment for a bill or invoice instead?{" "}
+        <Link href="/" className="font-medium text-[#0b1f3a] underline underline-offset-2">
+          Use the regular Payment Advice form →
+        </Link>
+      </p>
 
-      <PaymentAdviceForm mode="standard" recommendingAuthorities={authorities} />
+      <PaymentAdviceForm mode="advance" recommendingAuthorities={authorities} />
     </main>
   );
 }

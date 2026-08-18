@@ -95,6 +95,7 @@ export default async function EditPage({
       </div>
 
       <PaymentAdviceForm
+        mode={advice.isAdvance ? "advance" : "standard"}
         recommendingAuthorities={authorities}
         editToken={token}
         existingAttachments={existingAttachments}

@@ -619,6 +619,25 @@ Extends the Advance Payment feature above — none of it rebuilt, all four chang
 
 `tsc --noEmit`, ESLint, the full Vitest suite (271 passing, 7 pre-existing skipped), and `next build` all clean.
 
+### Shipped — Advance Payment moved off the main form onto its own route, `/advance` (Claude Code, 2026-08-18)
+Pure UI restructuring — none of the backend/validation/numbering/routing/admin-tab logic from the two entries above changed at all. The reason: embedding Advance Payment as a third Payment Mode radio inside the main form meant fields conditionally appeared/disappeared with no clear separation, which was confusing in practice.
+
+**`components/form/PaymentAdviceForm.tsx` gained a required `mode: "standard" | "advance"` prop** — fixed per page, never toggled at runtime. `isAdvance` is now a plain `const isAdvance = mode === "advance"` derived from the prop (previously a `useWatch`'d/`setValue`'d form field toggled by a 3-way radio). The component itself is the "shared component" both routes render — this was the deliberate choice over splintering it into many small subcomponents: the underlying logic (submitter/payee auto-fill, Particulars, attachment handling, the submit handler) is deeply interdependent, already lived in one well-tested place, and a `mode` prop reuses all of it exactly rather than duplicating markup, which is what the brief actually asked to avoid.
+
+- **Section 4 "Payment mode" simplified back to a plain 2-way NEFT/Cash radio** for *both* modes — the old 3-way radio (NEFT / Cash / Advance Payment) and its secondary "Advance routes via" sub-radio are gone entirely. Being on `/advance` already means it's an advance; the NEFT/Cash choice made there still determines dashboard routing exactly as before.
+- **Section 3 "Bill & reference" → "3. Advance details" when `mode === "advance"`** (heading only changes; was previously mislabeled "Bill & reference" even while showing Particulars) — the Bill No./Date/P.O./Delivery Challan fields render only when `mode === "standard"`, so on `/advance` they are structurally absent from every render, not conditionally hidden.
+- **Section 6 "Documents": the Tax Invoice `FileUploadSlot` is not rendered at all when `mode === "advance"`** (previously present-but-optional) — Approval/Budget Letter becomes the first Documents slot on that page.
+- Submit button text is mode-aware: "Submit Advance Payment Request" vs "Submit Payment Advice" (still "Resubmit" in edit mode).
+- **`app/page.tsx`** — Payment Mode is back to NEFT/Cash only; passes `mode="standard"`; gained a visible banner (bordered/tinted box, not fine print) linking to `/advance`.
+- **`app/advance/page.tsx`** (new) — same structural shape as `app/page.tsx` (logo/header/intro-box), heading reads "Advance Payment Request" (unambiguous vs. "Payment Advice"), intro copy explains the advance-to-requester model, a link back to `/` for the regular form, passes `mode="advance"`.
+- **`app/edit/[token]/page.tsx`** — now passes `mode={advice.isAdvance ? "advance" : "standard"}`, so a SENT_BACK advance resubmits through the same reduced field set it was originally submitted through, and a SENT_BACK regular submission still gets the full standard form.
+
+**A second real bug found via live browser testing, distinct from the previous session's RHF-staleness fix**: the Particulars section's "seed one default row if the array is empty" logic lived in a `useEffect` gated on `isAdvance`. In the old toggle-based form, `isAdvance` started `false` on mount, so this effect was a no-op on initial mount and only ever ran later, from a genuine user-triggered state change (clicking the radio) — never subject to React Strict Mode's dev-only double-effect-invocation (which only doubles *initial mount* effects). Now that `isAdvance` is `true` from the very first render on `/advance`, this same effect runs *during* initial mount — which Strict Mode invokes twice against the same stale closure, silently seeding **two** empty Particulars rows instead of one. Both rows rendered separately in the DOM, but a real user would only ever notice and fill the first one — the second's `amount` stayed `0`, failing the schema's per-row `positive()` check, and the top-level submit silently did nothing. Fixed by seeding the row directly in `useForm`'s `defaultValues` (`advanceParticulars: isAdvance ? [{ category: "CONVEYANCE", amount: 0 }] : []`, overridden by `...prefill` for edit/resubmit as before) instead of via an effect — synchronous initial state isn't subject to the double-invocation hazard at all. The effect now only computes the live total, nothing else.
+
+**Live-tested end-to-end** against the real dev server + real Neon DB, via another **temporary Playwright install** (uninstalled after, empty `package.json`/`package-lock.json` diff confirmed): confirmed the main form's Payment Mode radios are exactly `["NEFT", "Cash"]` with no third option and Bill No. still renders unconditionally there; confirmed `/advance`'s heading, the total absence of both "Bill No." and "Tax Invoice" anywhere in its rendered DOM, the vendor-search help text's absence, Payee Name auto-filling from Submitter Name, exactly **one** Particulars row present on load (this is what caught the Strict Mode bug above — first attempt had two, silently blocking submission), and a link back to `/` → filled and submitted a real advance end-to-end → got `ADV/MCCIA/2026-27/0005` → confirmed via `curl` identity-confirm + approve that it landed in `?tab=advance_payment` and was absent from `?tab=awaiting_finance`, identical to the previous session's verification. Test data (1 advice + 1 attachment + its real Blob upload, 1 throwaway `admin_users` login) deleted afterward. Did **not** separately re-verify a SENT_BACK advance's resubmit flow through `/edit/[token]` in an actual browser this session (the `mode` prop wiring there is a single-line, type-checked change reusing the exact same component both other routes were just verified against) — flagged here rather than silently assumed identical.
+
+**Tests**: no new test files — this session's changes are presentational (which sections render, page routing) and were verified via live browser + `curl`, not unit tests; the existing `lib/validation/payment-advice.ts` schema, `lib/admin/filters.ts` tab logic, and their respective test suites are completely unchanged and still pass. `tsc --noEmit`, ESLint, the full Vitest suite (271 passing, 7 pre-existing skipped), and `next build` all clean.
+
 ## 4. Open Items (verify before building on top of these)
 
 Status legend: 🔴 unverified / high risk · 🟡 unverified / lower risk · 🟢 verified
@@ -1689,6 +1708,35 @@ and absent from ?tab=awaiting_finance → confirmed receive moved it into
 the shared received_in_process tab. tsc/ESLint/Vitest (271 passing)/
 `next build` all clean. Test data (1 advice + attachment + blob + 1
 throwaway admin_users login) deleted afterward. Committed and pushed.
+
+2026-08-18 — Claude Code — Moved Advance Payment off the main form onto
+its own route, /advance, since the 3-way Payment Mode radio made fields
+conditionally appear/disappear confusingly. PaymentAdviceForm.tsx now
+takes a fixed mode: "standard" | "advance" prop instead of a runtime
+isAdvance toggle — same shared component, no markup duplicated between
+"/" and the new /advance page. Section 4 is back to a plain NEFT/Cash
+2-way radio for both modes; Bill & Reference and Tax Invoice are
+structurally absent (not conditionally hidden) on /advance; main form
+gained a visible banner linking to /advance. /edit/[token] now derives
+mode from advice.isAdvance. Found and fixed a second real bug via
+browser testing: the Particulars "seed a default row if empty" effect
+ran during initial mount now that isAdvance is fixed true from the
+first render on /advance, and React Strict Mode's dev-only double-
+effect-invocation silently seeded two rows instead of one against a
+stale closure — second row's amount stayed 0, failing validation with
+no visible error. Fixed by seeding the row in useForm's defaultValues
+instead of via an effect. Live-tested end-to-end with another temporary
+Playwright install (uninstalled after, empty package.json/package-
+lock.json diff): confirmed exactly one Particulars row on load, no
+Bill No./Tax Invoice anywhere in the DOM on /advance, payee auto-fill,
+main form's radios back to NEFT/Cash only → real submission →
+ADV/MCCIA/2026-27/0005 → curl-driven approval → confirmed landed in
+?tab=advance_payment, absent from ?tab=awaiting_finance. tsc/ESLint/
+Vitest (271 passing)/`next build` all clean. Test data (1 advice +
+attachment + blob + 1 throwaway admin_users login) deleted afterward.
+Did not separately browser-test /edit/[token]'s new mode wiring (single-
+line, type-checked change) — flagged, not silently assumed. Committed
+and pushed.
 ```
 
 ## 7. Reference: Cash Voucher field mapping (paper → app)
