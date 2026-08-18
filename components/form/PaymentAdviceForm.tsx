@@ -11,6 +11,7 @@ import { VendorTypeahead, VendorSearchResult } from "@/components/form/VendorTyp
 import { StaffNameTypeahead, StaffSearchResult } from "@/components/form/StaffNameTypeahead";
 import { RecommendingAuthorityField } from "@/components/form/RecommendingAuthorityField";
 import { FileUploadSlot } from "@/components/form/FileUploadSlot";
+import { LineItemsField } from "@/components/form/LineItemsField";
 import { storeSubmissionSummary } from "@/lib/submission-summary";
 import { resolveAutoFillEmail } from "@/lib/form/staff-email-autofill";
 import { resolveSourceFieldAutoFill } from "@/lib/form/source-field-autofill";
@@ -21,9 +22,6 @@ import {
   MAX_OTHER_ATTACHMENTS,
   DocType,
   calculateCashVoucherTotal,
-  calculateAdvanceParticularsTotal,
-  ADVANCE_PARTICULAR_CATEGORIES,
-  ADVANCE_PARTICULAR_CATEGORY_LABELS,
 } from "@/lib/validation/payment-advice";
 
 type RecommendingAuthority = {
@@ -89,18 +87,17 @@ export function PaymentAdviceForm({
       // during initial mount, which React Strict Mode's dev-only
       // double-invocation would run twice against the same stale closure,
       // silently seeding two rows instead of one.
-      advanceParticulars: isAdvance ? [{ category: "CONVEYANCE", amount: 0 }] : [],
+      advanceParticulars: isAdvance ? [{ description: "", amount: 0 }] : [],
       ...prefill,
     },
   });
 
-  const { fields: cashVoucherFields, append: appendCashVoucherItem, remove: removeCashVoucherItem } =
-    useFieldArray({ control, name: "cashVoucherItems" });
-  const {
-    fields: advanceParticularFields,
-    append: appendAdvanceParticular,
-    remove: removeAdvanceParticular,
-  } = useFieldArray({ control, name: "advanceParticulars" });
+  // LineItemsField owns its own useFieldArray for rendering/add/remove —
+  // this one is only for appendCashVoucherItem, used below to seed a row
+  // when the submitter switches to Cash (a real interaction, not initial
+  // mount, so it's not subject to the Particulars row's Strict Mode
+  // double-invocation hazard the comment above describes).
+  const { append: appendCashVoucherItem } = useFieldArray({ control, name: "cashVoucherItems" });
 
   const [matchedStaff, setMatchedStaff] = useState<StaffSearchResult | null>(null);
   // Same "only react on an actual identity change" pattern
@@ -172,7 +169,7 @@ export function PaymentAdviceForm({
     const completeItems = advanceParticulars.filter(
       (item) => Number.isFinite(item?.amount) && item.amount > 0,
     );
-    setValue("amount", calculateAdvanceParticularsTotal(completeItems), {
+    setValue("amount", calculateCashVoucherTotal(completeItems), {
       shouldValidate: false,
     });
   }, [advanceParticulars, isAdvance, setValue]);
@@ -463,96 +460,15 @@ export function PaymentAdviceForm({
           ) : null}
           {mode === "advance" ? (
             <div className="sm:col-span-2 flex flex-col gap-6">
-              <div className="rounded-md border border-[#0b1f3a]/20 bg-[#0b1f3a]/[0.02] p-4">
-                <div className="mb-3 flex items-baseline justify-between gap-4">
-                  <div>
-                    <p className="text-sm font-medium text-[#0b1f3a]">
-                      Particulars <span className="text-xs text-[#b3261e]">Required</span>
-                    </p>
-                    <p className="mt-1 text-xs text-gray-600">
-                      Add every category this advance covers and its amount.
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => appendAdvanceParticular({ category: "CONVEYANCE", amount: 0 })}
-                    className="rounded-md border border-[#0b1f3a] px-3 py-1.5 text-sm font-medium text-[#0b1f3a] hover:bg-[#0b1f3a]/5"
-                  >
-                    Add row
-                  </button>
-                </div>
-                {errors.advanceParticulars?.message ? (
-                  <p className="mb-2 text-sm font-medium text-[#b3261e]">
-                    {errors.advanceParticulars.message}
-                  </p>
-                ) : null}
-                <div className="flex flex-col gap-2">
-                  {advanceParticularFields.map((field, index) => {
-                    const category = advanceParticulars[index]?.category;
-                    return (
-                      <div key={field.id} className="flex flex-col gap-2 sm:flex-row sm:items-start">
-                        <div className="w-full sm:w-56">
-                          <select
-                            className="admin-filter-input w-full"
-                            {...register(`advanceParticulars.${index}.category`)}
-                          >
-                            {ADVANCE_PARTICULAR_CATEGORIES.map((value) => (
-                              <option key={value} value={value}>
-                                {ADVANCE_PARTICULAR_CATEGORY_LABELS[value]}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                        {category === "OTHER" ? (
-                          <div className="w-full sm:flex-1">
-                            <Input
-                              placeholder="Please specify"
-                              hasError={!!errors.advanceParticulars?.[index]?.otherDescription}
-                              {...register(`advanceParticulars.${index}.otherDescription`)}
-                            />
-                            {errors.advanceParticulars?.[index]?.otherDescription ? (
-                              <p className="mt-1 text-xs font-medium text-[#b3261e]">
-                                {errors.advanceParticulars[index]?.otherDescription?.message}
-                              </p>
-                            ) : null}
-                          </div>
-                        ) : null}
-                        <div className="w-full sm:w-36">
-                          <Input
-                            type="number"
-                            step="0.01"
-                            min="0.01"
-                            placeholder="Amount"
-                            hasError={!!errors.advanceParticulars?.[index]?.amount}
-                            {...register(`advanceParticulars.${index}.amount`, { valueAsNumber: true })}
-                          />
-                          {errors.advanceParticulars?.[index]?.amount ? (
-                            <p className="mt-1 text-xs font-medium text-[#b3261e]">
-                              {errors.advanceParticulars[index]?.amount?.message}
-                            </p>
-                          ) : null}
-                        </div>
-                        <button
-                          type="button"
-                          disabled={advanceParticularFields.length === 1}
-                          onClick={() => removeAdvanceParticular(index)}
-                          className="self-start rounded-md px-2 py-2 text-sm text-[#b3261e] hover:bg-[#b3261e]/5 disabled:cursor-not-allowed disabled:opacity-40"
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-                <div className="mt-4 flex justify-end border-t border-[#0b1f3a]/15 pt-3 text-base font-semibold text-[#0b1f3a]">
-                  Total: ₹{" "}
-                  {calculateAdvanceParticularsTotal(
-                    advanceParticulars.filter(
-                      (item) => Number.isFinite(item?.amount) && item.amount > 0,
-                    ),
-                  ).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
-                </div>
-              </div>
+              <LineItemsField
+                name="advanceParticulars"
+                heading="Particulars"
+                helpText="Add every item this advance covers and its amount."
+                descriptionPlaceholder="Description"
+                register={register}
+                control={control}
+                errors={errors}
+              />
 
               <Field
                 label="Purpose of Advance"
@@ -645,58 +561,15 @@ export function PaymentAdviceForm({
             </>
           ) : null}
           {!isAdvance && paymentMode === "CASH" ? (
-            <div className="sm:col-span-2 rounded-md border border-[#0b1f3a]/20 bg-[#0b1f3a]/[0.02] p-4">
-              <div className="mb-3 flex items-baseline justify-between gap-4">
-                <div>
-                  <p className="text-sm font-medium text-[#0b1f3a]">Nature of Expenditure <span className="text-xs text-[#b3261e]">Required</span></p>
-                  <p className="mt-1 text-xs text-gray-600">Add every Cash Voucher expenditure and its amount.</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => appendCashVoucherItem({ description: "", amount: 0 })}
-                  className="rounded-md border border-[#0b1f3a] px-3 py-1.5 text-sm font-medium text-[#0b1f3a] hover:bg-[#0b1f3a]/5"
-                >
-                  Add row
-                </button>
-              </div>
-              {errors.cashVoucherItems?.message ? <p className="mb-2 text-sm font-medium text-[#b3261e]">{errors.cashVoucherItems.message}</p> : null}
-              <div className="flex flex-col gap-2">
-                {cashVoucherFields.map((field, index) => (
-                  <div key={field.id} className="grid grid-cols-[minmax(0,1fr)_9rem_auto] gap-2">
-                    <div>
-                      <Input
-                        placeholder="Expenditure description"
-                        hasError={!!errors.cashVoucherItems?.[index]?.description}
-                        {...register(`cashVoucherItems.${index}.description`)}
-                      />
-                      {errors.cashVoucherItems?.[index]?.description ? <p className="mt-1 text-xs font-medium text-[#b3261e]">{errors.cashVoucherItems[index]?.description?.message}</p> : null}
-                    </div>
-                    <div>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        min="0.01"
-                        placeholder="Amount"
-                        hasError={!!errors.cashVoucherItems?.[index]?.amount}
-                        {...register(`cashVoucherItems.${index}.amount`, { valueAsNumber: true })}
-                      />
-                      {errors.cashVoucherItems?.[index]?.amount ? <p className="mt-1 text-xs font-medium text-[#b3261e]">{errors.cashVoucherItems[index]?.amount?.message}</p> : null}
-                    </div>
-                    <button
-                      type="button"
-                      disabled={cashVoucherFields.length === 1}
-                      onClick={() => removeCashVoucherItem(index)}
-                      className="self-start rounded-md px-2 py-2 text-sm text-[#b3261e] hover:bg-[#b3261e]/5 disabled:cursor-not-allowed disabled:opacity-40"
-                    >
-                      Remove
-                    </button>
-                  </div>
-                ))}
-              </div>
-              <div className="mt-4 flex justify-end border-t border-[#0b1f3a]/15 pt-3 text-base font-semibold text-[#0b1f3a]">
-                Total: ₹ {calculateCashVoucherTotal(cashVoucherItems.filter((item) => Number.isFinite(item?.amount) && item.amount > 0)).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
-              </div>
-            </div>
+            <LineItemsField
+              name="cashVoucherItems"
+              heading="Nature of Expenditure"
+              helpText="Add every Cash Voucher expenditure and its amount."
+              descriptionPlaceholder="Expenditure description"
+              register={register}
+              control={control}
+              errors={errors}
+            />
           ) : null}
           <Field label="Form Date" required error={errors.formDate?.message} help="Defaults to today; change if backdating.">
             <Input type="date" max={today} hasError={!!errors.formDate} {...register("formDate")} />

@@ -14,12 +14,7 @@ import { StatusChip } from "@/components/admin/StatusChip";
 import { AdviceActions } from "@/components/admin/AdviceActions";
 import { BackLink } from "@/components/admin/BackLink";
 import { NameCorrectionAction } from "@/components/admin/NameCorrectionAction";
-import {
-  ADVANCE_PARTICULAR_CATEGORY_LABELS,
-  PaymentMode,
-  Status,
-  SANCTIONER_NAMES,
-} from "@/lib/validation/payment-advice";
+import { PaymentMode, Status, SANCTIONER_NAMES } from "@/lib/validation/payment-advice";
 import { getAdminSession } from "@/lib/admin-session";
 import { billPassedForLabelFor, displayNoFor, documentLabelFor } from "@/lib/advice/document-identity";
 
@@ -215,7 +210,6 @@ export default async function AdviceDetailPage({
                 <table className="w-full text-left text-sm">
                   <thead className="border-b border-gray-200 text-xs uppercase tracking-wide text-gray-500">
                     <tr>
-                      <th className="pb-2">Category</th>
                       <th className="pb-2">Description</th>
                       <th className="pb-2 text-right">Amount</th>
                     </tr>
@@ -223,12 +217,7 @@ export default async function AdviceDetailPage({
                   <tbody>
                     {particulars.map((item) => (
                       <tr key={item.id} className="border-b border-gray-100 last:border-0">
-                        <td className="py-2">
-                          {ADVANCE_PARTICULAR_CATEGORY_LABELS[
-                            item.category as keyof typeof ADVANCE_PARTICULAR_CATEGORY_LABELS
-                          ] ?? item.category}
-                        </td>
-                        <td className="py-2">{item.category === "OTHER" ? item.otherDescription ?? "—" : "—"}</td>
+                        <td className="py-2">{item.description}</td>
                         <td className="py-2 text-right">{formatAmount(item.amount)}</td>
                       </tr>
                     ))}

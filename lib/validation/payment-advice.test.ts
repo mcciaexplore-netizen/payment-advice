@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  calculateAdvanceParticularsTotal,
   calculateCashVoucherTotal,
   paymentAdviceFormSchema,
   VERIFIER_NAMES,
@@ -159,8 +158,8 @@ const baseAdvanceNeftSubmission = {
   beneficiaryName: "Acme Supplies",
   cashVoucherItems: [],
   advanceParticulars: [
-    { category: "CONVEYANCE" as const, amount: 500 },
-    { category: "TRAVELING" as const, amount: 1500 },
+    { description: "Conveyance", amount: 500 },
+    { description: "Traveling to Delhi", amount: 1500 },
   ],
   amount: 2000,
 };
@@ -171,10 +170,8 @@ describe("Advance Payment validation", () => {
     expect(result.success).toBe(true);
   });
 
-  it("computes the Particulars total in paise", () => {
-    expect(calculateAdvanceParticularsTotal(baseAdvanceNeftSubmission.advanceParticulars)).toBe(
-      2000,
-    );
+  it("computes the Particulars total in paise, reusing calculateCashVoucherTotal directly — same schema/helper as Cash Voucher's line items, not a separate one", () => {
+    expect(calculateCashVoucherTotal(baseAdvanceNeftSubmission.advanceParticulars)).toBe(2000);
   });
 
   it("rejects a missing Purpose of Advance", () => {
@@ -198,26 +195,24 @@ describe("Advance Payment validation", () => {
     expect(result.success).toBe(false);
   });
 
-  it("requires otherDescription when category is OTHER", () => {
+  it("requires a description for each Particulars row — same free-text description+amount shape as Cash Voucher, no category dropdown", () => {
     const result = paymentAdviceFormSchema.safeParse({
       ...baseAdvanceNeftSubmission,
-      advanceParticulars: [{ category: "OTHER", amount: 2000 }],
+      advanceParticulars: [{ description: "", amount: 2000 }],
       amount: 2000,
     });
     expect(result.success).toBe(false);
     if (!result.success) {
       expect(
-        result.error.issues.some(
-          (issue) => issue.path.join(".") === "advanceParticulars.0.otherDescription",
-        ),
+        result.error.issues.some((issue) => issue.path.join(".") === "advanceParticulars.0.description"),
       ).toBe(true);
     }
   });
 
-  it("accepts OTHER with a description", () => {
+  it("accepts a single free-text Particulars row", () => {
     const result = paymentAdviceFormSchema.safeParse({
       ...baseAdvanceNeftSubmission,
-      advanceParticulars: [{ category: "OTHER", otherDescription: "Venue booking", amount: 2000 }],
+      advanceParticulars: [{ description: "Venue booking deposit", amount: 2000 }],
       amount: 2000,
     });
     expect(result.success).toBe(true);

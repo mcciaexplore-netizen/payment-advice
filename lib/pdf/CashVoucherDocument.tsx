@@ -9,10 +9,9 @@ export type CashVoucherPdfData = {
   displayNo: string;
   formDate: string;
   payeeName: string;
-  // For an advance, this is fed from advance_particulars (category label,
-  // plus " — {otherDescription}" when category is OTHER) rather than
-  // cash_voucher_items — reuses this same table/column instead of adding a
-  // second one, per AGENT_HANDOFF.md.
+  // For an advance, this is fed from advance_particulars rather than
+  // cash_voucher_items — same description+amount shape either way, see
+  // AGENT_HANDOFF.md.
   items: { description: string; amount: string }[];
   submittedByName: string;
   submittedAt: string; // ISO timestamp — drives the Submitted stamp's date

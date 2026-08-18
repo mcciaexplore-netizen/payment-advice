@@ -130,49 +130,12 @@ export const sanctionerNameCorrectionSchema = z.object({
   sanctionedBy: sanctionerNameSchema,
 });
 
-/**
- * Advance Payment's "Particulars" breakdown — a third top-level Payment
- * Mode option (NEFT / Cash / Advance Payment), not a fourth payment_mode
- * value (see AGENT_HANDOFF.md). Categories are the exact presets from the
- * original paper form; "OTHER" is the stored value for "Others (please
- * specify)", which requires otherDescription.
- */
-export const ADVANCE_PARTICULAR_CATEGORIES = [
-  "CONVEYANCE",
-  "MEETING_EXPENSES",
-  "SNACKS_LUNCH",
-  "TRAVELING",
-  "FACULTY_FEES",
-  "OTHER",
-] as const;
-export const advanceParticularCategorySchema = z.enum(ADVANCE_PARTICULAR_CATEGORIES);
-export type AdvanceParticularCategory = z.infer<typeof advanceParticularCategorySchema>;
-
-export const ADVANCE_PARTICULAR_CATEGORY_LABELS: Record<AdvanceParticularCategory, string> = {
-  CONVEYANCE: "Conveyance",
-  MEETING_EXPENSES: "Meeting Expenses",
-  SNACKS_LUNCH: "Snacks / Lunch etc.",
-  TRAVELING: "Traveling",
-  FACULTY_FEES: "Faculty Fees",
-  OTHER: "Others (please specify)",
-};
-
-export const advanceParticularSchema = z.object({
-  category: advanceParticularCategorySchema,
-  otherDescription: optionalTrimmed(),
-  amount: z
-    .number()
-    .positive("Each particular's amount must be greater than 0")
-    .multipleOf(0.01, "Each particular's amount can have at most 2 decimal places"),
-});
-export type AdvanceParticular = z.infer<typeof advanceParticularSchema>;
-
-/** Sums currency using paise to avoid floating-point drift — same technique
- * as calculateCashVoucherTotal. */
-export function calculateAdvanceParticularsTotal(items: AdvanceParticular[]): number {
-  return items.reduce((total, item) => total + Math.round(item.amount * 100), 0) / 100;
-}
-
+/** Free-text description + amount line item — shared by Cash Voucher's
+ * "Nature of Expenditure" items and Advance Payment's "Particulars"
+ * breakdown (see AGENT_HANDOFF.md: Particulars originally had its own
+ * preset-category-dropdown + "Other" shape, simplified to reuse this one
+ * directly rather than maintaining a parallel schema/total-calculation
+ * helper for a structurally identical line item). */
 export const cashVoucherItemSchema = z.object({
   description: requiredTrimmed("Nature of expenditure is required"),
   amount: z
@@ -263,7 +226,7 @@ export const paymentAdviceFormSchema = z
       .min(0, "Previous Pending Advance amount cannot be negative")
       .default(0),
     previousPendingAdvanceSince: optionalDateString(),
-    advanceParticulars: z.array(advanceParticularSchema).default([]),
+    advanceParticulars: z.array(cashVoucherItemSchema).default([]),
 
     // Section 4 — payment mode
     paymentMode: paymentModeSchema,
@@ -331,16 +294,7 @@ export const paymentAdviceFormSchema = z
           message: "Add at least one Particulars line item",
         });
       }
-      data.advanceParticulars.forEach((item, index) => {
-        if (item.category === "OTHER" && !item.otherDescription) {
-          ctx.addIssue({
-            code: "custom",
-            path: ["advanceParticulars", index, "otherDescription"],
-            message: "Please specify a description for \"Others\"",
-          });
-        }
-      });
-      const computedTotal = calculateAdvanceParticularsTotal(data.advanceParticulars);
+      const computedTotal = calculateCashVoucherTotal(data.advanceParticulars);
       if (computedTotal <= 0) {
         ctx.addIssue({
           code: "custom",

@@ -638,6 +638,25 @@ Pure UI restructuring — none of the backend/validation/numbering/routing/admin
 
 **Tests**: no new test files — this session's changes are presentational (which sections render, page routing) and were verified via live browser + `curl`, not unit tests; the existing `lib/validation/payment-advice.ts` schema, `lib/admin/filters.ts` tab logic, and their respective test suites are completely unchanged and still pass. `tsc --noEmit`, ESLint, the full Vitest suite (271 passing, 7 pre-existing skipped), and `next build` all clean.
 
+### Shipped — Advance Payment's Particulars simplified from a category dropdown to plain description+amount, matching Cash Voucher exactly (Claude Code, 2026-08-18)
+Pure simplification, requested because the preset-category-dropdown + conditional "Other" field design was more than the actual use case needed — Particulars now behaves identically to Cash Voucher's line items in every respect: free-text description, amount, Add row / Remove, live-summed Total.
+
+**New shared component, `components/form/LineItemsField.tsx`** — extracted from the (previously duplicated-in-spirit) Cash Voucher line-items JSX, since the two were now byte-for-byte the same interaction pattern. Takes `name: "cashVoucherItems" | "advanceParticulars"` plus per-context `heading`/`helpText`/`descriptionPlaceholder`, and owns its own `useFieldArray` for rendering/Add/Remove — react-hook-form supports multiple `useFieldArray` calls against the same field name sharing state via `control`, so `PaymentAdviceForm.tsx` (which still needs `appendCashVoucherItem` itself, to seed a row when the submitter switches to Cash) and this component both stay in sync without prop-drilling the field array state. Both the Cash Voucher block and the Particulars block in `PaymentAdviceForm.tsx` now render `<LineItemsField>` — zero duplicated add/remove/sum JSX between them.
+
+**Validation (`lib/validation/payment-advice.ts`) — `advanceParticulars` now reuses `cashVoucherItemSchema`/`calculateCashVoucherTotal` directly, not a parallel schema.** Deleted entirely: `ADVANCE_PARTICULAR_CATEGORIES`, `advanceParticularCategorySchema`, `AdvanceParticularCategory`, `ADVANCE_PARTICULAR_CATEGORY_LABELS`, the old `advanceParticularSchema` (category + optional otherDescription + amount), and `calculateAdvanceParticularsTotal` (was byte-for-byte identical to `calculateCashVoucherTotal` already). The superRefine's Advance branch lost its per-row "otherDescription required when category is OTHER" check — `cashVoucherItemSchema`'s own `description` field (`requiredTrimmed`) already enforces a non-empty description for every row, matching Cash Voucher's existing rule exactly.
+
+**Schema — `advance_particulars` table (`lib/db/schema.ts`) — `category`/`other_description` dropped, replaced with a single `description text not null` column, matching `cash_voucher_items`' shape.** Two migrations, not one, specifically because **real production data already existed** (3 rows on a live advance a real user had already submitted, discovered via a live DB check before touching anything): `0012_secret_speed.sql` adds `description` as nullable first; a one-off backfill script (not a migration — same "hand-run once, not part of the migration chain" precedent as the Kopardekar merge) populated it from the old `category`+`other_description` values via the same label mapping the UI used to show (`CONVEYANCE` → "Conveyance", etc., `OTHER` → the row's `other_description` or a fallback); `0013_military_runaways.sql` then sets `description` `NOT NULL` and drops both old columns, only after every row had a real value. All 3 real rows verified correct post-migration, not assumed.
+
+**PDF — `lib/pdf/PaymentAdviceDocument.tsx`'s Particulars table lost its "Category" column**, now a plain two-column Description/Amount table (80%/20% width) exactly mirroring Cash Voucher's own items table layout; `particularCategoryLabel()` helper deleted. `lib/pdf/CashVoucherDocument.tsx` needed no code change at all — it already rendered `{description, amount}[]` generically regardless of source table (only its doc comment mentioned the old category+otherDescription shape, fixed). `lib/pdf/render.tsx`'s particulars mapping simplified to `{description: p.description, amount: p.amount}` in both `renderPaymentAdvicePdf` and `renderCashVoucherPdf` — the label-lookup/`" — {otherDescription}"` concatenation logic is gone.
+
+**Admin detail page (`app/admin/advice/[id]/page.tsx`)** — the Advance Details particulars table lost its Category column, now Description/Amount, matching the existing Cash Voucher Items table's exact structure one section below it.
+
+**Live-tested end-to-end** against the real dev server + real Neon DB, via another **temporary Playwright install** (uninstalled after, empty `package.json`/`package-lock.json` diff confirmed): confirmed zero `<select>` elements anywhere on `/advance`; added 3 Particulars rows (Taxi fare ₹450 + Hotel ₹6,200 + Conference fee ₹3,500), confirmed the live-displayed Total read exactly "₹ 10,150.00" → submitted → got `ADV/MCCIA/2026-27/0006`, confirmation page's AMOUNT matched → downloaded the real PDF and read it directly: Particulars table shows all 3 rows as plain Description/Amount pairs with the correct Total row, no Category column anywhere, all other content (stamps, Purpose of Advance, Previous Pending Advance "None") unaffected → confirmed the admin detail page's rendered HTML shows the same 3 descriptions/amounts with no Category column. Test data (1 advice + 1 attachment + its real Blob upload, 1 throwaway `admin_users` login) deleted afterward, and the 3 pre-existing **real production** `advance_particulars` rows (from `ADV/MCCIA/2026-27/0003`, submitted before this session) were confirmed to have migrated correctly — not deleted, not test data.
+
+**Tests**: `lib/validation/payment-advice.test.ts` updated — the advance-particulars fixture now uses `description` instead of `category`; the OTHER-category-specific tests replaced with a generic "requires a description" / "accepts a single free-text row" pair mirroring Cash Voucher's own tests; the Particulars-total test now calls `calculateCashVoucherTotal` directly (asserting the reuse, not just the arithmetic). New `lib/db/migrations/advance-particulars-description-migration.test.ts` (3 tests: 0012's SQL is exactly the nullable ADD COLUMN, 0013's SQL contains the SET NOT NULL + both DROP COLUMNs, and the final snapshot has `description` notNull with `category`/`other_description` absent).
+
+`tsc --noEmit`, ESLint, the full Vitest suite (274 passing, 7 pre-existing skipped), and `next build` all clean.
+
 ## 4. Open Items (verify before building on top of these)
 
 Status legend: 🔴 unverified / high risk · 🟡 unverified / lower risk · 🟢 verified
@@ -1737,6 +1756,30 @@ attachment + blob + 1 throwaway admin_users login) deleted afterward.
 Did not separately browser-test /edit/[token]'s new mode wiring (single-
 line, type-checked change) — flagged, not silently assumed. Committed
 and pushed.
+
+2026-08-18 — Claude Code — Simplified Advance Payment's Particulars from
+a category-dropdown + conditional "Other" field to plain description +
+amount, matching Cash Voucher's line items exactly (same underlying
+cashVoucherItemSchema/calculateCashVoucherTotal reused directly, not a
+parallel copy). New shared components/form/LineItemsField.tsx replaces
+the duplicated add/remove/sum JSX in both the Cash Voucher and
+Particulars blocks. Migrated advance_particulars (0012 adds description
+nullable, one-off backfill script populates it from category/
+other_description, 0013 sets NOT NULL + drops both old columns) — this
+mattered because 3 REAL rows already existed from an actual user's
+prior submission (ADV/MCCIA/2026-27/0003, discovered via a live DB
+check before touching anything), not just test data; verified all 3
+migrated correctly and left in place. Updated both PDF templates and
+the admin detail page's particulars table to Description/Amount only,
+no Category column. Live-tested end-to-end with another temporary
+Playwright install (uninstalled after, empty diff): confirmed zero
+<select> elements on /advance, added 3 real Particulars rows, confirmed
+the live total and confirmation-page amount matched, downloaded and
+read the real PDF confirming the 2-column table renders correctly, and
+confirmed the admin detail page matches. tsc/ESLint/Vitest (274
+passing)/`next build` all clean. Test data (1 advice + attachment +
+blob + 1 throwaway admin_users login) deleted afterward — the 3 real
+production rows were left untouched, not deleted. Committed and pushed.
 ```
 
 ## 7. Reference: Cash Voucher field mapping (paper → app)

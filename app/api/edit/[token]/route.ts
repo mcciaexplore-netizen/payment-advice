@@ -320,8 +320,7 @@ export async function POST(
         await tx.insert(advanceParticulars).values(
           values.advanceParticulars.map((item, sortOrder) => ({
             paymentAdviceId: advice.id,
-            category: item.category,
-            otherDescription: item.category === "OTHER" ? item.otherDescription ?? null : null,
+            description: item.description,
             amount: item.amount.toFixed(2),
             sortOrder,
           })),

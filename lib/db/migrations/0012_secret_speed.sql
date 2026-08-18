@@ -1,0 +1,1 @@
+ALTER TABLE "advance_particulars" ADD COLUMN "description" text;

@@ -3,7 +3,6 @@ import fs from "node:fs";
 import path from "node:path";
 import { Stamp } from "@/lib/pdf/Stamp";
 import { billPassedForLabelFor } from "@/lib/advice/document-identity";
-import { ADVANCE_PARTICULAR_CATEGORY_LABELS } from "@/lib/validation/payment-advice";
 
 export type PaymentAdvicePdfData = {
   // Resolved primary document number — serial_no normally, or advance_no
@@ -58,7 +57,7 @@ export type PaymentAdvicePdfData = {
   isAdvance: boolean;
   previousPendingAdvanceAmount: string | null;
   previousPendingAdvanceSince: string | null; // YYYY-MM-DD
-  particulars: { category: string; otherDescription: string | null; amount: string }[];
+  particulars: { description: string; amount: string }[];
 };
 
 const BORDER = "1pt solid #000000";
@@ -114,8 +113,7 @@ const styles = StyleSheet.create({
     borderBottom: BORDER,
   },
   particularsCell: { fontSize: 8.5, padding: 4, borderRight: BORDER, borderBottom: BORDER },
-  particularsCategory: { width: "45%" },
-  particularsDescription: { width: "35%" },
+  particularsDescription: { width: "80%" },
   particularsAmount: { width: "20%", textAlign: "right" },
   particularsTotalLabel: { fontFamily: "Helvetica-Bold" },
   previousPendingText: { fontSize: 9, marginTop: 6 },
@@ -147,13 +145,6 @@ function formatDateOnly(dateStr: string | null): string {
   if (!dateStr) return "";
   const [y, m, d] = dateStr.split("-");
   return `${d}/${m}/${y}`;
-}
-
-function particularCategoryLabel(category: string): string {
-  return (
-    ADVANCE_PARTICULAR_CATEGORY_LABELS[category as keyof typeof ADVANCE_PARTICULAR_CATEGORY_LABELS] ??
-    category
-  );
 }
 
 function formatAmount(value: string | null): string {
@@ -329,7 +320,6 @@ export function PaymentAdviceDocument({ data }: { data: PaymentAdvicePdfData }) 
             <Text style={styles.sectionHeading}>Particulars</Text>
             <View style={styles.particularsTable}>
               <View style={styles.particularsRow}>
-                <Text style={[styles.particularsHeaderCell, styles.particularsCategory]}>Category</Text>
                 <Text style={[styles.particularsHeaderCell, styles.particularsDescription]}>
                   Description
                 </Text>
@@ -337,11 +327,8 @@ export function PaymentAdviceDocument({ data }: { data: PaymentAdvicePdfData }) 
               </View>
               {data.particulars.map((item, index) => (
                 <View style={styles.particularsRow} key={index}>
-                  <Text style={[styles.particularsCell, styles.particularsCategory]}>
-                    {particularCategoryLabel(item.category)}
-                  </Text>
                   <Text style={[styles.particularsCell, styles.particularsDescription]}>
-                    {item.category === "OTHER" ? item.otherDescription ?? "" : ""}
+                    {item.description}
                   </Text>
                   <Text style={[styles.particularsCell, styles.particularsAmount]}>
                     {formatAmount(item.amount)}
@@ -352,10 +339,8 @@ export function PaymentAdviceDocument({ data }: { data: PaymentAdvicePdfData }) 
                 <Text
                   style={[
                     styles.particularsCell,
-                    styles.particularsCategory,
                     styles.particularsDescription,
                     styles.particularsTotalLabel,
-                    { width: "80%" },
                   ]}
                 >
                   Total

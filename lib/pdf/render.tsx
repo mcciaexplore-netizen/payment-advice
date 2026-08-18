@@ -3,7 +3,7 @@ import { advanceParticulars, cashVoucherItems, paymentAdvices } from "@/lib/db/s
 import { PaymentAdviceDocument } from "@/lib/pdf/PaymentAdviceDocument";
 import { CashVoucherDocument } from "@/lib/pdf/CashVoucherDocument";
 import { displayNoFor } from "@/lib/advice/document-identity";
-import { ADVANCE_PARTICULAR_CATEGORY_LABELS, type PaymentMode } from "@/lib/validation/payment-advice";
+import { type PaymentMode } from "@/lib/validation/payment-advice";
 
 type PaymentAdviceRow = typeof paymentAdvices.$inferSelect;
 type CashVoucherItemRow = typeof cashVoucherItems.$inferSelect;
@@ -63,8 +63,7 @@ export async function renderPaymentAdvicePdf(
         previousPendingAdvanceAmount: advice.previousPendingAdvanceAmount,
         previousPendingAdvanceSince: advice.previousPendingAdvanceSince,
         particulars: particulars.map((p) => ({
-          category: p.category,
-          otherDescription: p.otherDescription,
+          description: p.description,
           amount: p.amount,
         })),
       }}
@@ -96,15 +95,7 @@ export async function renderCashVoucherPdf(
         formDate: advice.formDate,
         payeeName: advice.payeeName,
         items: advice.isAdvance
-          ? particulars.map((p) => ({
-              description:
-                p.category === "OTHER"
-                  ? `${ADVANCE_PARTICULAR_CATEGORY_LABELS.OTHER}${p.otherDescription ? ` — ${p.otherDescription}` : ""}`
-                  : ADVANCE_PARTICULAR_CATEGORY_LABELS[
-                      p.category as keyof typeof ADVANCE_PARTICULAR_CATEGORY_LABELS
-                    ] ?? p.category,
-              amount: p.amount,
-            }))
+          ? particulars.map((p) => ({ description: p.description, amount: p.amount }))
           : items.map((item) => ({ description: item.description, amount: item.amount })),
         submittedByName: advice.submittedByName,
         submittedAt: advice.submittedAt.toISOString(),

@@ -8,7 +8,7 @@ import {
   advanceParticulars,
 } from "@/lib/db/schema";
 import { PaymentAdviceForm } from "@/components/form/PaymentAdviceForm";
-import { ADVANCE_PARTICULAR_CATEGORIES, DocType, PaymentMode } from "@/lib/validation/payment-advice";
+import { DocType, PaymentMode } from "@/lib/validation/payment-advice";
 import { displayNoFor, documentLabelFor } from "@/lib/advice/document-identity";
 
 export const dynamic = "force-dynamic";
@@ -137,8 +137,7 @@ export default async function EditPage({
               : undefined,
           previousPendingAdvanceSince: advice.previousPendingAdvanceSince ?? undefined,
           advanceParticulars: particulars.map((item) => ({
-            category: item.category as (typeof ADVANCE_PARTICULAR_CATEGORIES)[number],
-            otherDescription: item.otherDescription ?? undefined,
+            description: item.description,
             amount: Number(item.amount),
           })),
           paymentMode: advice.paymentMode as PaymentMode,

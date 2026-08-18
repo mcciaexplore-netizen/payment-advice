@@ -323,17 +323,16 @@ export const cashVoucherItems = pgTable("cash_voucher_items", {
 });
 
 /** Itemised Particulars breakdown for Advance Payment submissions only
- * (isAdvance = true), regardless of NEFT/CASH sub-route — mirrors the
- * cash_voucher_items pattern. `category` is one of the 6 preset dropdown
- * values (see ADVANCE_PARTICULAR_CATEGORIES in lib/validation/payment-advice.ts);
- * `otherDescription` is only populated when category = 'OTHER'. */
+ * (isAdvance = true), regardless of NEFT/CASH sub-route — same free-text
+ * description + amount shape as cash_voucher_items (originally a category
+ * dropdown + conditional "Other" text field; simplified to match Cash
+ * Voucher's plain description+amount pattern exactly, see AGENT_HANDOFF.md). */
 export const advanceParticulars = pgTable("advance_particulars", {
   id: uuid("id").primaryKey().defaultRandom(),
   paymentAdviceId: uuid("payment_advice_id")
     .notNull()
     .references(() => paymentAdvices.id, { onDelete: "cascade" }),
-  category: text("category").notNull(),
-  otherDescription: text("other_description"),
+  description: text("description").notNull(),
   amount: numeric("amount", { precision: 14, scale: 2 }).notNull(),
   sortOrder: integer("sort_order").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
