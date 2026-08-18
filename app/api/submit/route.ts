@@ -137,6 +137,16 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // Bill & Reference doesn't exist for an Advance Payment (no bill yet, same
+  // reasoning as Tax Invoice not being required) — the form hides that whole
+  // section and the schema no longer requires billNo/billDate when isAdvance.
+  // Mirrored into these still-NOT-NULL columns using the advance number and
+  // form date, same dual-representation pattern purposeOfAdvance uses for
+  // nature_of_expenditure, so every existing reader (PDF, admin list search,
+  // Excel export, emails) keeps working unchanged for advances too.
+  const billNo = values.isAdvance ? (values.billNo ?? advanceNo ?? serialNo) : values.billNo!;
+  const billDate = values.isAdvance ? (values.billDate ?? values.formDate) : values.billDate!;
+
   const uploadedPathnames: string[] = [];
   try {
     const attachmentRecords: {
@@ -200,8 +210,8 @@ export async function POST(req: NextRequest) {
           poDate: values.poDate ?? null,
           deliveryChallanNo: values.deliveryChallanNo ?? null,
           deliveryChallanDate: values.deliveryChallanDate ?? null,
-          billNo: values.billNo,
-          billDate: values.billDate,
+          billNo,
+          billDate,
           amount: values.amount.toFixed(2),
           basicAmount:
             values.paymentMode === "NEFT" && !values.isAdvance
@@ -315,11 +325,12 @@ export async function POST(req: NextRequest) {
         submittedByName: values.submittedByName,
         payeeName: values.payeeName,
         amount: values.amount.toLocaleString("en-IN", { minimumFractionDigits: 2 }),
-        natureOfExpenditure:
-          values.paymentMode === "CASH"
+        natureOfExpenditure: values.isAdvance
+          ? values.purposeOfAdvance ?? ""
+          : values.paymentMode === "CASH"
             ? values.cashVoucherItems.map((item) => item.description).join("; ")
             : values.natureOfExpenditure ?? "",
-        billReference: values.billNo,
+        billReference: billNo,
         paymentMode: values.paymentMode,
         formDate: values.formDate,
         approvalLink: `${origin}/authority-approval/${authorityToken}`,

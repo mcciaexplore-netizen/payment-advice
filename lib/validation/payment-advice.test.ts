@@ -107,6 +107,37 @@ describe("NEFT Basic/GST split validation", () => {
       expect(result.error.issues.some((issue) => issue.path.join(".") === "amount")).toBe(true);
     }
   });
+
+  it("rejects a missing billNo for a non-advance submission", () => {
+    const rest: Record<string, unknown> = { ...baseNeftSubmission };
+    delete rest.billNo;
+    const result = paymentAdviceFormSchema.safeParse(rest);
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.some((issue) => issue.path.join(".") === "billNo")).toBe(true);
+    }
+  });
+
+  it("rejects a missing billDate for a non-advance submission", () => {
+    const rest: Record<string, unknown> = { ...baseNeftSubmission };
+    delete rest.billDate;
+    const result = paymentAdviceFormSchema.safeParse(rest);
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.some((issue) => issue.path.join(".") === "billDate")).toBe(true);
+    }
+  });
+
+  it("rejects a future billDate for a non-advance submission", () => {
+    const result = paymentAdviceFormSchema.safeParse({
+      ...baseNeftSubmission,
+      billDate: "2099-01-01",
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.some((issue) => issue.path.join(".") === "billDate")).toBe(true);
+    }
+  });
 });
 
 const baseAdvanceNeftSubmission = {
@@ -231,16 +262,60 @@ describe("Advance Payment validation", () => {
     expect(result.success).toBe(true);
   });
 
-  it("still requires NEFT bank details for an NEFT-routed advance", () => {
+  it("does NOT require NEFT bank details for an NEFT-routed advance — Finance already has them on file for staff", () => {
     const rest: Record<string, unknown> = { ...baseAdvanceNeftSubmission };
     delete rest.bankAccountNo;
+    delete rest.bankIfsc;
+    delete rest.beneficiaryName;
     const result = paymentAdviceFormSchema.safeParse(rest);
-    expect(result.success).toBe(false);
-    if (!result.success) {
-      expect(result.error.issues.some((issue) => issue.path.join(".") === "bankAccountNo")).toBe(
-        true,
-      );
-    }
+    expect(result.success).toBe(true);
+    // Sanity: the same shape WITHOUT isAdvance would fail for missing bank details.
+    const nonAdvanceResult = paymentAdviceFormSchema.safeParse({ ...rest, isAdvance: false });
+    expect(nonAdvanceResult.success).toBe(false);
+  });
+
+  it("still accepts NEFT bank details when the submitter provides them anyway on an advance", () => {
+    expect(paymentAdviceFormSchema.safeParse(baseAdvanceNeftSubmission).success).toBe(true);
+  });
+
+  it("does NOT require billNo/billDate/PO/Delivery Challan for an advance — no bill exists yet", () => {
+    const rest: Record<string, unknown> = { ...baseAdvanceNeftSubmission };
+    delete rest.billNo;
+    delete rest.billDate;
+    const result = paymentAdviceFormSchema.safeParse(rest);
+    expect(result.success).toBe(true);
+  });
+
+  it("tolerates a stale empty-string billDate/basicAmount/gstAmount/NaN left behind by a hidden field react-hook-form registered before the mode switch to Advance", () => {
+    // Regression guard: billDate, poDate, deliveryChallanDate, basicAmount
+    // and gstAmount all render (and so get registered by react-hook-form)
+    // by default, since paymentMode defaults to NEFT non-advance on page
+    // load. If the submitter switches straight to Advance Payment without
+    // ever touching them, react-hook-form retains their untouched native
+    // uncontrolled defaults ("" for date/text inputs, NaN for a
+    // valueAsNumber-registered empty number input) in its internal form
+    // state even after the fields unmount — this must not silently block
+    // submission (previously did: optionalDateString's regex ran before
+    // its empty-to-undefined transform, and NaN isn't forgiven by
+    // z.number().optional()).
+    const result = paymentAdviceFormSchema.safeParse({
+      ...baseAdvanceNeftSubmission,
+      billDate: "",
+      poDate: "",
+      deliveryChallanDate: "",
+      basicAmount: NaN,
+      gstAmount: NaN,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("tolerates the same stale empty-string 'Since' left behind after Previous Pending Advance amount drops back to 0", () => {
+    const result = paymentAdviceFormSchema.safeParse({
+      ...baseAdvanceNeftSubmission,
+      previousPendingAdvanceAmount: 0,
+      previousPendingAdvanceSince: "",
+    });
+    expect(result.success).toBe(true);
   });
 
   it("does NOT require basicAmount/gstAmount/natureOfExpenditure for an advance", () => {
@@ -284,5 +359,20 @@ describe("Cash voucher validation", () => {
     if (!result.success) {
       expect(result.error.issues.some((issue) => issue.path.join(".") === "amount")).toBe(true);
     }
+  });
+
+  it("tolerates a stale NaN basicAmount/gstAmount left behind by react-hook-form when the submitter switches straight from the default NEFT mode to Cash", () => {
+    // Same regression class as the Advance Payment case above — basicAmount
+    // and gstAmount render by default (paymentMode starts as NEFT), so they
+    // get registered before a submitter who goes straight to Cash ever
+    // touches them.
+    const result = paymentAdviceFormSchema.safeParse({
+      ...baseCashSubmission,
+      billNo: "INV-1",
+      billDate: "2026-07-20",
+      basicAmount: NaN,
+      gstAmount: NaN,
+    });
+    expect(result.success).toBe(true);
   });
 });

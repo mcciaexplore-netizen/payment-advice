@@ -57,7 +57,7 @@ export default function SubmittedPage() {
             label="Amount"
             value={`₹ ${summary.amount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`}
           />
-          <SummaryRow label="Bill No." value={summary.billNo} />
+          {!summary.isAdvance ? <SummaryRow label="Bill No." value={summary.billNo} /> : null}
           <SummaryRow label="Payment Mode" value={summary.paymentMode} />
           <SummaryRow label="Submitted By" value={summary.submittedByName} />
           <SummaryRow label="Department" value={summary.submittedByDepartment} />

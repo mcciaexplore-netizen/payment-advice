@@ -13,6 +13,7 @@ import { RecommendingAuthorityField } from "@/components/form/RecommendingAuthor
 import { FileUploadSlot } from "@/components/form/FileUploadSlot";
 import { storeSubmissionSummary } from "@/lib/submission-summary";
 import { resolveAutoFillEmail } from "@/lib/form/staff-email-autofill";
+import { resolveSourceFieldAutoFill } from "@/lib/form/source-field-autofill";
 import {
   paymentAdviceFormSchema,
   PaymentAdviceFormInput,
@@ -105,6 +106,7 @@ export function PaymentAdviceForm({
   const paymentMode = useWatch({ control, name: "paymentMode" });
   const payeeName = useWatch({ control, name: "payeeName" }) ?? "";
   const submittedByName = useWatch({ control, name: "submittedByName" }) ?? "";
+  const submittedByEmail = useWatch({ control, name: "submittedByEmail" }) ?? "";
   const recommendingAuthorityId = useWatch({ control, name: "recommendingAuthorityId" }) ?? "";
   const watchedCashVoucherItems = useWatch({ control, name: "cashVoucherItems" });
   const cashVoucherItems = useMemo(
@@ -163,6 +165,47 @@ export function PaymentAdviceForm({
       shouldValidate: false,
     });
   }, [advanceParticulars, appendAdvanceParticular, isAdvance, setValue]);
+
+  // Advance Payment's payee IS the submitter — they're receiving the
+  // advance themselves, not paying a vendor — so the vendor typeahead is
+  // hidden and Payee Name/Email are instead auto-filled from Submitter
+  // Name/Email, using the same "only react on an actual source-value
+  // change, never fight the user" pattern as the staff-match email
+  // auto-fill below.
+  const lastAutoFilledPayeeNameRef = useRef<string | null>(null);
+  const lastAutoFilledPayeeEmailRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!isAdvance) return;
+    const action = resolveSourceFieldAutoFill(
+      submittedByName,
+      getValues("payeeName") ?? "",
+      lastAutoFilledPayeeNameRef.current,
+    );
+    if (action.type === "fill") {
+      setValue("payeeName", action.value);
+      lastAutoFilledPayeeNameRef.current = action.value;
+    } else if (action.type === "clear") {
+      setValue("payeeName", "");
+      lastAutoFilledPayeeNameRef.current = null;
+    }
+  }, [isAdvance, submittedByName, getValues, setValue]);
+
+  useEffect(() => {
+    if (!isAdvance) return;
+    const action = resolveSourceFieldAutoFill(
+      submittedByEmail,
+      getValues("payeeEmail") ?? "",
+      lastAutoFilledPayeeEmailRef.current,
+    );
+    if (action.type === "fill") {
+      setValue("payeeEmail", action.value);
+      lastAutoFilledPayeeEmailRef.current = action.value;
+    } else if (action.type === "clear") {
+      setValue("payeeEmail", "");
+      lastAutoFilledPayeeEmailRef.current = null;
+    }
+  }, [isAdvance, submittedByEmail, getValues, setValue]);
 
   // Mirrors applyVendor's "fill only what's on file" pattern below, plus
   // RecommendingAuthorityField's "only react when the matched identity
@@ -259,7 +302,7 @@ export function PaymentAdviceForm({
         advanceNo: data.advanceNo ?? null,
         payeeName: values.payeeName,
         amount: values.amount,
-        billNo: values.billNo,
+        billNo: values.billNo ?? "",
         paymentMode: values.paymentMode,
         submittedByName: values.submittedByName,
         submittedByDepartment: values.submittedByDepartment,
@@ -337,15 +380,23 @@ export function PaymentAdviceForm({
               required
               htmlFor="payeeName"
               error={errors.payeeName?.message}
-              help="Search for an existing payee, or type a new name if this is their first payment."
+              help={
+                isAdvance
+                  ? "Auto-filled from Your Name above — an advance is paid to you, the requester. Edit if needed."
+                  : "Search for an existing payee, or type a new name if this is their first payment."
+              }
             >
-              <VendorTypeahead
-                id="payeeName"
-                value={payeeName}
-                onChange={(v) => setValue("payeeName", v)}
-                onSelectVendor={applyVendor}
-                hasError={!!errors.payeeName}
-              />
+              {isAdvance ? (
+                <Input id="payeeName" hasError={!!errors.payeeName} {...register("payeeName")} />
+              ) : (
+                <VendorTypeahead
+                  id="payeeName"
+                  value={payeeName}
+                  onChange={(v) => setValue("payeeName", v)}
+                  onSelectVendor={applyVendor}
+                  hasError={!!errors.payeeName}
+                />
+              )}
             </Field>
           </div>
           <div className="sm:col-span-2">
@@ -373,24 +424,32 @@ export function PaymentAdviceForm({
 
       <Section title="3. Bill & reference">
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-          <Field label="Bill No." required error={errors.billNo?.message}>
-            <Input hasError={!!errors.billNo} {...register("billNo")} />
-          </Field>
-          <Field label="Bill Date" required error={errors.billDate?.message}>
-            <Input type="date" max={today} hasError={!!errors.billDate} {...register("billDate")} />
-          </Field>
-          <Field label="P.O. No." error={errors.poNumber?.message}>
-            <Input hasError={!!errors.poNumber} {...register("poNumber")} />
-          </Field>
-          <Field label="P.O. Date" error={errors.poDate?.message}>
-            <Input type="date" hasError={!!errors.poDate} {...register("poDate")} />
-          </Field>
-          <Field label="Delivery Challan No." error={errors.deliveryChallanNo?.message}>
-            <Input hasError={!!errors.deliveryChallanNo} {...register("deliveryChallanNo")} />
-          </Field>
-          <Field label="Delivery Challan Date" error={errors.deliveryChallanDate?.message}>
-            <Input type="date" hasError={!!errors.deliveryChallanDate} {...register("deliveryChallanDate")} />
-          </Field>
+          {!isAdvance ? (
+            <>
+              <Field label="Bill No." required error={errors.billNo?.message}>
+                <Input hasError={!!errors.billNo} {...register("billNo")} />
+              </Field>
+              <Field label="Bill Date" required error={errors.billDate?.message}>
+                <Input type="date" max={today} hasError={!!errors.billDate} {...register("billDate")} />
+              </Field>
+              <Field label="P.O. No." error={errors.poNumber?.message}>
+                <Input hasError={!!errors.poNumber} {...register("poNumber")} />
+              </Field>
+              <Field label="P.O. Date" error={errors.poDate?.message}>
+                <Input type="date" hasError={!!errors.poDate} {...register("poDate")} />
+              </Field>
+              <Field label="Delivery Challan No." error={errors.deliveryChallanNo?.message}>
+                <Input hasError={!!errors.deliveryChallanNo} {...register("deliveryChallanNo")} />
+              </Field>
+              <Field label="Delivery Challan Date" error={errors.deliveryChallanDate?.message}>
+                <Input
+                  type="date"
+                  hasError={!!errors.deliveryChallanDate}
+                  {...register("deliveryChallanDate")}
+                />
+              </Field>
+            </>
+          ) : null}
           {isAdvance ? (
             <div className="sm:col-span-2 flex flex-col gap-6">
               <div className="rounded-md border border-[#0b1f3a]/20 bg-[#0b1f3a]/[0.02] p-4">
@@ -696,17 +755,31 @@ export function PaymentAdviceForm({
 
           {paymentMode === "NEFT" && (
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
-              <Field label="Bank A/c No." required error={errors.bankAccountNo?.message}>
+              {isAdvance ? (
+                <p className="sm:col-span-3 text-xs text-gray-500">
+                  Optional for an advance — Finance already has your bank details on file. Fill these
+                  in only if you want to provide them here as well.
+                </p>
+              ) : null}
+              <Field
+                label="Bank A/c No."
+                required={!isAdvance}
+                error={errors.bankAccountNo?.message}
+              >
                 <Input hasError={!!errors.bankAccountNo} {...register("bankAccountNo")} />
               </Field>
-              <Field label="IFSC Code" required error={errors.bankIfsc?.message}>
+              <Field label="IFSC Code" required={!isAdvance} error={errors.bankIfsc?.message}>
                 <Input
                   placeholder="e.g. HDFC0001234"
                   hasError={!!errors.bankIfsc}
                   {...register("bankIfsc")}
                 />
               </Field>
-              <Field label="Beneficiary Name" required error={errors.beneficiaryName?.message}>
+              <Field
+                label="Beneficiary Name"
+                required={!isAdvance}
+                error={errors.beneficiaryName?.message}
+              >
                 <Input hasError={!!errors.beneficiaryName} {...register("beneficiaryName")} />
               </Field>
             </div>

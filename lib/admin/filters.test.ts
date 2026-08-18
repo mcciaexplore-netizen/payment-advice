@@ -85,6 +85,7 @@ describe("buildTabCondition", () => {
     for (const tab of [
       "waiting_authority",
       "awaiting_finance",
+      "advance_payment",
       "received_in_process",
       "verified_ready_payment",
       "partial_payment_done",
@@ -104,5 +105,35 @@ describe("buildTabCondition", () => {
     expect(extractBoundParams(buildTabCondition("sent_back"))).toContain("SENT_BACK");
     expect(extractBoundParams(buildTabCondition("sent_back"))).not.toContain("SUBMITTED");
     expect(extractBoundParams(buildTabCondition("sent_back"))).not.toContain("APPROVED");
+  });
+
+  it("'advance_payment' uses the same underlying condition as 'awaiting_finance', just also requiring is_advance = true", () => {
+    const advanceParams = extractBoundParams(buildTabCondition("advance_payment"));
+    expect(advanceParams).toContain("SUBMITTED");
+    expect(advanceParams).toContain(true);
+    expect(advanceParams).not.toContain(false);
+  });
+
+  it("'awaiting_finance' now also requires is_advance = false, so an approved advance never lands in both tabs", () => {
+    const awaitingFinanceParams = extractBoundParams(buildTabCondition("awaiting_finance"));
+    expect(awaitingFinanceParams).toContain("SUBMITTED");
+    expect(awaitingFinanceParams).toContain(false);
+    expect(awaitingFinanceParams).not.toContain(true);
+  });
+
+  it("does not add an is_advance condition to any other stage tab — the split is only at the landing point", () => {
+    for (const tab of [
+      "waiting_authority",
+      "received_in_process",
+      "verified_ready_payment",
+      "partial_payment_done",
+      "fully_payment_settled",
+      "payment_done",
+      "sent_back",
+    ] as const) {
+      const params = extractBoundParams(buildTabCondition(tab));
+      expect(params).not.toContain(true);
+      expect(params).not.toContain(false);
+    }
   });
 });

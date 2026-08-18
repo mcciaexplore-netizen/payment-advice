@@ -206,6 +206,11 @@ export async function POST(
         (await db.transaction((tx) => allocateAdvanceNumber(tx, advice.financialYear)))
       : null;
 
+    // Bill & Reference doesn't exist for an Advance Payment — see
+    // app/api/submit/route.ts for the same dual-representation reasoning.
+    const billNo = values.isAdvance ? (values.billNo ?? advanceNo ?? advice.serialNo) : values.billNo!;
+    const billDate = values.isAdvance ? (values.billDate ?? values.formDate) : values.billDate!;
+
     await db.transaction(async (tx) => {
       await tx
         .update(paymentAdvices)
@@ -240,8 +245,8 @@ export async function POST(
           poDate: values.poDate ?? null,
           deliveryChallanNo: values.deliveryChallanNo ?? null,
           deliveryChallanDate: values.deliveryChallanDate ?? null,
-          billNo: values.billNo,
-          billDate: values.billDate,
+          billNo,
+          billDate,
           amount: values.amount.toFixed(2),
           basicAmount:
             values.paymentMode === "NEFT" && !values.isAdvance
@@ -373,7 +378,7 @@ export async function POST(
           : values.paymentMode === "CASH"
             ? values.cashVoucherItems.map((item) => item.description).join("; ")
             : values.natureOfExpenditure ?? "",
-        billReference: values.billNo,
+        billReference: billNo,
         paymentMode: values.paymentMode,
         formDate: values.formDate,
         approvalLink: `${origin}/authority-approval/${authorityToken}`,

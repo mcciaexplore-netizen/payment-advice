@@ -27,6 +27,7 @@ type SearchParamsRecord = Record<string, string | string[] | undefined>;
 const DASHBOARD_STAGE_TABS: { tab: AdminTab; label: string }[] = [
   { tab: "waiting_authority", label: "Waiting on Authority" },
   { tab: "awaiting_finance", label: "Awaiting Finance Review" },
+  { tab: "advance_payment", label: "Advance Payment" },
   { tab: "received_in_process", label: "Received & In Process" },
   { tab: "verified_ready_payment", label: "Verified — Ready for Payment" },
   { tab: "partial_payment_done", label: "Partial Payment Done" },
@@ -115,6 +116,7 @@ export default async function AdminListPage({
     totalsRow,
     waitingCount,
     awaitingFinanceCount,
+    advancePaymentCount,
     receivedCount,
     verifiedCount,
     partialPaymentDoneCount,
@@ -162,6 +164,10 @@ export default async function AdminListPage({
     db
       .select({ count: count(), sum: sum(paymentAdvices.amount) })
       .from(paymentAdvices)
+      .where(and(baseWhere, buildTabCondition("advance_payment"))),
+    db
+      .select({ count: count(), sum: sum(paymentAdvices.amount) })
+      .from(paymentAdvices)
       .where(and(baseWhere, buildTabCondition("received_in_process"))),
     db
       .select({ count: count(), sum: sum(paymentAdvices.amount) })
@@ -190,6 +196,10 @@ export default async function AdminListPage({
     awaiting_finance: {
       count: awaitingFinanceCount[0]?.count ?? 0,
       sum: Number(awaitingFinanceCount[0]?.sum ?? 0),
+    },
+    advance_payment: {
+      count: advancePaymentCount[0]?.count ?? 0,
+      sum: Number(advancePaymentCount[0]?.sum ?? 0),
     },
     received_in_process: {
       count: receivedCount[0]?.count ?? 0,
@@ -281,6 +291,13 @@ export default async function AdminListPage({
           tab="awaiting_finance"
           activeTab={tab}
           count={awaitingFinanceCount[0]?.count ?? 0}
+          searchParams={sp}
+        />
+        <TabLink
+          label="Advance Payment"
+          tab="advance_payment"
+          activeTab={tab}
+          count={advancePaymentCount[0]?.count ?? 0}
           searchParams={sp}
         />
         <TabLink

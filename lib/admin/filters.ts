@@ -114,6 +114,18 @@ export const ADMIN_LIST_PAGE_SIZE = 25;
  * exact same derived condition the old tab used (verified_at set), just
  * renamed/relabeled since there's no more Sanction stage to be "awaiting."
  *
+ * "advance_payment" is Advance Payment's own landing tab (see
+ * AGENT_HANDOFF.md) — split out of "awaiting_finance" using the exact same
+ * underlying condition (authority-approved, not yet Finance-received), just
+ * also requiring `is_advance = true`; "awaiting_finance" is correspondingly
+ * narrowed to `is_advance = false` so an approved advance lands in exactly
+ * one of the two tabs, never both. This separation is deliberately only at
+ * the landing point — once Finance marks an advance Received, it falls out
+ * of "advance_payment" (financeReceivedAt is no longer null) and into the
+ * same shared "received_in_process" / "verified_ready_payment" / payment
+ * tabs every other submission uses, with no is_advance condition anywhere
+ * past this one tab.
+ *
  * NEFT's multi-part payment model (see AGENT_HANDOFF.md) replaced the old
  * single "payment_done" tab's NEFT half with two new ones,
  * "partial_payment_done" and "fully_payment_settled" — both keyed on
@@ -131,6 +143,7 @@ export const ADMIN_LIST_PAGE_SIZE = 25;
 export const ADMIN_TABS = [
   "waiting_authority",
   "awaiting_finance",
+  "advance_payment",
   "received_in_process",
   "verified_ready_payment",
   "partial_payment_done",
@@ -155,6 +168,15 @@ export function buildTabCondition(tab: AdminTab): SQL | undefined {
       submitted,
       isNotNull(paymentAdvices.authorityApprovedAt),
       isNull(paymentAdvices.financeReceivedAt),
+      eq(paymentAdvices.isAdvance, false),
+    );
+  }
+  if (tab === "advance_payment") {
+    return and(
+      submitted,
+      isNotNull(paymentAdvices.authorityApprovedAt),
+      isNull(paymentAdvices.financeReceivedAt),
+      eq(paymentAdvices.isAdvance, true),
     );
   }
   if (tab === "received_in_process") {

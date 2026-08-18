@@ -29,12 +29,44 @@ function pastOrTodayDateString(message: string) {
     }, message);
 }
 
+/** Same "trim/empty-to-undefined first, THEN validate format" ordering as
+ * optionalTrimmed's .pipe() uses for payeeContactPhone/payeeGstin/bankIfsc —
+ * validating the regex before the empty-string transform (as a single
+ * `.regex().transform()` chain would) fails on "", which matters a lot here:
+ * a date input that's conditionally hidden (e.g. Bill Date for an Advance
+ * Payment, or "Since" when Previous Pending Advance is 0) still gets
+ * registered with react-hook-form's native uncontrolled default of "" the
+ * moment it first mounts, and that stale "" is what's still sitting in form
+ * state if the field becomes inapplicable and unmounts before ever being
+ * touched — without this ordering, submission would fail validation with no
+ * visible error anywhere, since the field showing it is gone from the DOM. */
 function optionalDateString() {
-  return z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/, "Enter a valid date")
-    .transform((v) => (v === "" ? undefined : v))
-    .optional();
+  return optionalTrimmed().pipe(
+    z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Enter a valid date").optional(),
+  );
+}
+
+/** Same reasoning as optionalDateString above, for a conditionally-hidden
+ * numeric field: react-hook-form's `valueAsNumber: true` turns an untouched,
+ * stale "" into NaN, which `z.number().optional()` does NOT forgive (only
+ * `undefined` satisfies `.optional()`) — so a hidden Basic/GST field that
+ * was briefly mounted before the user switched away from NEFT would
+ * otherwise block submission invisibly, the same way an unfixed
+ * optionalDateString would. */
+function optionalNumber(message: string) {
+  return z.preprocess(
+    (v) => (typeof v === "number" && Number.isNaN(v) ? undefined : v),
+    z.number().multipleOf(0.01, message).optional(),
+  );
+}
+
+/** Mirrors pastOrTodayDateString's future-date check, for fields that are
+ * only conditionally required (so can't use a Zod-level `.refine()` on the
+ * base schema — the check has to run inside superRefine instead). */
+function isFutureDateString(value: string): boolean {
+  const today = new Date();
+  today.setHours(23, 59, 59, 999);
+  return new Date(value) > today;
 }
 
 export const docTypeSchema = z.enum([
@@ -193,9 +225,13 @@ export const paymentAdviceFormSchema = z
     ),
     payeeUdyamNumber: optionalTrimmed(),
 
-    // Section 3 — bill & reference
-    billNo: requiredTrimmed("Bill number is required"),
-    billDate: pastOrTodayDateString("Bill date cannot be in the future"),
+    // Section 3 — bill & reference. Optional at the object-shape level since
+    // an Advance Payment has no bill yet (the whole section is hidden on the
+    // form for advances, mirroring why Tax Invoice isn't required either);
+    // required/validated for non-advance submissions specifically in the
+    // superRefine below.
+    billNo: optionalTrimmed(),
+    billDate: optionalDateString(),
     poNumber: optionalTrimmed(),
     poDate: optionalDateString(),
     deliveryChallanNo: optionalTrimmed(),
@@ -208,8 +244,8 @@ export const paymentAdviceFormSchema = z
     // Cash never submits either; required/validated for NEFT specifically
     // in the superRefine below (gstAmount may legitimately be 0, so it
     // can't just be "truthy required").
-    basicAmount: z.number().multipleOf(0.01, "Basic Amount can have at most 2 decimal places").optional(),
-    gstAmount: z.number().multipleOf(0.01, "GST Amount can have at most 2 decimal places").optional(),
+    basicAmount: optionalNumber("Basic Amount can have at most 2 decimal places"),
+    gstAmount: optionalNumber("GST Amount can have at most 2 decimal places"),
     natureOfExpenditure: optionalTrimmed(),
     cashVoucherItems: z.array(cashVoucherItemSchema).default([]),
 
@@ -249,9 +285,11 @@ export const paymentAdviceFormSchema = z
     formDate: pastOrTodayDateString("Form date cannot be in the future"),
   })
   .superRefine((data, ctx) => {
-    // Bank details are required for NEFT regardless of isAdvance — the
-    // money still needs a destination even when there's no invoice yet.
-    if (data.paymentMode === "NEFT") {
+    // Bank details are required for a regular NEFT submission, but NOT for
+    // an NEFT-routed advance — Finance already has the submitter's bank
+    // details on file as staff, and the fields stay visible/editable on the
+    // form in case they want to supply them anyway, just not required.
+    if (data.paymentMode === "NEFT" && !data.isAdvance) {
       if (!data.bankAccountNo) {
         ctx.addIssue({
           code: "custom",
@@ -325,6 +363,30 @@ export const paymentAdviceFormSchema = z
         });
       }
     } else {
+      // Bill & Reference — required for every non-advance submission; an
+      // Advance Payment has no bill yet, so this whole section is hidden on
+      // the form and skipped entirely when isAdvance is true (see above).
+      if (!data.billNo) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["billNo"],
+          message: "Bill number is required",
+        });
+      }
+      if (!data.billDate) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["billDate"],
+          message: "Bill date is required",
+        });
+      } else if (isFutureDateString(data.billDate)) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["billDate"],
+          message: "Bill date cannot be in the future",
+        });
+      }
+
       if (data.paymentMode === "NEFT") {
         if (!data.natureOfExpenditure) {
           ctx.addIssue({
