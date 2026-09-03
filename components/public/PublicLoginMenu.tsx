@@ -23,7 +23,7 @@ export function PublicLoginMenu() {
   }, []);
 
   return (
-    <div ref={rootRef} className="relative ml-auto shrink-0">
+    <div ref={rootRef} className="relative ml-auto shrink-0 sm:absolute sm:right-0 sm:top-0">
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}

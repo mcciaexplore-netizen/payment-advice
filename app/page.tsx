@@ -19,8 +19,8 @@ export default async function HomePage() {
 
   return (
     <main className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-8 px-6 py-10">
-      <header className="flex flex-wrap items-start gap-4 border-b border-gray-200 pb-6">
-        <div className="flex min-w-0 items-center gap-4">
+      <header className="relative flex flex-wrap items-start gap-4 border-b border-gray-200 pb-6">
+        <div className="flex min-w-0 items-center gap-4 sm:pr-32">
           <Image
             src="/mccia-logo.png"
             alt="MCCIA logo"

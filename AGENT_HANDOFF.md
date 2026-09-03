@@ -47,7 +47,7 @@ Design system: Navy `#0B1F3A`, Forest green `#2E8B57`, Amber `#E8A33D`. Headings
 
 ## 3. Current State (update this every session)
 
-**Last updated:** 3 September 2026, by Codex (public Finance/Authority Login menu)
+**Last updated:** 3 September 2026, by Codex (verified deliberate pre-launch production reset)
 
 ### Shipped — Phase 1 baseline (Claude Code)
 - Public form `/` (no login): submitter, payee (vendor typeahead), bill/reference, payment mode (NEFT/Cash), enclosures, mandatory Tax Invoice + Approval/Budget PDF attachments
@@ -714,7 +714,15 @@ Requested because every `admin_users` password (Sunil's, Abha's, the ALL account
 ### Shipped — Public Finance/Authority Login menu (Codex, 2026-09-03)
 - Added a shared top-right `Login` dropdown to both `/` and `/advance`. It opens on the public page and offers `Finance Admin Login` → `/admin/login` and `Authority Login` → `/authority/login`; those existing login flows remain responsible for credential validation and redirect to `/admin` and `/authority` respectively.
 - The dropdown closes on selection, outside click, or Escape and includes menu ARIA semantics. Its wrapping header layout remains responsive for narrow screens.
+- Follow-up: anchored the control to the header's actual top-right at `sm` and above, with reserved title-block padding to prevent overlap; this stops long institutional copy from wrapping the button onto a lower row. Small screens retain the natural wrapped layout.
 - Production-rendered `/` contains the Login control and both login routes return 200. The in-app browser connection was unavailable, so no visual/click interaction claim was made. TypeScript, ESLint, 303 tests (7 pre-existing skipped), and production build pass.
+
+### Operations — Deliberate pre-launch production data reset (Human-executed; Codex verified 2026-09-03)
+- Immediately before the Finance-team launch, the human deliberately wiped all demo/test submission data and reset numbering. This is expected production preparation, not data loss caused by an application bug.
+- Mandatory local safety backup remains at `.local-backups/prelaunch-2026-09-03T16-38-11+0530/` (gitignored): JSON exports for 12 tables, 25 attachment Blobs, SHA-256 manifest, plus a supplemental checksum manifest and copies of 12 older orphaned test Blobs discovered during preflight. Codex verified every backup checksum before the human performed the deletion.
+- Codex verified the live post-reset state read-only: `payment_advices=0`, `attachments=0`, `cash_voucher_items=0`, `advance_particulars=0`, `payment_entries=0`, `audit_log=0`, and Vercel Blob contains zero files. Preserved data matches the pre-wipe backup exactly: `admin_users=7`, `vendors=660`, `staff_members=51`, `staff_authority_options=59`, `recommending_authorities=13`.
+- `serial_counters` has exactly the three current-FY rows at `last_number=0`: `PAYMENT_ADVICE`, `CASH_VOUCHER`, and `ADVANCE` for `2026-27`. The next real allocations will therefore be `MCCIA/2026-27/0001`, `CASH/MCCIA/2026-27/0001`, and `ADV/MCCIA/2026-27/0001`. **Do not create live test submissions after this checkpoint; they would consume the launch numbers.**
+- Post-reset checks performed no writes or submissions: public `/`, `/advance`, `/admin/login`, and `/authority/login` return 200; unauthenticated `/admin`, `/admin/submissions`, and `/authority` redirect to the correct login pages. TypeScript, ESLint, 303 tests (7 pre-existing skipped), and production build pass.
 
 ## 4. Open Items (verify before building on top of these)
 
@@ -840,6 +848,17 @@ Append one entry per session, newest at the top. Keep entries short — this is 
 (Note: this header was accidentally dropped in an earlier edit and restored 2026-08-01 by Claude Code — no content was lost, only the heading line.)
 
 ```
+2026-09-03 — Codex — Verified the human-executed deliberate pre-launch data
+reset: all 6 submission/audit tables empty, Blob store empty, all three
+2026-27 counters at 0, and preserved counts exactly unchanged (7 admins, 660
+vendors, 51 staff, 59 mappings, 13 authorities). Backup/checksums retained in
+the gitignored .local-backups directory. Ran only non-mutating route checks;
+no submission consumed 0001. tsc, ESLint, 303 tests (7 skipped), build clean.
+
+2026-09-03 — Codex — Anchored the shared public Login menu to the header's
+top-right on desktop and reserved title space so long copy cannot push it
+onto a second row; mobile keeps natural wrapping. tsc and ESLint clean.
+
 2026-09-03 — Codex — Added a shared top-right Login dropdown to both public
 request forms, linking Finance Admin Login to /admin/login and Authority Login
 to /authority/login; their existing successful-login redirects remain /admin
