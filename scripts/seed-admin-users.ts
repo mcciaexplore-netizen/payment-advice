@@ -1,22 +1,21 @@
 /**
- * One-off seed: creates the 3 real per-person Admin logins (admin_users),
- * replacing the old shared ADMIN_PASSWORD. See
+ * Idempotent seed for the real Finance and Recommending Authority logins
+ * (`admin_users`), replacing the old shared ADMIN_PASSWORD. See
  * Dual_Login_Retire_Sanction_Stamps_Prompt.md / AGENT_HANDOFF.md.
  *
- * BEFORE RUNNING: fill in the real emails below (marked TODO). Full names
- * for Sunil/Abha are pre-filled from lib/validation/payment-advice.ts's
+ * Full names for Sunil/Abha are sourced from lib/validation/payment-advice.ts's
  * existing VERIFIER_NAMES list ("Sunil Salunke", "Abha Khatavkar") — the
  * same real people this app already names elsewhere. The ALL-access
  * account's email is pre-filled from the session context this script was
- * written in (mcciaexplore@gmail.com) — confirm that's correct before
- * running, don't assume it silently.
+ * written in (mcciaexplore@gmail.com). Authority entries must exactly match
+ * one existing recommending_authorities row before any account is inserted.
  *
  * Generates a strong random password per account, prints each one ONCE to
  * the console and to a local, gitignored report file
  * (scripts/admin-users-report.md — never committed, delete after copying
  * the passwords out) — only the bcrypt hash is ever written to the DB.
- * Re-running is safe but will error on a duplicate email (admin_users.email
- * is unique) rather than silently resetting an existing account's password.
+ * Re-running skips an exact matching active account without changing its
+ * password, and refuses any conflicting name/role/authority-link state.
  *
  * Usage: npm run seed:admin-users
  */
@@ -42,6 +41,14 @@ const ACCOUNTS: SeedAccount[] = [
   { fullName: "Chintamani Shrotri", email: "chintamanis@mcciapune.com", role: "AUTHORITY", authorityName: "Chintamani Shrotri" },
   { fullName: "PRASHANT JOGALEKAR", email: "prashantj@mcciapune.com", role: "AUTHORITY", authorityName: "PRASHANT JOGALEKAR" },
   { fullName: "SHANTANU JAGTAP", email: "shantanuj@mcciapune.com", role: "AUTHORITY", authorityName: "SHANTANU JAGTAP" },
+  { fullName: "DG", email: "dg@mcciapune.com", role: "AUTHORITY", authorityName: "DG" },
+  { fullName: "Ganesh Mate", email: "ganeshm@mcciapune.com", role: "AUTHORITY", authorityName: "Ganesh Mate" },
+  { fullName: "MANGESH KULKARNI", email: "mangeshk@mcciapune.com", role: "AUTHORITY", authorityName: "MANGESH KULKARNI" },
+  { fullName: "Neeraj Thakur", email: "neerajt@mcciapune.com", role: "AUTHORITY", authorityName: "Neeraj Thakur" },
+  { fullName: "Nikhil Jain", email: "nikhilj@mcciapune.com", role: "AUTHORITY", authorityName: "Nikhil Jain" },
+  { fullName: "RAJNIKANT  GAIKWAD", email: "engineer@mcciapune.com", role: "AUTHORITY", authorityName: "RAJNIKANT  GAIKWAD" },
+  { fullName: "SUDHANWA KOPARDEKAR", email: "sudhanwak@mcciapune.com", role: "AUTHORITY", authorityName: "SUDHANWA KOPARDEKAR" },
+  { fullName: "Satavisha Natu", email: "satavishan@mcciapune.com", role: "AUTHORITY", authorityName: "Satavisha Natu" },
 ];
 
 function generatePassword(): string {

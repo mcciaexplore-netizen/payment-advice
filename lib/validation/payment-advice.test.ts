@@ -139,6 +139,34 @@ describe("NEFT Basic/GST split validation", () => {
       expect(result.error.issues.some((issue) => issue.path.join(".") === "billDate")).toBe(true);
     }
   });
+
+  it("keeps P.O. number and P.O. date optional for a standard NEFT submission", () => {
+    const result = paymentAdviceFormSchema.safeParse({
+      ...baseNeftSubmission,
+      poNumber: "",
+      poDate: "",
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.poNumber).toBeUndefined();
+      expect(result.data.poDate).toBeUndefined();
+    }
+  });
+
+  it("validates P.O. date format only when an optional value is supplied", () => {
+    const result = paymentAdviceFormSchema.safeParse({
+      ...baseNeftSubmission,
+      poDate: "03/09/2026",
+    });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues).toContainEqual(
+        expect.objectContaining({ path: ["poDate"], message: "Enter a valid date" }),
+      );
+    }
+  });
 });
 
 describe("standard NEFT Enclosures & Remarks validation", () => {

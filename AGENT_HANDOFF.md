@@ -47,7 +47,7 @@ Design system: Navy `#0B1F3A`, Forest green `#2E8B57`, Amber `#E8A33D`. Headings
 
 ## 3. Current State (update this every session)
 
-**Last updated:** 3 September 2026, by Codex (verified deliberate pre-launch production reset)
+**Last updated:** 3 September 2026, by Codex (awaiting confirmation of predictable passwords for new Authority batch)
 
 ### Shipped — Phase 1 baseline (Claude Code)
 - Public form `/` (no login): submitter, payee (vendor typeahead), bill/reference, payment mode (NEFT/Cash), enclosures, mandatory Tax Invoice + Approval/Budget PDF attachments
@@ -661,7 +661,7 @@ Pure simplification, requested because the preset-category-dropdown + conditiona
 - `admin_users.role` now accepts `AUTHORITY`; new nullable FK `recommending_authority_id` links only those accounts to `recommending_authorities` (migration `0014_easy_magdalene.sql`, applied live). JWT payloads carry the linked ID and validate that AUTHORITY sessions have it while Finance sessions do not. Proxy routing strictly separates `/admin*` from `/authority*`.
 - New `/authority/login` and `/authority` dashboard use the existing email+bcrypt+JWT pattern. Default view shows only the logged-in authority's currently pending submissions; History is read-only and shows their approved/sent-back decisions. Both queue queries and every action/attachment endpoint scope by the session's linked authority ID. No Finance pipeline states are shown.
 - Extracted `performAuthorityApproval()` / `performAuthorityRejection()` into `lib/advice/authority-actions.ts`; both the old token routes and new authenticated routes call these same functions. The `/authority-approval/[token]` route, token behavior, and email identity-confirmation gate were not removed or bypassed.
-- `scripts/seed-admin-users.ts` includes the four named AUTHORITY accounts with deliberately blocking `TODO-*` email placeholders. Before any inserts it requires an exact, unique name match to the authority table, then links the FK and generates/prints each random password once. All four names were confirmed against the live DB exactly: ANIRUDDHA BRAHMA, Chintamani Shrotri, PRASHANT JOGALEKAR, SHANTANU JAGTAP. Script was not run pending supplied emails.
+- `scripts/seed-admin-users.ts` now idempotently covers all three Finance accounts plus all **12 active AUTHORITY accounts**. Every authority name must exactly match one existing `recommending_authorities` row; matching active accounts are skipped without changing passwords, conflicting rows abort, and passwords are generated/printed only for newly inserted accounts. Current AUTHORITY accounts (all active and uniquely linked): ANIRUDDHA BRAHMA, Chintamani Shrotri, DG, Ganesh Mate, MANGESH KULKARNI, Neeraj Thakur, Nikhil Jain, PRASHANT JOGALEKAR, RAJNIKANT  GAIKWAD, Satavisha Natu, SHANTANU JAGTAP, and SUDHANWA KOPARDEKAR. The exact inactive `AI Studio` authority remains deliberately excluded and has no login.
 - Live verification: two temporary accounts linked to Aniruddha and Chintamani proved no cross-visibility. Real pending `MCCIA/2026-27/0046` appeared only for Aniruddha, was approved via the authenticated route, disappeared from Pending, appeared in History, and its unchanged token URL still returned 200 with "You already approved this." Temporary accounts were deleted afterward. TypeScript, ESLint, 279 tests (7 pre-existing skipped), and production build pass.
 
 ### Shipped — Change Password, self-service for any admin_users account (Claude Code, 2026-09-03)
@@ -724,11 +724,18 @@ Requested because every `admin_users` password (Sunil's, Abha's, the ALL account
 - `serial_counters` has exactly the three current-FY rows at `last_number=0`: `PAYMENT_ADVICE`, `CASH_VOUCHER`, and `ADVANCE` for `2026-27`. The next real allocations will therefore be `MCCIA/2026-27/0001`, `CASH/MCCIA/2026-27/0001`, and `ADV/MCCIA/2026-27/0001`. **Do not create live test submissions after this checkpoint; they would consume the launch numbers.**
 - Post-reset checks performed no writes or submissions: public `/`, `/advance`, `/admin/login`, and `/authority/login` return 200; unauthenticated `/admin`, `/admin/submissions`, and `/authority` redirect to the correct login pages. TypeScript, ESLint, 303 tests (7 pre-existing skipped), and production build pass.
 
+### Verified — Public-form required/optional field audit (Codex, 2026-09-03)
+- Audited shared `PaymentAdviceForm` labels against `paymentAdviceFormSchema` and the server submit/edit routes for standard NEFT, Cash Voucher, and Advance Payment conditional branches, including attachment presence/count validation.
+- Confirmed **P.O. Date is optional**: the UI displays the gray `Optional` marker, the input has no native `required` attribute, and blank input is normalized to `undefined` by the shared client/server Zod schema. P.O. Number and both Delivery Challan fields are likewise optional; Bill Number and Bill Date remain required on non-advance submissions.
+- Added regression coverage proving blank P.O. Number/P.O. Date pass standard NEFT validation while a supplied malformed P.O. Date is rejected. The deployed `/` page also renders `P.O. Date Optional`; no form was submitted, preserving the fresh `0001` counters.
+- Verification: TypeScript and ESLint clean; Vitest **305 passed / 7 skipped**; production build clean (the first sandboxed build could not reach Google Fonts, then passed with network access).
+
 ## 4. Open Items (verify before building on top of these)
 
 Status legend: 🔴 unverified / high risk · 🟡 unverified / lower risk · 🟢 verified
 
-- ⬜ **AUTHORITY account seed needs to be re-run:** the human supplied all four emails, but the first run stopped safely on the already-existing Sunil Finance account before creating any Authority account. `scripts/seed-admin-users.ts` now skips exact matching active accounts without changing their passwords, while refusing conflicting name/role/authority-link rows. Re-run `npm run seed:admin-users`; it will create and print credentials only for missing accounts.
+- 🟢 **Authority Dashboard account expansion completed 2026-09-03:** the human explicitly included DG and confirmed `engineer@mcciapune.com` for RAJNIKANT  GAIKWAD. Eight missing accounts were seeded, producing 12 active, uniquely linked AUTHORITY accounts in total; exact inactive `AI Studio` remains excluded. Live production login/dashboard checks passed for new Ganesh Mate and Nikhil Jain accounts. Both rendered their own identities and empty scoped queues and neither exposed the real `MCCIA/2026-27/0001` submission assigned to original authority Chintamani Shrotri. The original 3 Finance + 4 Authority accounts were explicitly skipped by the seed, not updated. No test submission was created.
+- 🟡 **Predictable initial passwords for the eight-account expansion batch await human confirmation:** those accounts already exist with random generated passwords from the completed expansion above, so the next operation will reset only their hashes after explicit confirmation, not create duplicate accounts. Proposed rule is the exact authority full name lowercased with every space removed, then `@2026`; all eight names reduce cleanly. No forced-change/login redirect will be added. Exact proposed values were shown to the human in the 2026-09-03 checkpoint response; do not write them into this tracked handoff.
 - 🟢 **Change Password (self-service, any `admin_users` role) shipped and live-verified end-to-end 2026-09-03 by Claude Code** — see the "Shipped" entry above for the full detail: the shared `/api/account/change-password` route, the `proxy.ts` addition that authorizes it for any signed-in role, the account-menu dropdown now in both Finance Admin's and Authority's headers, and the live test that changed a real throwaway account's password, confirmed the session stayed valid, then confirmed via logout/login that the old password stopped working and the new one worked. Whichever of the four real AUTHORITY accounts get seeded per the item just above will have Change Password available immediately — no further wiring needed once they exist.
 - 🟡 **Change Password has no "forgot password" / admin-reset path** — if someone forgets their current password, there is still no self-service recovery; the only fix is a human directly updating `password_hash` in the DB, or (for a non-critical account) deactivating and re-seeding. Not built — out of scope for what was asked (self-service change while already logged in), flagged as a natural follow-up.
 
@@ -848,6 +855,44 @@ Append one entry per session, newest at the top. Keep entries short — this is 
 (Note: this header was accidentally dropped in an earlier edit and restored 2026-08-01 by Claude Code — no content was lost, only the heading line.)
 
 ```
+2026-09-03 — Codex — Prepared, but did not apply, the requested predictable
+password pattern for the eight newly added Authority accounts. Confirmed the
+prior audit is final: DG included, AI Studio excluded, engineer@ confirmed for
+Rajnikant. All names reduce unambiguously via lowercase + remove every space +
+@2026 (including Rajnikant's doubled DB whitespace). Awaiting explicit approval
+of the displayed eight-password list before resetting any stored hashes.
+
+2026-09-03 — Codex — Completed the confirmed Authority Dashboard expansion.
+Extended the guarded idempotent seed and created 8 accounts: DG, Ganesh Mate,
+MANGESH KULKARNI, Neeraj Thakur, Nikhil Jain, RAJNIKANT  GAIKWAD, SUDHANWA
+KOPARDEKAR, and Satavisha Natu. Production now has 12 active, uniquely linked
+AUTHORITY accounts; inactive AI Studio remains excluded. The seed skipped all
+7 existing accounts unchanged. Live logins passed for Ganesh and Nikhil; both
+saw only their empty queues and could not see real 0001 assigned to Chintamani.
+No test submission was created. tsc, ESLint, 305 tests (7 skipped), build clean.
+
+2026-09-03 — Codex — Completed Step 1 of the requested Authority Dashboard
+account expansion as a read-only production audit. Found 13 authority rows:
+the original 4 active AUTHORITY accounts, exact inactive AI Studio exclusion,
+and 8 active rows without accounts. No authority lacks an email. Awaiting the
+human's explicit DG decision and confirmation of Rajnikant Gaikwad's role-style
+engineer@ email before changing or running the seed; no accounts were created.
+
+2026-09-03 — Codex — Diagnosed Shantanu's failed Authority login read-only.
+The production admin_users row exists, is active, has AUTHORITY role, and is
+linked to SHANTANU JAGTAP; the locally retained generated credential matches
+its stored bcrypt hash. The screenshot's typed password omitted its leading
+hyphen and used lowercase k where the generated credential has uppercase K.
+No account or production data was changed. Recommended rotating the exposed
+password after login.
+
+2026-09-03 — Codex — Audited Required/Optional UI labels against the shared
+client/server schema and server attachment validation across standard NEFT,
+Cash Voucher, and Advance. Confirmed source and deployed P.O. Date are
+Optional; added regression tests for blank and malformed values. No live
+submission was made, preserving 0001. tsc, ESLint, 305 tests (7 skipped),
+and production build clean.
+
 2026-09-03 — Codex — Verified the human-executed deliberate pre-launch data
 reset: all 6 submission/audit tables empty, Blob store empty, all three
 2026-27 counters at 0, and preserved counts exactly unchanged (7 admins, 660
