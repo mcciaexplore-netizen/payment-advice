@@ -47,7 +47,7 @@ Design system: Navy `#0B1F3A`, Forest green `#2E8B57`, Amber `#E8A33D`. Headings
 
 ## 3. Current State (update this every session)
 
-**Last updated:** 3 September 2026, by Codex (Authority View-first approval detail workflow)
+**Last updated:** 3 September 2026, by Codex (public Finance/Authority Login menu)
 
 ### Shipped — Phase 1 baseline (Claude Code)
 - Public form `/` (no login): submitter, payee (vendor typeahead), bill/reference, payment mode (NEFT/Cash), enclosures, mandatory Tax Invoice + Approval/Budget PDF attachments
@@ -704,6 +704,18 @@ Requested because every `admin_users` password (Sunil's, Abha's, the ALL account
 - Pending details mount the existing `AuthorityQueueActions` unchanged, reusing its existing scoped approve/reject APIs and required-remarks behavior. Approved/sent-back details render a read-only decision record with no action component. The shared history-aware `BackLink` returns to Pending or History, with `/authority` or `/authority?view=history` as the matching direct-entry fallback.
 - Live-tested through a normal login using an isolated throwaway AUTHORITY account and advice: Pending contained View with zero inline action buttons; detail showed the full amount breakdown and actions; approving through the existing API moved the advice into History; History detail had zero actions and displayed its read-only decision record. A temporary `OTHER` PDF appeared on the detail page and downloaded from the scoped route as `200 application/pdf`. The account, advice, audit/attachment rows, and Blob were deleted afterward. TypeScript, ESLint, 300 tests (7 pre-existing skipped), and production build pass.
 
+### Shipped — Finance Dashboard + `/admin/submissions` page split (Codex, 2026-09-03)
+- `/admin` is now the Finance Dashboard; the unchanged working queue (tabs, filters, sorting, pagination, export, and table) moved to `/admin/submissions`. The Finance header now has separate Dashboard and Submissions links, with Dashboard first, and the MCCIA/Finance Admin brand links home. Advice-detail fallback navigation now targets `/admin/submissions`.
+- The existing nine stage summary cards moved off the queue and onto Dashboard. Every card links to its matching `/admin/submissions?tab=...` view and carries the role's default `paymentMode` where applicable.
+- Dashboard analytics: weekly submission counts for the last 90 days; mutually exclusive standard NEFT / standard Cash / Advance count-and-amount breakdown; top five payees by cumulative current-FY amount; average submitted-to-authority-approved duration; and current-FY submitted, paid/settled, and still-pending totals. Paid/settled means completed Cash amount plus recorded NEFT `total_paid`, capped at the submitted amount.
+- Role scoping deliberately reuses one `defaultPaymentModeForRole()` helper in both Dashboard and Submissions: PAYMENT_ADVICE → NEFT, CASH_VOUCHER → CASH, ALL → unscoped. It remains a default view/data scope, not an authorization wall. Current data volume was checked read-only before implementation (13 rows); Dashboard performs fixed stage aggregates plus one current-FY projection, so no periodic precomputation is warranted at present.
+- Live-rendered the production build through normal logins for temporary ALL and PAYMENT_ADVICE accounts: ALL showed the combined overview and unforced card links; PAYMENT_ADVICE showed the NEFT-focused label, NEFT-prefiltered card links, and `/admin/submissions` defaulted to NEFT. Both rendered all analytics areas and both nav items. Temporary accounts were deleted. TypeScript, ESLint, 303 tests (7 pre-existing skipped), and production build pass.
+
+### Shipped — Public Finance/Authority Login menu (Codex, 2026-09-03)
+- Added a shared top-right `Login` dropdown to both `/` and `/advance`. It opens on the public page and offers `Finance Admin Login` → `/admin/login` and `Authority Login` → `/authority/login`; those existing login flows remain responsible for credential validation and redirect to `/admin` and `/authority` respectively.
+- The dropdown closes on selection, outside click, or Escape and includes menu ARIA semantics. Its wrapping header layout remains responsive for narrow screens.
+- Production-rendered `/` contains the Login control and both login routes return 200. The in-app browser connection was unavailable, so no visual/click interaction claim was made. TypeScript, ESLint, 303 tests (7 pre-existing skipped), and production build pass.
+
 ## 4. Open Items (verify before building on top of these)
 
 Status legend: 🔴 unverified / high risk · 🟡 unverified / lower risk · 🟢 verified
@@ -828,6 +840,21 @@ Append one entry per session, newest at the top. Keep entries short — this is 
 (Note: this header was accidentally dropped in an earlier edit and restored 2026-08-01 by Claude Code — no content was lost, only the heading line.)
 
 ```
+2026-09-03 — Codex — Added a shared top-right Login dropdown to both public
+request forms, linking Finance Admin Login to /admin/login and Authority Login
+to /authority/login; their existing successful-login redirects remain /admin
+and /authority. Rendered Login control and both 200 routes verified; browser
+connection unavailable for visual clicking. tsc, ESLint, 303 tests (7 skipped),
+and build clean.
+
+2026-09-03 — Codex — Split Finance home into analytics Dashboard at /admin
+and the unchanged working queue at /admin/submissions. Moved role-scoped stage
+cards to Dashboard and added 90-day weekly volume, payment-type breakdown,
+top vendors, authority wait time, and current-FY financial totals. Shared one
+role-scope helper with Submissions; updated nav/logo/detail fallback. Live-
+rendered ALL and PAYMENT_ADVICE logins and deleted both temporary accounts.
+tsc, ESLint, 303 tests (7 skipped), and build clean.
+
 2026-09-03 — Codex — Replaced Authority Pending's inline decision controls
 with View and added the authority-scoped full submission detail page. History
 also links to the same read-only detail; pending detail reuses the existing

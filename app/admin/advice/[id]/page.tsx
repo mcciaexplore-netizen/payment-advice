@@ -122,7 +122,7 @@ export default async function AdviceDetailPage({
 
   return (
     <div className="flex flex-col gap-8">
-      <BackLink label="Back to Submissions" fallbackHref="/admin" />
+      <BackLink label="Back to Submissions" fallbackHref="/admin/submissions" />
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
