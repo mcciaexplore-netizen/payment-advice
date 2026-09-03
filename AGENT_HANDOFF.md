@@ -47,7 +47,7 @@ Design system: Navy `#0B1F3A`, Forest green `#2E8B57`, Amber `#E8A33D`. Headings
 
 ## 3. Current State (update this every session)
 
-**Last updated:** 3 September 2026, by Claude Code (Change Password, self-service, for any admin_users account regardless of role — built on top of Codex's Authority dashboard from earlier the same day)
+**Last updated:** 3 September 2026, by Codex (shared Change Password page centered for Finance and Authority)
 
 ### Shipped — Phase 1 baseline (Claude Code)
 - Public form `/` (no login): submitter, payee (vendor typeahead), bill/reference, payment mode (NEFT/Cash), enclosures, mandatory Tax Invoice + Approval/Budget PDF attachments
@@ -676,6 +676,23 @@ Requested because every `admin_users` password (Sunil's, Abha's, the ALL account
 
 `tsc --noEmit`, ESLint, the full Vitest suite (287 passing, 7 pre-existing skipped), and `next build` all clean.
 
+### Shipped — Standard NEFT Enclosures and Special Remarks required (Codex, 2026-09-03)
+- Section 5 now marks Enclosures and Special Remarks with the shared red `Required` treatment only when `paymentMode === "NEFT" && !isAdvance`; Cash and `/advance` continue to display `Optional`.
+- The shared `paymentAdviceFormSchema` adds trimmed, non-empty errors under the same condition, so React Hook Form, `/api/submit`, and `/api/edit/[token]` enforce one identical rule client- and server-side.
+- Added focused validation coverage for each field empty, both empty, regular Cash remaining optional, and NEFT-routed Advance remaining optional. Updated the existing valid NEFT resubmission fixture with both fields.
+- Live local verification: rendered `/` shows both labels Required; `/advance` shows both Optional. Real local `/api/submit` validation attempts with each NEFT field empty returned `400` with `Enclosures are required` / `Special Remarks are required`, before any DB write. Browser-control was unavailable, so no clicked React interaction was claimed; the same shared schema used by `zodResolver` is covered directly. TypeScript, ESLint, 292 tests (7 pre-existing skipped), and production build pass.
+
+### Shipped — Authority dashboard “My Submissions” view (Codex, 2026-09-03)
+- `/authority` now has a third read-only tab, `?view=my-submissions`, alongside Pending My Approval and History. It shows reference number using the shared document-identity helper, payee/particulars, amount, submitted date, full derived Finance stage, and retained sent-back remarks.
+- Scope is an exact `payment_advices.submitted_by_email = admin_users.email` match. The page reloads the active session user's email from `admin_users` by `session.adminUserId`; it does not add email to or trust the JWT. This assumes authorities submit with the same official email used by their login, as explicitly selected in the brief. Current seeded authority accounts and authority/staff source data use the same official addresses, so no mismatch was found.
+- New pure `pipelineStageFor()` derives Waiting on Authority / Awaiting Finance Review / Received & In Process / Verified—Ready for Payment / Partial Payment Done / Fully Payment Settled / Payment Done / Sent Back from the existing status and timestamps. Eight-stage unit coverage added.
+- The My Submissions branch never renders `AuthorityQueueActions` and does not load approval attachments, so it is strictly read-only; existing edit-token resubmission remains the only correction path.
+- Live-tested with two real AUTHORITY accounts using signed sessions without reading/changing their passwords. Submitted temporary NEFT `MCCIA/2026-27/0061` through `/api/submit` using Aniruddha's login email: it appeared only in Aniruddha's My Submissions at Waiting on Authority, not Chintamani's, with zero Approve/Send Back controls. Preview-only email mode used. Advice, audit rows, generated fixture, and both Blob files deleted afterward. TypeScript, ESLint, 300 tests (7 pre-existing skipped), and production build pass.
+
+### Shipped — Change Password page centered (Codex, 2026-09-03)
+- Both `/admin/change-password` and `/authority/change-password` already used the same `ChangePasswordForm`, but duplicated their heading/description wrappers. Added shared `ChangePasswordPageContent` in the same component module so the whole column—heading, copy, and form—is now one `mx-auto w-full max-w-sm` layout for both areas, with only account-specific description copy passed by each route.
+- Live-rendered authenticated Authority HTML confirmed the shared centered wrapper and correct page content. The in-app browser connection was unavailable, so no visual screenshot claim was made; structural rendering plus the identical shared component used by both routes was verified. TypeScript, ESLint, and all 300 tests (7 pre-existing skipped) pass.
+
 ## 4. Open Items (verify before building on top of these)
 
 Status legend: 🔴 unverified / high risk · 🟡 unverified / lower risk · 🟢 verified
@@ -800,6 +817,33 @@ Append one entry per session, newest at the top. Keep entries short — this is 
 (Note: this header was accidentally dropped in an earlier edit and restored 2026-08-01 by Claude Code — no content was lost, only the heading line.)
 
 ```
+2026-09-03 — Codex — Centered the entire Change Password content column
+(heading, description, shared form) with mx-auto/w-full/max-w-sm. Added one
+shared ChangePasswordPageContent wrapper used by both Finance Admin and
+Authority routes rather than duplicating the layout fix. Authenticated live
+HTML confirmed the centered wrapper; browser connection unavailable, so no
+visual screenshot claim. tsc, ESLint, and 300 tests (7 skipped) clean.
+
+2026-09-03 — Codex — Added the read-only Authority dashboard My Submissions
+tab, exactly scoped by payment_advices.submitted_by_email = the current
+admin_users.email loaded from DB. Shows shared document identity, full
+derived pipeline stage, date/amount/payee, and retained send-back remarks;
+never renders approval actions or duplicates edit-token resubmission. Added
+8 pipeline-stage tests. Live-tested a real API submission under Aniruddha's
+official email: visible only to Aniruddha, absent for Chintamani, correct
+Waiting on Authority stage, zero action controls. Temporary advice/audit/
+Blob files deleted. tsc, ESLint, 300 tests (7 skipped), and build clean.
+
+2026-09-03 — Codex — Made Enclosures and Special Remarks required only
+for standard NEFT Payment Advice submissions. UI labels use the shared red
+Required style under exactly the same condition; the shared Zod schema
+enforces trimmed non-empty values on both client and server. Focused tests
+confirm standard Cash and /advance remain optional. Live-rendered / and
+/advance labels confirmed; local API attempts returned each clear NEFT
+validation error without persisting data. Browser-control unavailable, so
+clicked UI interaction not claimed. tsc, ESLint, 292 tests (7 skipped),
+and build clean.
+
 2026-09-03 — Claude Code — Added self-service Change Password for any
 admin_users account (Finance or Authority, any role). New shared route
 POST /api/account/change-password, authorized in proxy.ts by "any valid

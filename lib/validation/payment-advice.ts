@@ -253,6 +253,20 @@ export const paymentAdviceFormSchema = z
     // details on file as staff, and the fields stay visible/editable on the
     // form in case they want to supply them anyway, just not required.
     if (data.paymentMode === "NEFT" && !data.isAdvance) {
+      if (!data.enclosures) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["enclosures"],
+          message: "Enclosures are required",
+        });
+      }
+      if (!data.specialRemarks) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["specialRemarks"],
+          message: "Special Remarks are required",
+        });
+      }
       if (!data.bankAccountNo) {
         ctx.addIssue({
           code: "custom",

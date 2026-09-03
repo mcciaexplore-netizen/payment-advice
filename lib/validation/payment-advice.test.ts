@@ -58,6 +58,8 @@ const baseNeftSubmission = {
   basicAmount: 1000,
   gstAmount: 180,
   amount: 1180,
+  enclosures: "Tax invoice and approval letter",
+  specialRemarks: "Process against the attached invoice",
 };
 
 describe("NEFT Basic/GST split validation", () => {
@@ -136,6 +138,58 @@ describe("NEFT Basic/GST split validation", () => {
     if (!result.success) {
       expect(result.error.issues.some((issue) => issue.path.join(".") === "billDate")).toBe(true);
     }
+  });
+});
+
+describe("standard NEFT Enclosures & Remarks validation", () => {
+  it.each([
+    ["enclosures", "Enclosures are required"],
+    ["specialRemarks", "Special Remarks are required"],
+  ] as const)("requires a non-empty %s value", (field, message) => {
+    const result = paymentAdviceFormSchema.safeParse({
+      ...baseNeftSubmission,
+      [field]: "   ",
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues).toContainEqual(
+        expect.objectContaining({ path: [field], message }),
+      );
+    }
+  });
+
+  it("reports clear errors for both fields when both are empty", () => {
+    const result = paymentAdviceFormSchema.safeParse({
+      ...baseNeftSubmission,
+      enclosures: "",
+      specialRemarks: "",
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.map((issue) => issue.path.join("."))).toEqual(
+        expect.arrayContaining(["enclosures", "specialRemarks"]),
+      );
+    }
+  });
+
+  it("leaves the regular Cash Voucher form optional", () => {
+    expect(
+      paymentAdviceFormSchema.safeParse({
+        ...baseCashSubmission,
+        enclosures: "",
+        specialRemarks: "",
+      }).success,
+    ).toBe(true);
+  });
+
+  it("leaves the /advance form optional even when routed through NEFT", () => {
+    expect(
+      paymentAdviceFormSchema.safeParse({
+        ...baseAdvanceNeftSubmission,
+        enclosures: "",
+        specialRemarks: "",
+      }).success,
+    ).toBe(true);
   });
 });
 

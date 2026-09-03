@@ -636,10 +636,18 @@ export function PaymentAdviceForm({
 
       <Section title="5. Enclosures & remarks">
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-          <Field label="Enclosures" error={errors.enclosures?.message}>
+          <Field
+            label="Enclosures"
+            required={!isAdvance && paymentMode === "NEFT"}
+            error={errors.enclosures?.message}
+          >
             <Textarea rows={2} hasError={!!errors.enclosures} {...register("enclosures")} />
           </Field>
-          <Field label="Special Remarks" error={errors.specialRemarks?.message}>
+          <Field
+            label="Special Remarks"
+            required={!isAdvance && paymentMode === "NEFT"}
+            error={errors.specialRemarks?.message}
+          >
             <Textarea rows={2} hasError={!!errors.specialRemarks} {...register("specialRemarks")} />
           </Field>
         </div>

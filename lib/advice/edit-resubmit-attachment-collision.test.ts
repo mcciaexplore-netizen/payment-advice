@@ -123,6 +123,8 @@ function buildFormData(taxInvoiceFileName: string) {
   fd.set("basicAmount", "1500.00");
   fd.set("gstAmount", "0");
   fd.set("natureOfExpenditure", "Corrected on resubmission");
+  fd.set("enclosures", "Tax invoice and approval letter");
+  fd.set("specialRemarks", "Corrected documents attached");
   fd.set("paymentMode", "NEFT");
   fd.set("bankAccountNo", "1234567890");
   fd.set("bankIfsc", "HDFC0001234");

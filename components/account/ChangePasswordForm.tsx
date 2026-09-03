@@ -113,3 +113,18 @@ export function ChangePasswordForm() {
     </form>
   );
 }
+
+/** Shared page-width and heading treatment for both Finance Admin and
+ * Authority Approvals. Keeping the centering here prevents the two routes
+ * from drifting into different layouts while they share the same form. */
+export function ChangePasswordPageContent({ description }: { description: string }) {
+  return (
+    <div className="mx-auto flex w-full max-w-sm flex-col gap-6">
+      <div>
+        <h1 className="font-heading text-2xl text-[#0b1f3a]">Change Password</h1>
+        <p className="mt-1 text-sm text-gray-600">{description}</p>
+      </div>
+      <ChangePasswordForm />
+    </div>
+  );
+}
