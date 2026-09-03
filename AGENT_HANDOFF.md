@@ -47,7 +47,7 @@ Design system: Navy `#0B1F3A`, Forest green `#2E8B57`, Amber `#E8A33D`. Headings
 
 ## 3. Current State (update this every session)
 
-**Last updated:** 17 August 2026, by Claude Code (new Advance Payment feature — third top-level Payment Mode option, routes through the existing NEFT/Cash pipelines with its own ADV/MCCIA/<FY>/NNNN numbering series — see below)
+**Last updated:** 3 September 2026, by Claude Code (Change Password, self-service, for any admin_users account regardless of role — built on top of Codex's Authority dashboard from earlier the same day)
 
 ### Shipped — Phase 1 baseline (Claude Code)
 - Public form `/` (no login): submitter, payee (vendor typeahead), bill/reference, payment mode (NEFT/Cash), enclosures, mandatory Tax Invoice + Approval/Budget PDF attachments
@@ -657,9 +657,32 @@ Pure simplification, requested because the preset-category-dropdown + conditiona
 
 `tsc --noEmit`, ESLint, the full Vitest suite (274 passing, 7 pre-existing skipped), and `next build` all clean.
 
+### Shipped — Authenticated Recommending Authority dashboard (Codex, 2026-09-03)
+- `admin_users.role` now accepts `AUTHORITY`; new nullable FK `recommending_authority_id` links only those accounts to `recommending_authorities` (migration `0014_easy_magdalene.sql`, applied live). JWT payloads carry the linked ID and validate that AUTHORITY sessions have it while Finance sessions do not. Proxy routing strictly separates `/admin*` from `/authority*`.
+- New `/authority/login` and `/authority` dashboard use the existing email+bcrypt+JWT pattern. Default view shows only the logged-in authority's currently pending submissions; History is read-only and shows their approved/sent-back decisions. Both queue queries and every action/attachment endpoint scope by the session's linked authority ID. No Finance pipeline states are shown.
+- Extracted `performAuthorityApproval()` / `performAuthorityRejection()` into `lib/advice/authority-actions.ts`; both the old token routes and new authenticated routes call these same functions. The `/authority-approval/[token]` route, token behavior, and email identity-confirmation gate were not removed or bypassed.
+- `scripts/seed-admin-users.ts` includes the four named AUTHORITY accounts with deliberately blocking `TODO-*` email placeholders. Before any inserts it requires an exact, unique name match to the authority table, then links the FK and generates/prints each random password once. All four names were confirmed against the live DB exactly: ANIRUDDHA BRAHMA, Chintamani Shrotri, PRASHANT JOGALEKAR, SHANTANU JAGTAP. Script was not run pending supplied emails.
+- Live verification: two temporary accounts linked to Aniruddha and Chintamani proved no cross-visibility. Real pending `MCCIA/2026-27/0046` appeared only for Aniruddha, was approved via the authenticated route, disappeared from Pending, appeared in History, and its unchanged token URL still returned 200 with "You already approved this." Temporary accounts were deleted afterward. TypeScript, ESLint, 279 tests (7 pre-existing skipped), and production build pass.
+
+### Shipped — Change Password, self-service for any admin_users account (Claude Code, 2026-09-03)
+Requested because every `admin_users` password (Sunil's, Abha's, the ALL account's, and now the AUTHORITY accounts Codex's dashboard above adds) could only ever be *set*, once, by a human running `scripts/seed-admin-users.ts` — nobody signed in could change their own. Built directly on top of Codex's same-day Authority dashboard work (found mid-session as live, uncommitted, undocumented WIP — confirmed with the human it was Codex actively finishing it before proceeding, per §0 rule 7).
+- New shared route `POST /api/account/change-password` (`app/api/account/change-password/route.ts`) — deliberately **not** under `/api/admin/` or `/api/authority/`, since both of those prefixes are role-gated in `proxy.ts` (Finance-only / Authority-only respectively) and this needs to work for *either*. `proxy.ts` gained a new `/api/account/*` branch requiring only "some valid admin_users session," checked before the two role-specific branches — the only change made to `proxy.ts`; the existing Finance/Authority routing logic Codex just wrote was not touched.
+- Verifies `currentPassword` via the existing `verifyPassword()`/bcrypt (`lib/admin-users.ts`, `SALT_ROUNDS = 12` — reused as-is, no second hashing configuration introduced) before allowing any change; wrong current password → `401`, no write. New password: min 8 characters, must match confirmation, must differ from the current password — all three enforced by one shared Zod schema (`lib/validation/account.ts`'s `changePasswordFormSchema`, `superRefine`) used by both the client form and the server route, same "one schema" convention as every other form in this app. The differs-from-current check is a plain string compare against the already-bcrypt-verified `currentPassword`, not a second `bcrypt.compare` — equivalent and cheaper.
+- On success: hashes with `hashPassword()` (same bcrypt config), updates `admin_users.password_hash`, and in the same transaction writes an `audit_log` row (`action: "ADMIN_PASSWORD_CHANGED"`, `actor: "{fullName} <{email}>"`, `paymentAdviceId: null`, `details: {}`) — no password material anywhere in it, same reasoning as `AUTHORITY_IDENTITY_CHECK_FAILED`. Session is left valid (no forced re-login); the success message tells the user their new password takes effect next sign-in.
+- Account menu: new shared `components/account/AccountMenu.tsx` (click-to-open dropdown, closes on outside click) replaces the plain name/role text in both `app/admin/layout.tsx`'s header and `app/authority/layout.tsx`'s header — same component, different props (`changePasswordHref`, `logoutEndpoint`, `loginPath`), matching this codebase's existing "shared component, mode/prop-driven" pattern rather than two near-duplicate menus. `LogoutButton` gained an optional `className` prop (default unchanged, `"hover:text-white"`) so it can be restyled to sit inside the dropdown's white background instead of the navy header bar it originally assumed. New pages `/admin/change-password` and `/authority/change-password`, both thin wrappers around one shared `components/account/ChangePasswordForm.tsx` (react-hook-form + `zodResolver`, `Field`/`Input`, same shape as `VendorForm.tsx`).
+- **Verified live**, against the real dev server + real Neon DB: created one throwaway `admin_users` test account directly in the DB (role `ALL`, not through the seed script) → logged in with its real password → confirmed each guard individually: wrong current password → `401` "Current password is incorrect."; new password under 8 chars → `400`; confirmation mismatch → `400`; new password identical to current → `400` "must be different" — none of these four attempts touched the DB (`db.transaction` never called, confirmed at the unit-test level too) → a correct change → `200`, and the **same session cookie** still worked immediately afterward (`GET /admin` → `200`, no forced logout) → logged out, confirmed the **old** password now `401`s at `/api/admin/login` and the **new** one `200`s → queried `audit_log` directly: exactly one `ADMIN_PASSWORD_CHANGED` row, correct actor string, `details: {}`, and grepped the dev server's stdout log for both the old and new plaintext passwords — zero matches. Deleted the test account and its audit row afterward. Also confirmed via a role-`AUTHORITY` unit test case that the route has no role check at all — it works identically for Finance and Authority sessions, per the brief.
+- New tests: `lib/change-password-route.test.ts` (8 cases — no-session 401, short-password 400, mismatched-confirmation 400, same-as-current 400, unknown/inactive-user 404, wrong-current-password 401 with zero DB writes, successful change with the exact audit-row shape asserted including a no-password-material check via string search on the serialized row, and the AUTHORITY-role case above).
+- **Did not touch**: `lib/auth.ts`, `lib/db/schema.ts`, any migration, or `scripts/seed-admin-users.ts` — all Codex's active work from the entry immediately above; this feature needed none of them. Did not re-verify the Authority dashboard itself beyond confirming its files were unmodified by this session (`git status` before/after).
+
+`tsc --noEmit`, ESLint, the full Vitest suite (287 passing, 7 pre-existing skipped), and `next build` all clean.
+
 ## 4. Open Items (verify before building on top of these)
 
 Status legend: 🔴 unverified / high risk · 🟡 unverified / lower risk · 🟢 verified
+
+- ⬜ **AUTHORITY account seed needs to be re-run:** the human supplied all four emails, but the first run stopped safely on the already-existing Sunil Finance account before creating any Authority account. `scripts/seed-admin-users.ts` now skips exact matching active accounts without changing their passwords, while refusing conflicting name/role/authority-link rows. Re-run `npm run seed:admin-users`; it will create and print credentials only for missing accounts.
+- 🟢 **Change Password (self-service, any `admin_users` role) shipped and live-verified end-to-end 2026-09-03 by Claude Code** — see the "Shipped" entry above for the full detail: the shared `/api/account/change-password` route, the `proxy.ts` addition that authorizes it for any signed-in role, the account-menu dropdown now in both Finance Admin's and Authority's headers, and the live test that changed a real throwaway account's password, confirmed the session stayed valid, then confirmed via logout/login that the old password stopped working and the new one worked. Whichever of the four real AUTHORITY accounts get seeded per the item just above will have Change Password available immediately — no further wiring needed once they exist.
+- 🟡 **Change Password has no "forgot password" / admin-reset path** — if someone forgets their current password, there is still no self-service recovery; the only fix is a human directly updating `password_hash` in the DB, or (for a non-critical account) deactivating and re-seeding. Not built — out of scope for what was asked (self-service change while already logged in), flagged as a natural follow-up.
 
 - 🟢 **Cash-voucher-pdf routes (public + admin) 404 correctly for NEFT submissions.** Verified 2026-07-29 by Claude Code, two ways: (1) live end-to-end against the real dev server + real Neon DB — inserted a real NEFT `payment_advices` row, hit both `/api/advice/[id]/cash-voucher-pdf` and `/api/admin/advice/[id]/cash-voucher-pdf`, got clean `404 {"error":"Not found"}` with `Content-Type: application/json` from both, no server-side errors in the log. Also spot-checked the CASH happy path on a real row — both routes 200 with a real single-page PDF. (2) Strengthened the existing mocked test in `lib/pdf/cash-voucher-routes.test.ts` to also assert `content-type` isn't `application/pdf` and the JSON body shape, not just the status code — guards specifically against a future regression that returns 200 with empty/garbage PDF bytes instead of 404. No code fix was needed; both routes already guarded on `paymentMode !== "CASH"` before doing any rendering.
 - 🟡 Confirm Excel/Tally export column order is unchanged, and Cash rows' joined `nature_of_expenditure` string (line items joined with `"; "`) reads sensibly for Finance. *(Partially checked 2026-07-30: confirmed `GET /api/admin/export` still returns 200/a valid .xlsx after the `authority_name` schema change, but there were 0 `payment_advices` rows in the DB at the time — did not confirm the Recommending Authority column actually renders the right name in a populated row, or re-check column order/Cash row content. Still open.)*
@@ -777,6 +800,51 @@ Append one entry per session, newest at the top. Keep entries short — this is 
 (Note: this header was accidentally dropped in an earlier edit and restored 2026-08-01 by Claude Code — no content was lost, only the heading line.)
 
 ```
+2026-09-03 — Claude Code — Added self-service Change Password for any
+admin_users account (Finance or Authority, any role). New shared route
+POST /api/account/change-password, authorized in proxy.ts by "any valid
+session" (new /api/account/* branch, added without touching the existing
+Finance/Authority routing Codex wrote the same day). bcrypt-verifies the
+current password, requires 8+ chars, confirmation match, and different-
+from-current, all via one shared Zod schema. Writes ADMIN_PASSWORD_CHANGED
+to audit_log with no password material; session stays valid after a
+change. New AccountMenu dropdown in both the Finance Admin and Authority
+headers. Found Codex's Authority-dashboard feature as live, uncommitted,
+undocumented WIP mid-session; confirmed with the human it was Codex
+actively finishing before building on top of it, per §0 rule 7 (parallel-
+agent conflict). Live-verified end-to-end against the real dev server +
+real Neon DB with a throwaway test account: every validation guard,
+session-stays-valid-after-change, old-password-401s/new-password-200s
+after logout, and the exact audit_log row content (test account deleted
+after). Did not touch lib/auth.ts, schema.ts, migrations, or the seed
+script. tsc, ESLint, 287 tests (7 pre-existing skipped), and build clean.
+
+2026-09-03 — Codex — Added an accessible Show password checkbox to both
+Finance Admin and Authority login forms. It toggles only the input display
+type and leaves credential handling/authentication unchanged. tsc, ESLint,
+and diff checks clean.
+
+2026-09-03 — Codex — Fixed the combined Finance+Authority seed after its
+first real run stopped at Sunil's expected duplicate email. It now preflights
+all requested emails, safely skips exact matching active accounts without
+changing or reprinting their passwords, and still refuses any conflicting
+name/role/authority-link state. No Authority rows were created by the failed
+run because Sunil was first. tsc, ESLint, and diff check clean; seed not
+re-run by Codex so the generated passwords remain in the human's own console.
+
+2026-09-03 — Codex — Added AUTHORITY-role admin_users linked by FK to
+recommending_authorities, a separate /authority/login, strictly scoped
+Pending + read-only History dashboard, scoped attachment access, and
+Approve/Send Back actions. Extracted the underlying authority decision
+logic so both authenticated and existing token-link routes call the same
+functions; old token route and email-confirmation gate remain intact.
+Migration 0014 applied. Exact live name matches confirmed for all four;
+seed entries remain TODO-email-blocked and were not run. Live-tested two
+temporary accounts for cross-visibility, approved real pending submission
+MCCIA/2026-27/0046 as Aniruddha, confirmed Pending→History and the old token
+URL's already-approved view, then deleted temporary accounts. tsc, lint,
+279 tests (7 pre-existing skipped), and build clean.
+
 2026-08-17 — Claude Code — Shipped Advance Payment: a third top-level
 Payment Mode option (NEFT / Cash / Advance Payment) that routes through
 the existing NEFT/Cash pipelines exactly unchanged, flagged via a new

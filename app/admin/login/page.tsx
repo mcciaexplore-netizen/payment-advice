@@ -9,6 +9,7 @@ export default function AdminLoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -72,12 +73,21 @@ export default function AdminLoginPage() {
           </label>
           <Input
             id="password"
-            type="password"
+            type={showPassword ? "text" : "password"}
             required
             autoComplete="current-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
           />
+          <label className="mt-1 flex cursor-pointer items-center gap-2 text-xs font-normal text-gray-600">
+            <input
+              type="checkbox"
+              checked={showPassword}
+              onChange={(e) => setShowPassword(e.target.checked)}
+              className="h-4 w-4 accent-[#0b1f3a]"
+            />
+            Show password
+          </label>
         </div>
         <button
           type="submit"

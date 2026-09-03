@@ -1,0 +1,2 @@
+ALTER TABLE "admin_users" ADD COLUMN "recommending_authority_id" uuid;--> statement-breakpoint
+ALTER TABLE "admin_users" ADD CONSTRAINT "admin_users_recommending_authority_id_recommending_authorities_id_fk" FOREIGN KEY ("recommending_authority_id") REFERENCES "public"."recommending_authorities"("id") ON DELETE no action ON UPDATE no action;

@@ -99,6 +99,13 @@
       "when": 1787035509566,
       "tag": "0013_military_runaways",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1788415368559,
+      "tag": "0014_easy_magdalene",
+      "breakpoints": true
     }
   ]
 }

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
-import { LogoutButton } from "@/components/admin/LogoutButton";
+import { AccountMenu } from "@/components/account/AccountMenu";
 import { getAdminSession } from "@/lib/admin-session";
 
 const ROLE_LABELS: Record<string, string> = {
@@ -45,10 +45,12 @@ export default async function AdminLayout({ children }: { children: React.ReactN
               <Link href="/admin/staff" className="hover:text-white">
                 Staff &amp; Authorities
               </Link>
-              <span className="border-l border-white/20 pl-6 text-white/60">
-                {session.fullName} · {ROLE_LABELS[session.adminRole] ?? session.adminRole}
-              </span>
-              <LogoutButton />
+              <div className="border-l border-white/20 pl-6">
+                <AccountMenu
+                  label={`${session.fullName} · ${ROLE_LABELS[session.adminRole] ?? session.adminRole}`}
+                  changePasswordHref="/admin/change-password"
+                />
+              </div>
             </nav>
           ) : null}
         </div>

@@ -13,13 +13,14 @@ import { SignJWT, jwtVerify } from "jose";
 export const ADMIN_SESSION_COOKIE = "mccia_admin_session";
 export const ADMIN_SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 7; // 7 days
 
-export const ADMIN_ROLES = ["PAYMENT_ADVICE", "CASH_VOUCHER", "ALL"] as const;
+export const ADMIN_ROLES = ["PAYMENT_ADVICE", "CASH_VOUCHER", "ALL", "AUTHORITY"] as const;
 export type AdminRole = (typeof ADMIN_ROLES)[number];
 
 export type AdminSessionPayload = {
   adminUserId: string;
   fullName: string;
   adminRole: AdminRole;
+  recommendingAuthorityId: string | null;
 };
 
 function getSecretKey() {
@@ -55,11 +56,20 @@ export async function decodeAdminSessionToken(
       typeof adminUserId !== "string" ||
       typeof fullName !== "string" ||
       typeof adminRole !== "string" ||
-      !(ADMIN_ROLES as readonly string[]).includes(adminRole)
+      !(ADMIN_ROLES as readonly string[]).includes(adminRole) ||
+      !(typeof payload.recommendingAuthorityId === "string" ||
+        payload.recommendingAuthorityId === null) ||
+      (adminRole === "AUTHORITY" && typeof payload.recommendingAuthorityId !== "string") ||
+      (adminRole !== "AUTHORITY" && payload.recommendingAuthorityId !== null)
     ) {
       return null;
     }
-    return { adminUserId, fullName, adminRole: adminRole as AdminRole };
+    return {
+      adminUserId,
+      fullName,
+      adminRole: adminRole as AdminRole,
+      recommendingAuthorityId: payload.recommendingAuthorityId,
+    };
   } catch {
     return null;
   }

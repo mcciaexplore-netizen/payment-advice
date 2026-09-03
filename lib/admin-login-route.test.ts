@@ -89,4 +89,12 @@ describe("POST /api/admin/login", () => {
     const body = await res.json();
     expect(body).toEqual({ ok: true, fullName: "Sunil Salunke", role: "PAYMENT_ADVICE" });
   });
+
+  it("refuses an authority account at the Finance Admin login", async () => {
+    mocks.findActiveAdminUserByEmail.mockResolvedValueOnce({ ...activeUser, role: "AUTHORITY", recommendingAuthorityId: "authority-1" });
+    mocks.verifyPassword.mockResolvedValueOnce(true);
+    const res = await POST(req({ email: "authority@mcciapune.com", password: "correct-password" }));
+    expect(res.status).toBe(403);
+    expect(res.headers.get("set-cookie")).toBeNull();
+  });
 });

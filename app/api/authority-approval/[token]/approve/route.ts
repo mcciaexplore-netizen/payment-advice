@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { paymentAdvices, auditLog, recommendingAuthorities } from "@/lib/db/schema";
+import { paymentAdvices, recommendingAuthorities } from "@/lib/db/schema";
 import { authorityActionError } from "@/lib/advice/authority-token";
+import { performAuthorityApproval } from "@/lib/advice/authority-actions";
 
 export const runtime = "nodejs";
 
@@ -42,20 +43,10 @@ export async function POST(
     .where(eq(recommendingAuthorities.id, advice.recommendingAuthorityId))
     .limit(1);
 
-  const now = new Date();
-  await db.transaction(async (tx) => {
-    await tx
-      .update(paymentAdvices)
-      .set({ authorityApprovedAt: now, updatedAt: now })
-      .where(eq(paymentAdvices.id, advice.id));
-
-    await tx.insert(auditLog).values({
-      paymentAdviceId: advice.id,
-      action: "AUTHORITY_APPROVED",
-      actor: authority?.authorityName ?? "Recommending Authority",
-      ipAddress: clientIp(req),
-      details: {},
-    });
+  const now = await performAuthorityApproval({
+    advice,
+    actor: authority?.authorityName ?? "Recommending Authority",
+    ipAddress: clientIp(req),
   });
 
   return NextResponse.json({ ok: true, approvedAt: now.toISOString() });

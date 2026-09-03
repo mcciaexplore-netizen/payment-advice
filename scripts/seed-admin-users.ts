@@ -27,16 +27,21 @@ import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import { db } from "../lib/db";
-import { adminUsers } from "../lib/db/schema";
+import { adminUsers, recommendingAuthorities } from "../lib/db/schema";
 import { hashPassword } from "../lib/admin-users";
 import { ADMIN_ROLES, AdminRole } from "../lib/auth";
+import { inArray } from "drizzle-orm";
 
-type SeedAccount = { fullName: string; email: string; role: AdminRole };
+type SeedAccount = { fullName: string; email: string; role: AdminRole; authorityName?: string };
 
 const ACCOUNTS: SeedAccount[] = [
   { fullName: "Sunil Salunke", email: "sunils@mcciapune.com", role: "PAYMENT_ADVICE" },
   { fullName: "Abha Khatavkar", email: "abhak@mcciapune.com", role: "CASH_VOUCHER" },
   { fullName: "MCCIA Finance (All Access)", email: "mcciaexplore@gmail.com", role: "ALL" },
+  { fullName: "ANIRUDDHA BRAHMA", email: "aniruddhab@mcciapune.com", role: "AUTHORITY", authorityName: "ANIRUDDHA BRAHMA" },
+  { fullName: "Chintamani Shrotri", email: "chintamanis@mcciapune.com", role: "AUTHORITY", authorityName: "Chintamani Shrotri" },
+  { fullName: "PRASHANT JOGALEKAR", email: "prashantj@mcciapune.com", role: "AUTHORITY", authorityName: "PRASHANT JOGALEKAR" },
+  { fullName: "SHANTANU JAGTAP", email: "shantanuj@mcciapune.com", role: "AUTHORITY", authorityName: "SHANTANU JAGTAP" },
 ];
 
 function generatePassword(): string {
@@ -64,29 +69,81 @@ async function main() {
     }
   }
 
+  const authorityNames = ACCOUNTS.flatMap((account) => account.authorityName ? [account.authorityName] : []);
+  const authorityRows = authorityNames.length
+    ? await db.select({ id: recommendingAuthorities.id, authorityName: recommendingAuthorities.authorityName })
+        .from(recommendingAuthorities)
+        .where(inArray(recommendingAuthorities.authorityName, authorityNames))
+    : [];
+  for (const name of authorityNames) {
+    const matches = authorityRows.filter((row) => row.authorityName === name);
+    if (matches.length !== 1) {
+      throw new Error(`Authority name must match exactly one recommending_authorities row: "${name}" (found ${matches.length}). Refusing to guess.`);
+    }
+  }
+
+  const normalizedEmails = ACCOUNTS.map((account) => account.email.trim().toLowerCase());
+  const existingUsers = await db
+    .select({
+      fullName: adminUsers.fullName,
+      email: adminUsers.email,
+      role: adminUsers.role,
+      recommendingAuthorityId: adminUsers.recommendingAuthorityId,
+      isActive: adminUsers.isActive,
+    })
+    .from(adminUsers)
+    .where(inArray(adminUsers.email, normalizedEmails));
+
+  const accountsToCreate = ACCOUNTS.filter((account) => {
+    const email = account.email.trim().toLowerCase();
+    const existing = existingUsers.find((user) => user.email === email);
+    if (!existing) return true;
+
+    const expectedAuthorityId = account.authorityName
+      ? authorityRows.find((row) => row.authorityName === account.authorityName)!.id
+      : null;
+    if (
+      existing.fullName !== account.fullName ||
+      existing.role !== account.role ||
+      existing.recommendingAuthorityId !== expectedAuthorityId ||
+      !existing.isActive
+    ) {
+      throw new Error(
+        `Existing admin_users row for ${email} does not exactly match the requested ` +
+          `name, role, authority link, and active state. Refusing to overwrite it.`,
+      );
+    }
+
+    console.log(`Skipping ${email}: matching active account already exists (password unchanged).`);
+    return false;
+  });
+
   const results: { fullName: string; email: string; role: AdminRole; password: string }[] = [];
 
-  for (const account of ACCOUNTS) {
+  for (const account of accountsToCreate) {
     const password = generatePassword();
     const passwordHash = await hashPassword(password);
-    try {
-      await db.insert(adminUsers).values({
-        fullName: account.fullName,
-        email: account.email.trim().toLowerCase(),
-        passwordHash,
-        role: account.role,
-      });
-    } catch (err) {
-      console.error(`Failed to insert ${account.email} (already exists? see error below) — stopping.`);
-      throw err;
-    }
+    await db.insert(adminUsers).values({
+      fullName: account.fullName,
+      email: account.email.trim().toLowerCase(),
+      passwordHash,
+      role: account.role,
+      recommendingAuthorityId: account.authorityName
+        ? authorityRows.find((row) => row.authorityName === account.authorityName)!.id
+        : null,
+    });
     results.push({ ...account, password });
+  }
+
+  if (results.length === 0) {
+    console.log("No accounts created; every requested account already exists and matches.");
+    return;
   }
 
   const reportLines = [
     "# Admin user credentials — generated once, never re-shown",
     "",
-    "Copy these to whoever needs them (Sunil, Abha, yourself), then delete this file.",
+    "Copy these to the named account holders, then delete this file.",
     "This file is gitignored and must never be committed.",
     "",
     ...results.map(

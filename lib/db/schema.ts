@@ -12,16 +12,18 @@ import {
   primaryKey,
 } from "drizzle-orm/pg-core";
 
-/** Real per-person Admin logins, replacing the old shared ADMIN_PASSWORD.
- * `role` gates only the default landing filter (Payment-Advice/Cash-Voucher/
- * combined) — NOT a backend authorization wall; every logged-in user can
- * still see everything via the "All" tab/filter. See AGENT_HANDOFF.md. */
+/** Real per-person Finance and Recommending Authority logins. Finance roles
+ * use the admin area; AUTHORITY users are strictly scoped to the linked
+ * recommending-authority queue. */
 export const adminUsers = pgTable("admin_users", {
   id: uuid("id").primaryKey().defaultRandom(),
   fullName: text("full_name").notNull(),
   email: text("email").notNull().unique(),
   passwordHash: text("password_hash").notNull(),
-  role: text("role").notNull(), // 'PAYMENT_ADVICE' | 'CASH_VOUCHER' | 'ALL'
+  role: text("role").notNull(), // 'PAYMENT_ADVICE' | 'CASH_VOUCHER' | 'ALL' | 'AUTHORITY'
+  recommendingAuthorityId: uuid("recommending_authority_id").references(
+    () => recommendingAuthorities.id,
+  ),
   isActive: boolean("is_active").default(true).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true })
     .defaultNow()

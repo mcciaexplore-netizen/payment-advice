@@ -3,10 +3,8 @@ import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { paymentAdvices, recommendingAuthorities } from "@/lib/db/schema";
 import { authorityActionError } from "@/lib/advice/authority-token";
-import { performSendBack } from "@/lib/advice/send-back";
-import { displayNoFor, documentLabelFor } from "@/lib/advice/document-identity";
-import { notifySentBack } from "@/lib/email/notify";
-import { authorityRejectSchema, PaymentMode } from "@/lib/validation/payment-advice";
+import { performAuthorityRejection } from "@/lib/advice/authority-actions";
+import { authorityRejectSchema } from "@/lib/validation/payment-advice";
 
 export const runtime = "nodejs";
 
@@ -65,34 +63,13 @@ export async function POST(
     .limit(1);
   const authorityName = authority?.authorityName ?? "Recommending Authority";
 
-  const editToken = await performSendBack({
-    adviceId: advice.id,
-    remarks: parsed.data.remarks,
+  await performAuthorityRejection({
+    advice,
     actor: authorityName,
+    remarks: parsed.data.remarks,
     ipAddress: clientIp(req),
-    authorityRejection: true,
+    origin: new URL(req.url).origin,
   });
-
-  await notifySentBack(
-    {
-      displayNo: displayNoFor(
-        advice.paymentMode as PaymentMode,
-        advice.serialNo,
-        advice.cashVoucherNo,
-        advice.isAdvance,
-        advice.advanceNo,
-      ),
-      documentLabel: documentLabelFor(advice.paymentMode as PaymentMode, advice.isAdvance),
-      submittedByName: advice.submittedByName,
-      sentBackBy: authorityName,
-      remarks: parsed.data.remarks,
-      payeeName: advice.payeeName,
-      amount: Number(advice.amount).toLocaleString("en-IN", { minimumFractionDigits: 2 }),
-      editLink: `${new URL(req.url).origin}/edit/${editToken}`,
-    },
-    advice.submittedByEmail,
-    advice.id,
-  );
 
   return NextResponse.json({ ok: true });
 }

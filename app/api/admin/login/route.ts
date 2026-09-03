@@ -78,12 +78,20 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Incorrect email or password." }, { status: 401 });
   }
 
+  if (user.role === "AUTHORITY") {
+    return NextResponse.json(
+      { error: "Please use the Authority Approvals sign-in page." },
+      { status: 403 },
+    );
+  }
+
   clearAttempts(ip);
   await recordAdminLogin(user.id);
   const token = await createAdminSessionToken({
     adminUserId: user.id,
     fullName: user.fullName,
     adminRole: user.role as AdminRole,
+    recommendingAuthorityId: null,
   });
   const res = NextResponse.json({ ok: true, fullName: user.fullName, role: user.role });
   res.cookies.set(ADMIN_SESSION_COOKIE, token, {
