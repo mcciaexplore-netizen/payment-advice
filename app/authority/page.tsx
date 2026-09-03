@@ -1,12 +1,11 @@
 import Link from "next/link";
-import { and, desc, eq, inArray, isNotNull, isNull, or } from "drizzle-orm";
+import { and, desc, eq, isNotNull, isNull, or } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { adminUsers, attachments, paymentAdvices } from "@/lib/db/schema";
+import { adminUsers, paymentAdvices } from "@/lib/db/schema";
 import { getAdminSession } from "@/lib/admin-session";
 import { displayNoFor } from "@/lib/advice/document-identity";
 import { pipelineStageFor } from "@/lib/advice/pipeline-stage";
 import { PaymentMode } from "@/lib/validation/payment-advice";
-import { AuthorityQueueActions } from "@/components/authority/AuthorityQueueActions";
 
 export const dynamic = "force-dynamic";
 type AuthorityView = "pending" | "history" | "my-submissions";
@@ -45,12 +44,6 @@ export default async function AuthorityDashboard({ searchParams }: { searchParam
     paymentDoneAt: paymentAdvices.paymentDoneAt, totalPaid: paymentAdvices.totalPaid,
   }).from(paymentAdvices).where(where).orderBy(desc(paymentAdvices.submittedAt));
 
-  const ids = rows.map((row) => row.id);
-  const docs = view !== "my-submissions" && ids.length
-    ? await db.select({ id: attachments.id, adviceId: attachments.paymentAdviceId, docType: attachments.docType })
-      .from(attachments).where(inArray(attachments.paymentAdviceId, ids))
-    : [];
-  const allowedDocs = docs.filter((doc) => ["TAX_INVOICE", "APPROVAL_BUDGET"].includes(doc.docType));
   const subtitle = view === "history" ? "Your previous approval decisions"
     : view === "my-submissions" ? `${rows.length} submission${rows.length === 1 ? "" : "s"} made using ${account.email}`
       : `${rows.length} submission${rows.length === 1 ? "" : "s"} waiting for you`;
@@ -71,8 +64,8 @@ export default async function AuthorityDashboard({ searchParams }: { searchParam
         <div className="overflow-x-auto rounded-lg border border-gray-200"><table className="w-full text-left text-sm">
           <thead className="bg-gray-50 text-xs uppercase text-gray-500"><tr>
             <th className="p-3">Reference</th><th className="p-3">Payee / Particulars</th><th className="p-3">Amount</th><th className="p-3">Submitted</th>
-            {view !== "my-submissions" ? <th className="p-3">Attachments</th> : null}
-            <th className="p-3">{view === "pending" ? "Action" : view === "history" ? "Decision" : "Current Stage"}</th>
+            <th className="p-3">{view === "history" ? "Decision" : view === "my-submissions" ? "Current Stage" : "Action"}</th>
+            {view === "history" ? <th className="p-3">Action</th> : null}
           </tr></thead>
           <tbody className="divide-y divide-gray-100">{rows.map((row) => (
             <tr key={row.id} className="align-top">
@@ -80,20 +73,22 @@ export default async function AuthorityDashboard({ searchParams }: { searchParam
               <td className="p-3"><div className="font-medium">{row.payeeName}</div><div className="mt-1 max-w-xs text-xs text-gray-600">{row.nature}</div></td>
               <td className="p-3 whitespace-nowrap">₹ {Number(row.amount).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
               <td className="p-3 whitespace-nowrap">{view !== "my-submissions" ? <div>{row.submittedBy}</div> : null}<div className="text-xs text-gray-500">{date(row.submittedAt)}</div></td>
-              {view !== "my-submissions" ? <td className="p-3">{allowedDocs.filter((doc) => doc.adviceId === row.id).map((doc) => (
-                <a key={doc.id} href={`/api/authority/advice/${row.id}/attachments/${doc.id}`} target="_blank" rel="noreferrer" className="block text-xs font-medium text-[#0b1f3a] hover:underline">{doc.docType === "TAX_INVOICE" ? "Tax Invoice" : "Approval / Budget"}</a>
-              ))}</td> : null}
-              <td className="p-3">{view === "pending" ? <AuthorityQueueActions adviceId={row.id} /> : view === "history" ? (
+              <td className="p-3">{view === "pending" ? <ViewLink adviceId={row.id} from="pending" /> : view === "history" ? (
                 <div className="text-xs"><span className={`font-semibold ${row.approvedAt ? "text-[#2e8b57]" : "text-amber-700"}`}>{row.approvedAt ? "Approved" : "Sent Back"}</span><div className="mt-1 text-gray-500">{date(row.approvedAt ?? row.rejectedAt!)}</div>{row.authorityRemarks ? <div className="mt-1 max-w-xs text-gray-600">{row.authorityRemarks}</div> : null}</div>
               ) : (
                 <div className="text-xs"><span className="font-semibold text-[#0b1f3a]">{pipelineStageFor(row)}</span>{row.adminRemarks ? <div className="mt-2 max-w-xs rounded bg-amber-50 px-2 py-1 text-amber-800">Sent-back remarks: {row.adminRemarks}</div> : null}</div>
               )}</td>
+              {view === "history" ? <td className="p-3"><ViewLink adviceId={row.id} from="history" /></td> : null}
             </tr>
           ))}</tbody>
         </table></div>
       )}
     </div>
   );
+}
+
+function ViewLink({ adviceId, from }: { adviceId: string; from: "pending" | "history" }) {
+  return <Link href={`/authority/advice/${adviceId}?from=${from}`} className="inline-flex rounded-md bg-[#0b1f3a] px-3 py-2 text-xs font-medium text-white hover:bg-[#0b1f3a]/90">View</Link>;
 }
 
 function Tab({ href, active, children }: { href: string; active: boolean; children: React.ReactNode }) {

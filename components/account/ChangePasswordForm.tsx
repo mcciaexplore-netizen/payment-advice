@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { BackLink } from "@/components/admin/BackLink";
 import { Field } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
 import {
@@ -117,9 +118,16 @@ export function ChangePasswordForm() {
 /** Shared page-width and heading treatment for both Finance Admin and
  * Authority Approvals. Keeping the centering here prevents the two routes
  * from drifting into different layouts while they share the same form. */
-export function ChangePasswordPageContent({ description }: { description: string }) {
+export function ChangePasswordPageContent({
+  description,
+  fallbackHref,
+}: {
+  description: string;
+  fallbackHref: string;
+}) {
   return (
     <div className="mx-auto flex w-full max-w-sm flex-col gap-6">
+      <BackLink label="Back to Dashboard" fallbackHref={fallbackHref} />
       <div>
         <h1 className="font-heading text-2xl text-[#0b1f3a]">Change Password</h1>
         <p className="mt-1 text-sm text-gray-600">{description}</p>

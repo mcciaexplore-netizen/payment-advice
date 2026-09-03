@@ -47,7 +47,7 @@ Design system: Navy `#0B1F3A`, Forest green `#2E8B57`, Amber `#E8A33D`. Headings
 
 ## 3. Current State (update this every session)
 
-**Last updated:** 3 September 2026, by Codex (shared Change Password page centered for Finance and Authority)
+**Last updated:** 3 September 2026, by Codex (Authority View-first approval detail workflow)
 
 ### Shipped — Phase 1 baseline (Claude Code)
 - Public form `/` (no login): submitter, payee (vendor typeahead), bill/reference, payment mode (NEFT/Cash), enclosures, mandatory Tax Invoice + Approval/Budget PDF attachments
@@ -693,6 +693,17 @@ Requested because every `admin_users` password (Sunil's, Abha's, the ALL account
 - Both `/admin/change-password` and `/authority/change-password` already used the same `ChangePasswordForm`, but duplicated their heading/description wrappers. Added shared `ChangePasswordPageContent` in the same component module so the whole column—heading, copy, and form—is now one `mx-auto w-full max-w-sm` layout for both areas, with only account-specific description copy passed by each route.
 - Live-rendered authenticated Authority HTML confirmed the shared centered wrapper and correct page content. The in-app browser connection was unavailable, so no visual screenshot claim was made; structural rendering plus the identical shared component used by both routes was verified. TypeScript, ESLint, and all 300 tests (7 pre-existing skipped) pass.
 
+### Shipped — Change Password back navigation (Codex, 2026-09-03)
+- The shared `ChangePasswordPageContent` now renders the existing `BackLink` above the title, so Finance Admin and Authority receive the same visual and history-aware navigation convention as other admin pages.
+- Each thin route wrapper supplies its own direct-entry fallback: `/admin/change-password` returns to `/admin`, while `/authority/change-password` returns to `/authority` (whose default view is Pending My Approval). The shared component is therefore context-aware rather than hardcoded to either dashboard.
+- TypeScript, ESLint, all 300 tests (7 pre-existing skipped), and the production build pass. Authenticated browser click-through could not be repeated this session because no browser session was connected, and the environment correctly refused minting impersonation sessions for real accounts; destination props and the shared rendered component path were verified in source/build without claiming a live click test.
+
+### Shipped — Authority View-first approval detail workflow (Codex, 2026-09-03)
+- Pending My Approval rows now contain one `View` action and no inline Approve/Send Back controls. History retains its decision summary and adds the same `View` action. The dashboard no longer preloads attachment metadata for every row.
+- New authority-scoped `/authority/advice/[id]` shows the full submission: document identity, submitter/date/department, payee/contact/tax details, bill/reference fields where applicable, Basic/GST/total or Cash/Advance line-item breakdowns, narrative/enclosures/remarks, payment details, and every stored attachment. The existing authenticated attachment route remains scoped by both advice ID and the session's `recommendingAuthorityId`; it now serves every attachment type shown on this full-detail page, not only the two mandatory types.
+- Pending details mount the existing `AuthorityQueueActions` unchanged, reusing its existing scoped approve/reject APIs and required-remarks behavior. Approved/sent-back details render a read-only decision record with no action component. The shared history-aware `BackLink` returns to Pending or History, with `/authority` or `/authority?view=history` as the matching direct-entry fallback.
+- Live-tested through a normal login using an isolated throwaway AUTHORITY account and advice: Pending contained View with zero inline action buttons; detail showed the full amount breakdown and actions; approving through the existing API moved the advice into History; History detail had zero actions and displayed its read-only decision record. A temporary `OTHER` PDF appeared on the detail page and downloaded from the scoped route as `200 application/pdf`. The account, advice, audit/attachment rows, and Blob were deleted afterward. TypeScript, ESLint, 300 tests (7 pre-existing skipped), and production build pass.
+
 ## 4. Open Items (verify before building on top of these)
 
 Status legend: 🔴 unverified / high risk · 🟡 unverified / lower risk · 🟢 verified
@@ -817,6 +828,21 @@ Append one entry per session, newest at the top. Keep entries short — this is 
 (Note: this header was accidentally dropped in an earlier edit and restored 2026-08-01 by Claude Code — no content was lost, only the heading line.)
 
 ```
+2026-09-03 — Codex — Replaced Authority Pending's inline decision controls
+with View and added the authority-scoped full submission detail page. History
+also links to the same read-only detail; pending detail reuses the existing
+AuthorityQueueActions and APIs. All attachment types are viewable through the
+session/authority-scoped route. Live-tested View → full detail → approve →
+History/read-only plus an OTHER PDF download; all temporary DB/Blob data
+deleted. tsc, ESLint, 300 tests (7 skipped), and build clean.
+
+2026-09-03 — Codex — Added the existing history-aware “← Back to Dashboard”
+link to the shared Change Password page wrapper. Finance supplies `/admin` as
+its direct-entry fallback; Authority supplies `/authority`, whose default is
+Pending My Approval. tsc, ESLint, 300 tests (7 skipped), and build clean.
+Authenticated click-through remains unclaimed: no browser session was
+connected and the environment refused impersonation-session minting.
+
 2026-09-03 — Codex — Centered the entire Change Password content column
 (heading, description, shared form) with mx-auto/w-full/max-w-sm. Added one
 shared ChangePasswordPageContent wrapper used by both Finance Admin and
