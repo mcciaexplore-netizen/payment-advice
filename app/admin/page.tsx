@@ -3,6 +3,7 @@ import { and, count, eq, sum } from "drizzle-orm";
 import { getAdminSession } from "@/lib/admin-session";
 import { defaultPaymentModeForRoles } from "@/lib/admin/role-scope";
 import { AdminTab, buildTabCondition } from "@/lib/admin/filters";
+import { STAGE_FOR_TAB, STAGE_STYLE } from "@/lib/advice/stage-style";
 import { db } from "@/lib/db";
 import { paymentAdvices } from "@/lib/db/schema";
 import { financialYearFor } from "@/lib/serial";
@@ -16,7 +17,7 @@ import {
 
 export const dynamic = "force-dynamic";
 
-const STAGES: { tab: AdminTab; label: string }[] = [
+const STAGES: { tab: Exclude<AdminTab, "all">; label: string }[] = [
   { tab: "waiting_authority", label: "Waiting on Authority" },
   { tab: "awaiting_finance", label: "Awaiting Finance Review" },
   { tab: "advance_payment", label: "Advance Payment" },
@@ -125,8 +126,12 @@ export default async function AdminDashboardPage() {
           {STAGES.map(({ tab, label }) => {
             const metric = stageRows.find((row) => row.tab === tab)!;
             const modeParam = roleMode ? `&paymentMode=${roleMode}` : "";
+            const stageStyle = STAGE_STYLE[STAGE_FOR_TAB[tab]];
             return <Link key={tab} href={`/admin/submissions?tab=${tab}${modeParam}`} className="flex min-h-32 flex-col justify-between rounded-lg border border-gray-200 bg-white p-4 hover:border-[#0b1f3a] hover:shadow-sm">
-              <span className="text-xs font-medium uppercase tracking-wide text-gray-500">{label}</span>
+              <span className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-gray-500">
+                <span className={`h-1.5 w-1.5 flex-none rounded-full ${stageStyle.dot}`} />
+                {label}
+              </span>
               <span className="font-heading text-3xl text-[#0b1f3a]">{metric.count}</span>
               <span className="text-xs text-gray-500">{money(metric.sum)}</span>
             </Link>;

@@ -10,7 +10,7 @@ import {
   advanceParticulars,
   recommendingAuthorities,
 } from "@/lib/db/schema";
-import { StatusChip } from "@/components/admin/StatusChip";
+import { StageBadge } from "@/components/admin/StageBadge";
 import { AdviceActions } from "@/components/admin/AdviceActions";
 import { BackLink } from "@/components/admin/BackLink";
 import { NameCorrectionAction } from "@/components/admin/NameCorrectionAction";
@@ -18,6 +18,7 @@ import { SentBackIndicators } from "@/components/admin/SentBackIndicators";
 import { PaymentMode, Status, SANCTIONER_NAMES } from "@/lib/validation/payment-advice";
 import { getAdminSession } from "@/lib/admin-session";
 import { billPassedForLabelFor, displayNoFor, documentLabelFor } from "@/lib/advice/document-identity";
+import { pipelineStageFor } from "@/lib/advice/pipeline-stage";
 import { formatDateOnly, formatIstDateTime } from "@/lib/date-time";
 
 export const dynamic = "force-dynamic";
@@ -129,7 +130,18 @@ export default async function AdviceDetailPage({
             <p className="mt-1 text-xs text-gray-500">Internal Ref.: {advice.serialNo}</p>
           ) : null}
         </div>
-        <StatusChip status={advice.status as Status} />
+        <StageBadge
+          stage={pipelineStageFor({
+            status: advice.status,
+            approvedAt: advice.authorityApprovedAt,
+            financeReceivedAt: advice.financeReceivedAt,
+            verifiedAt: advice.verifiedAt,
+            paymentDoneAt: advice.paymentDoneAt,
+            paymentMode: advice.paymentMode,
+            totalPaid: advice.totalPaid,
+            isAdvance: advice.isAdvance,
+          })}
+        />
       </div>
 
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">

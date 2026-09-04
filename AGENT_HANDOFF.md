@@ -787,6 +787,12 @@ Requested because every `admin_users` password (Sunil's, Abha's, the ALL account
 - Role scoping deliberately reuses one `defaultPaymentModeForRole()` helper in both Dashboard and Submissions: PAYMENT_ADVICE → NEFT, CASH_VOUCHER → CASH, ALL → unscoped. It remains a default view/data scope, not an authorization wall. Current data volume was checked read-only before implementation (13 rows); Dashboard performs fixed stage aggregates plus one current-FY projection, so no periodic precomputation is warranted at present.
 - Live-rendered the production build through normal logins for temporary ALL and PAYMENT_ADVICE accounts: ALL showed the combined overview and unforced card links; PAYMENT_ADVICE showed the NEFT-focused label, NEFT-prefiltered card links, and `/admin/submissions` defaulted to NEFT. Both rendered all analytics areas and both nav items. Temporary accounts were deleted. TypeScript, ESLint, 303 tests (7 pre-existing skipped), and production build pass.
 
+### Shipped — Pipeline stage labels, colors, and legend (Claude Code + Codex, 2026-09-04)
+- Replaced the raw `StatusChip` (which showed `SUBMITTED` through most of the workflow) with shared `pipelineStageFor()` + `StageBadge` presentation. Finance queue/detail and Authority Pending/History/My Submissions now show the real derived stage using concise labels: Submitted, Recommended, Advance, In Process, Verified, Partial Paid, Paid, or Sent Back.
+- `lib/advice/stage-style.ts` is the single presentation map for badge, tab, and legend colors. Finance queue tabs use the same stage colors; completed Cash and NEFT stages deliberately share forest green. `StageLegend` is a collapsed, text-labelled key shared by both Finance and Authority dashboards, so color is never the only signal.
+- Dashboard summary cards retain their existing layout and gain matching stage-color dots. PDFs were not changed. Stage derivation mirrors the existing SQL tab conditions, including the distinct authority-approved Advance landing stage.
+- Verification: 359 tests pass (7 skipped), TypeScript, ESLint, and production build clean. The in-app browser was unavailable; do not describe this as visually click-tested.
+
 ### Shipped — Public Finance/Authority Login menu (Codex, 2026-09-03)
 - Added a shared top-right `Login` dropdown to both `/` and `/advance`. It opens on the public page and offers `Finance Admin Login` → `/admin/login` and `Authority Login` → `/authority/login`; those existing login flows remain responsible for credential validation and redirect to `/admin` and `/authority` respectively.
 - The dropdown closes on selection, outside click, or Escape and includes menu ARIA semantics. Its wrapping header layout remains responsive for narrow screens.
@@ -942,6 +948,18 @@ Append one entry per session, newest at the top. Keep entries short — this is 
 (Note: this header was accidentally dropped in an earlier edit and restored 2026-08-01 by Claude Code — no content was lost, only the heading line.)
 
 ```
+2026-09-04 — Codex — Completed Claude Code's interrupted pipeline-stage UI
+work: fixed the Admin Dashboard typing and Advance-stage fixture, updated the
+Authority wording regression, and added coverage for all stage/tab styles and
+short labels. Finance tabs/queue/detail and Authority status surfaces now share
+the same derived stage badges and compact legend; Dashboard cards use matching
+dots. PDFs remain untouched. 359 tests pass (7 skipped), tsc, ESLint, and build
+clean. Browser UI connection was unavailable, so no visual click-through is
+claimed. A read-only check of the 23 configured live rows derived 17 Submitted
+(Waiting on Authority), 3 Recommended (Awaiting Finance Review), and 3 Verified
+(Ready for Payment), confirming that real rows no longer collapse to one raw
+`SUBMITTED` badge.
+
 2026-09-04 — Codex — Restored optional Other Documents (up to three files) on
 the dedicated Payment Advice form and its edit/resubmit path. Server validation
 accepts OTHER metadata for NEFT while continuing to reject it for Cash Voucher;

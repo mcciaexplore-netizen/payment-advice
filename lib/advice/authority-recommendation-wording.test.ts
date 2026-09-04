@@ -9,7 +9,8 @@ describe("authenticated Authority dashboard recommendation wording", () => {
     expect(read("components/authority/AuthorityQueueActions.tsx")).toContain(">Recommend</button>");
     const queue = read("app/authority/page.tsx");
     expect(queue).toContain("Pending My Recommendation");
-    expect(queue).toContain('row.approvedAt ? "Recommended" : "Sent Back"');
+    expect(queue).toContain('row.approvedAt ? "Awaiting Finance Review" : "Sent Back"');
+    expect(read("lib/advice/stage-style.ts")).toContain('shortLabel: "Recommended"');
     const detail = read("app/authority/advice/[id]/page.tsx");
     expect(detail).toContain(">Recommended</span>");
     expect(detail).toContain("`Recommended ${formatDateTime");

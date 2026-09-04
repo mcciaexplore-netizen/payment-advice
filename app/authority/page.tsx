@@ -5,6 +5,8 @@ import { adminUsers, paymentAdvices } from "@/lib/db/schema";
 import { getAdminSession } from "@/lib/admin-session";
 import { displayNoFor } from "@/lib/advice/document-identity";
 import { pipelineStageFor } from "@/lib/advice/pipeline-stage";
+import { StageBadge } from "@/components/admin/StageBadge";
+import { StageLegend } from "@/components/admin/StageLegend";
 import { PaymentMode } from "@/lib/validation/payment-advice";
 import { formatIstDate } from "@/lib/date-time";
 
@@ -53,10 +55,11 @@ export default async function AuthorityDashboard({ searchParams }: { searchParam
   return (
     <div className="flex flex-col gap-6">
       <header><h1 className="font-heading text-3xl text-[#0b1f3a]">Authority Recommendations</h1><p className="mt-1 text-sm text-gray-600">{subtitle}</p></header>
-      <nav className="flex gap-2 border-b border-gray-200">
+      <nav className="flex flex-wrap items-center gap-2 border-b border-gray-200 pb-0">
         <Tab href="/authority" active={view === "pending"}>Pending My Recommendation</Tab>
         <Tab href="/authority?view=history" active={view === "history"}>History</Tab>
         <Tab href="/authority?view=my-submissions" active={view === "my-submissions"}>My Submissions</Tab>
+        <div className="ml-auto mb-1.5"><StageLegend /></div>
       </nav>
       {rows.length === 0 ? (
         <div className="rounded-lg border border-gray-200 p-10 text-center text-sm text-gray-500">
@@ -75,10 +78,15 @@ export default async function AuthorityDashboard({ searchParams }: { searchParam
               <td className="p-3"><div className="font-medium">{row.payeeName}</div><div className="mt-1 max-w-xs text-xs text-gray-600">{row.nature}</div>{view === "pending" && row.revisionCount >= 1 ? <div className="mt-2 max-w-sm rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs text-amber-900"><strong>Resubmission — revision {row.revisionCount}</strong>{row.adminRemarks ? <div className="mt-1">Previous remarks: {row.adminRemarks}</div> : null}</div> : null}</td>
               <td className="p-3 whitespace-nowrap">₹ {Number(row.amount).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
               <td className="p-3 whitespace-nowrap">{view !== "my-submissions" ? <div>{row.submittedBy}</div> : null}<div className="text-xs text-gray-500">{date(row.submittedAt)}</div></td>
-              <td className="p-3">{view === "pending" ? <ViewLink adviceId={row.id} from="pending" /> : view === "history" ? (
-                <div className="text-xs"><span className={`font-semibold ${row.approvedAt ? "text-[#2e8b57]" : "text-amber-700"}`}>{row.approvedAt ? "Recommended" : "Sent Back"}</span><div className="mt-1 text-gray-500">{date(row.approvedAt ?? row.rejectedAt!)}</div>{row.authorityRemarks ? <div className="mt-1 max-w-xs text-gray-600">{row.authorityRemarks}</div> : null}</div>
+              <td className="p-3">{view === "pending" ? (
+                <div className="flex flex-col items-start gap-2">
+                  <StageBadge stage="Waiting on Authority" />
+                  <ViewLink adviceId={row.id} from="pending" />
+                </div>
+              ) : view === "history" ? (
+                <div className="text-xs"><StageBadge stage={row.approvedAt ? "Awaiting Finance Review" : "Sent Back"} /><div className="mt-1 text-gray-500">{date(row.approvedAt ?? row.rejectedAt!)}</div>{row.authorityRemarks ? <div className="mt-1 max-w-xs text-gray-600">{row.authorityRemarks}</div> : null}</div>
               ) : (
-                <div className="text-xs"><span className="font-semibold text-[#0b1f3a]">{pipelineStageFor(row)}</span>{row.adminRemarks ? <div className="mt-2 max-w-xs rounded bg-amber-50 px-2 py-1 text-amber-800">Sent-back remarks: {row.adminRemarks}</div> : null}</div>
+                <div className="text-xs"><StageBadge stage={pipelineStageFor(row)} />{row.adminRemarks ? <div className="mt-2 max-w-xs rounded bg-amber-50 px-2 py-1 text-amber-800">Sent-back remarks: {row.adminRemarks}</div> : null}</div>
               )}</td>
               {view === "history" ? <td className="p-3"><ViewLink adviceId={row.id} from="history" /></td> : null}
             </tr>

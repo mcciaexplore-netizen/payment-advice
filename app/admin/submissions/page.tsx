@@ -3,7 +3,8 @@ import { Fragment } from "react";
 import { and, count, sum } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { paymentAdvices } from "@/lib/db/schema";
-import { StatusChip } from "@/components/admin/StatusChip";
+import { StageBadge } from "@/components/admin/StageBadge";
+import { StageLegend } from "@/components/admin/StageLegend";
 import {
   ADMIN_LIST_PAGE_SIZE,
   AdminTab,
@@ -15,10 +16,12 @@ import {
   searchParamsRecordToURLSearchParams,
   SortColumn,
 } from "@/lib/admin/filters";
-import { PaymentMode, Status } from "@/lib/validation/payment-advice";
+import { PaymentMode } from "@/lib/validation/payment-advice";
 import { getAdminSession } from "@/lib/admin-session";
 import { displayNoFor, submissionTypeLabelFor } from "@/lib/advice/document-identity";
 import { defaultPaymentModeForRoles } from "@/lib/admin/role-scope";
+import { pipelineStageFor } from "@/lib/advice/pipeline-stage";
+import { STAGE_FOR_TAB, STAGE_STYLE } from "@/lib/advice/stage-style";
 import { SentBackIndicators } from "@/components/admin/SentBackIndicators";
 import { sentBackStatus } from "@/lib/advice/send-back-status";
 import { formatDateOnly } from "@/lib/date-time";
@@ -124,6 +127,13 @@ export default async function AdminListPage({
         adminRemarks: paymentAdvices.adminRemarks,
         sentBackAt: paymentAdvices.sentBackAt,
         editTokenExpiresAt: paymentAdvices.editTokenExpiresAt,
+        // Everything pipelineStageFor() needs to derive the real per-row
+        // stage for the Status badge — see the Part 1 fix in AGENT_HANDOFF.md.
+        authorityApprovedAt: paymentAdvices.authorityApprovedAt,
+        financeReceivedAt: paymentAdvices.financeReceivedAt,
+        verifiedAt: paymentAdvices.verifiedAt,
+        paymentDoneAt: paymentAdvices.paymentDoneAt,
+        totalPaid: paymentAdvices.totalPaid,
       })
       .from(paymentAdvices)
       .where(where)
@@ -211,7 +221,7 @@ export default async function AdminListPage({
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <TabLink
           label="Waiting on Authority"
           tab="waiting_authority"
@@ -276,6 +286,7 @@ export default async function AdminListPage({
           searchParams={sp}
         />
         <TabLink label="All" tab="all" activeTab={tab} count={null} searchParams={sp} />
+        <StageLegend />
       </div>
 
       <form
@@ -392,7 +403,18 @@ export default async function AdminListPage({
                   <td className="px-4 py-3">{row.submittedByDepartment}</td>
                   <td className="px-4 py-3">
                     <div className="flex flex-col items-start gap-2">
-                      <StatusChip status={row.status as Status} />
+                      <StageBadge
+                        stage={pipelineStageFor({
+                          status: row.status,
+                          approvedAt: row.authorityApprovedAt,
+                          financeReceivedAt: row.financeReceivedAt,
+                          verifiedAt: row.verifiedAt,
+                          paymentDoneAt: row.paymentDoneAt,
+                          paymentMode: row.paymentMode,
+                          totalPaid: row.totalPaid,
+                          isAdvance: row.isAdvance,
+                        })}
+                      />
                       {tab === "sent_back" ? <SentBackIndicators sentBackAt={row.sentBackAt} editTokenExpiresAt={row.editTokenExpiresAt} /> : null}
                     </div>
                   </td>
@@ -463,14 +485,18 @@ function TabLink({
   searchParams: SearchParamsRecord;
 }) {
   const isActive = tab === activeTab;
+  // "All" has no single stage/color of its own — keeps the original
+  // neutral navy treatment. Every other tab is colored by the exact stage
+  // it represents (STAGE_FOR_TAB), the same colors as that stage's badge.
+  const style = tab === "all" ? null : STAGE_STYLE[STAGE_FOR_TAB[tab]];
+  const activeClasses = style ? style.tabActive : "border-[#0b1f3a] bg-[#0b1f3a] text-white";
+  const inactiveClasses = style
+    ? style.tabInactive
+    : "border-gray-300 bg-white text-gray-600 hover:border-[#0b1f3a] hover:text-[#0b1f3a]";
   return (
     <Link
       href={queryString(searchParams, { tab, page: undefined })}
-      className={`rounded-md border px-4 py-2 text-sm font-medium ${
-        isActive
-          ? "border-[#0b1f3a] bg-[#0b1f3a] text-white"
-          : "border-gray-300 bg-white text-gray-600 hover:border-[#0b1f3a] hover:text-[#0b1f3a]"
-      }`}
+      className={`rounded-md border px-4 py-2 text-sm font-medium ${isActive ? activeClasses : inactiveClasses}`}
     >
       {label}
       {count !== null ? ` (${count})` : ""}
