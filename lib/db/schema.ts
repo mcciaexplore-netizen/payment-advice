@@ -229,6 +229,7 @@ export const paymentAdvices = pgTable("payment_advices", {
   bankAccountNo: text("bank_account_no"),
   bankIfsc: text("bank_ifsc"),
   beneficiaryName: text("beneficiary_name"),
+  bankName: text("bank_name"),
   // Own gapless series (CASH/MCCIA/<FY>/NNNN, via serial_counters' CASH_VOUCHER
   // row), allocated only for regular payment_mode = 'CASH' submissions.
   // serial_no mirrors this value and acts as the canonical reference.

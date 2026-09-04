@@ -54,10 +54,12 @@ export function validateAttachmentCounts(
     return "Only one Delivery Challan file is allowed.";
   if (byDocType.OTHER.length > MAX_OTHER_ATTACHMENTS)
     return `At most ${MAX_OTHER_ATTACHMENTS} "Other" files are allowed.`;
+  if (!isAdvance && (byDocType.PURCHASE_ORDER.length || byDocType.DELIVERY_CHALLAN.length || byDocType.OTHER.length))
+    return "Only Tax Invoice / Supplementary Document and Approval / Budget Letter attachments are allowed.";
 
   if (!isAdvance && byDocType.TAX_INVOICE.length === 0 && !existingCounts?.TAX_INVOICE)
-    return "Tax Invoice is a mandatory attachment (exactly one PDF).";
-  if (byDocType.APPROVAL_BUDGET.length === 0 && !existingCounts?.APPROVAL_BUDGET)
+    return "Tax Invoice / Supplementary Document is a mandatory attachment (exactly one file).";
+  if (isAdvance && byDocType.APPROVAL_BUDGET.length === 0 && !existingCounts?.APPROVAL_BUDGET)
     return "Approval / Budget Letter is a mandatory attachment (exactly one PDF).";
   return null;
 }

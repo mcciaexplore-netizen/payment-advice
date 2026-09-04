@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useFieldArray, useForm, useWatch } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { upload } from "@vercel/blob/client";
 import { Field } from "@/components/ui/Field";
@@ -45,12 +45,11 @@ export function PaymentAdviceForm({
   existingAttachments,
 }: {
   /** Fixed per page, never toggled at runtime — "standard" is the plain
-   * NEFT/Cash Payment Advice / Cash Voucher form at "/", "advance" is the
-   * dedicated Advance Payment Request form at "/advance". Both render this
+   * Dedicated public document route, or the existing Advance route. All render this
    * same component so the shared field logic (submitter/payee auto-fill,
    * Particulars, attachments) only ever lives in one place; only which
    * sections render, and whether isAdvance itself is true, differ. */
-  mode: "standard" | "advance";
+  mode: "payment-advice" | "cash-voucher" | "advance";
   recommendingAuthorities: RecommendingAuthority[];
   /** When set, this is a resubmission via /edit/[token] — pre-fill everything. */
   prefill?: Partial<PaymentAdviceFormInput> & { formDate?: string };
@@ -61,6 +60,7 @@ export function PaymentAdviceForm({
   existingAttachments?: Partial<Record<DocType, string[]>>;
 }) {
   const isAdvance = mode === "advance";
+  const isCashVoucher = mode === "cash-voucher";
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
   const [uploadingAttachments, setUploadingAttachments] = useState(false);
@@ -84,8 +84,8 @@ export function PaymentAdviceForm({
     resolver: zodResolver(paymentAdviceFormSchema),
     defaultValues: {
       formDate: today,
-      paymentMode: "NEFT",
-      cashVoucherItems: [],
+      paymentMode: isCashVoucher ? "CASH" : "NEFT",
+      cashVoucherItems: isCashVoucher ? [{ description: "", amount: undefined as unknown as number }] : [],
       isAdvance,
       previousPendingAdvanceAmount: 0,
       // Seeded directly here (not via a useEffect that appends when empty)
@@ -98,13 +98,6 @@ export function PaymentAdviceForm({
       ...prefill,
     },
   });
-
-  // LineItemsField owns its own useFieldArray for rendering/add/remove —
-  // this one is only for appendCashVoucherItem, used below to seed a row
-  // when the submitter switches to Cash (a real interaction, not initial
-  // mount, so it's not subject to the Particulars row's Strict Mode
-  // double-invocation hazard the comment above describes).
-  const { append: appendCashVoucherItem } = useFieldArray({ control, name: "cashVoucherItems" });
 
   const [matchedStaff, setMatchedStaff] = useState<StaffSearchResult | null>(null);
   // Same "only react on an actual identity change" pattern
@@ -158,17 +151,13 @@ export function PaymentAdviceForm({
 
   useEffect(() => {
     if (isAdvance || paymentMode !== "CASH") return;
-    if (cashVoucherItems.length === 0) {
-      appendCashVoucherItem({ description: "", amount: 0 });
-      return;
-    }
     const completeItems = cashVoucherItems.filter(
       (item) => Number.isFinite(item?.amount) && item.amount > 0,
     );
     setValue("amount", calculateCashVoucherTotal(completeItems), {
       shouldValidate: false,
     });
-  }, [appendCashVoucherItem, cashVoucherItems, isAdvance, paymentMode, setValue]);
+  }, [cashVoucherItems, isAdvance, paymentMode, setValue]);
 
   // Total (Rs.) is always Basic Amount + GST Amount for NEFT — auto-
   // calculated, read-only, updates live as either field changes. Mirrors
@@ -205,7 +194,7 @@ export function PaymentAdviceForm({
   const lastAutoFilledPayeeEmailRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!isAdvance) return;
+    if (!isAdvance && !isCashVoucher) return;
     const action = resolveSourceFieldAutoFill(
       submittedByName,
       getValues("payeeName") ?? "",
@@ -218,10 +207,10 @@ export function PaymentAdviceForm({
       setValue("payeeName", "");
       lastAutoFilledPayeeNameRef.current = null;
     }
-  }, [isAdvance, submittedByName, getValues, setValue]);
+  }, [isAdvance, isCashVoucher, submittedByName, getValues, setValue]);
 
   useEffect(() => {
-    if (!isAdvance) return;
+    if (!isAdvance && !isCashVoucher) return;
     const action = resolveSourceFieldAutoFill(
       submittedByEmail,
       getValues("payeeEmail") ?? "",
@@ -234,7 +223,7 @@ export function PaymentAdviceForm({
       setValue("payeeEmail", "");
       lastAutoFilledPayeeEmailRef.current = null;
     }
-  }, [isAdvance, submittedByEmail, getValues, setValue]);
+  }, [isAdvance, isCashVoucher, submittedByEmail, getValues, setValue]);
 
   // Mirrors applyVendor's "fill only what's on file" pattern below, plus
   // RecommendingAuthorityField's "only react when the matched identity
@@ -276,19 +265,19 @@ export function PaymentAdviceForm({
   async function onSubmit(values: PaymentAdviceFormValues) {
     setSubmitError(null);
 
-    // Tax Invoice is not required for advances — no invoice exists before
-    // money is spent. Approval / Budget Letter stays required regardless.
+    // Tax Invoice / Supplementary Document is required for both regular
+    // document types. Approval / Budget Letter is only mandatory for advances.
     const hasTaxInvoice =
       values.isAdvance ||
       taxInvoice.length === 1 ||
       (existingAttachments?.TAX_INVOICE?.length ?? 0) > 0;
-    const hasApprovalBudget =
+    const hasApprovalBudget = !values.isAdvance ||
       approvalBudget.length === 1 || (existingAttachments?.APPROVAL_BUDGET?.length ?? 0) > 0;
     if (!hasTaxInvoice || !hasApprovalBudget) {
       setAttachmentError(
         values.isAdvance
           ? "Approval / Budget Letter is a mandatory attachment."
-          : "Tax Invoice and Approval / Budget Letter are both mandatory attachments.",
+          : "Tax Invoice / Supplementary Document is a mandatory attachment.",
       );
       window.scrollTo({ top: 0, behavior: "smooth" });
       return;
@@ -433,7 +422,7 @@ export function PaymentAdviceForm({
         </div>
       </Section>
 
-      <Section title="2. Payee details">
+      {!isCashVoucher ? <Section title="2. Payee details">
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
           <div className="sm:col-span-2">
             <Field
@@ -481,19 +470,19 @@ export function PaymentAdviceForm({
             <Input hasError={!!errors.payeeUdyamNumber} {...register("payeeUdyamNumber")} />
           </Field>
         </div>
-      </Section>
+      </Section> : null}
 
       <Section title={isAdvance ? "3. Advance details" : "3. Bill & reference"}>
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-          {mode === "standard" ? (
+          {!isAdvance ? (
             <>
-              <Field label="Bill No." required error={errors.billNo?.message}>
+              <Field label="Bill No." required={!isCashVoucher} error={errors.billNo?.message}>
                 <Input hasError={!!errors.billNo} {...register("billNo")} />
               </Field>
-              <Field label="Bill Date" required error={errors.billDate?.message}>
+              <Field label="Bill Date" required={!isCashVoucher} error={errors.billDate?.message}>
                 <Input type="date" max={today} hasError={!!errors.billDate} {...register("billDate")} />
               </Field>
-              <Field label="P.O. No." error={errors.poNumber?.message}>
+              {!isCashVoucher ? <><Field label="P.O. No." error={errors.poNumber?.message}>
                 <Input hasError={!!errors.poNumber} {...register("poNumber")} />
               </Field>
               <Field label="P.O. Date" error={errors.poDate?.message}>
@@ -509,6 +498,7 @@ export function PaymentAdviceForm({
                   {...register("deliveryChallanDate")}
                 />
               </Field>
+              </> : null}
             </>
           ) : null}
           {mode === "advance" ? (
@@ -630,9 +620,9 @@ export function PaymentAdviceForm({
         </div>
       </Section>
 
-      <Section title="4. Payment mode">
+      {!isCashVoucher ? <Section title={isAdvance ? "4. Payment mode" : "4. Bank details"}>
         <div className="flex flex-col gap-6">
-          <Field label="Mode" required error={errors.paymentMode?.message}>
+          {isAdvance ? <Field label="Mode" required error={errors.paymentMode?.message}>
             <div className="flex gap-6">
               <label className="flex items-center gap-2 text-sm">
                 <input
@@ -651,10 +641,10 @@ export function PaymentAdviceForm({
                 Cash
               </label>
             </div>
-          </Field>
+          </Field> : null}
 
           {paymentMode === "NEFT" && (
-            <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
+            <div className={`grid grid-cols-1 gap-6 ${isAdvance ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
               {isAdvance ? (
                 <p className="sm:col-span-3 text-xs text-gray-500">
                   Optional for an advance — Finance already has your bank details on file. Fill these
@@ -682,10 +672,13 @@ export function PaymentAdviceForm({
               >
                 <Input hasError={!!errors.beneficiaryName} {...register("beneficiaryName")} />
               </Field>
+              {!isAdvance ? <Field label="Bank Name" required error={errors.bankName?.message}>
+                <Input hasError={!!errors.bankName} {...register("bankName")} />
+              </Field> : null}
             </div>
           )}
         </div>
-      </Section>
+      </Section> : null}
 
       <Section title="5. Enclosures & remarks">
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
@@ -713,10 +706,11 @@ export function PaymentAdviceForm({
           </div>
         ) : null}
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-          {mode === "standard" ? (
+          {!isAdvance ? (
             <FileUploadSlot
-              label="Tax Invoice"
+              label={isCashVoucher ? "Tax Invoice / Supplementary Document" : "Tax Invoice"}
               required
+              allowImages
               maxFiles={1}
               files={taxInvoice}
               onChange={setTaxInvoice}
@@ -725,34 +719,35 @@ export function PaymentAdviceForm({
           ) : null}
           <FileUploadSlot
             label="Approval / Budget Letter"
-            required
+            required={isAdvance}
+            allowImages={!isAdvance}
             maxFiles={1}
             files={approvalBudget}
             onChange={setApprovalBudget}
             existingFileNames={existingAttachments?.APPROVAL_BUDGET}
           />
-          <FileUploadSlot
+          {isAdvance ? <FileUploadSlot
             label="Purchase Order"
             maxFiles={1}
             files={purchaseOrder}
             onChange={setPurchaseOrder}
             existingFileNames={existingAttachments?.PURCHASE_ORDER}
-          />
-          <FileUploadSlot
+          /> : null}
+          {isAdvance ? <FileUploadSlot
             label="Delivery Challan"
             maxFiles={1}
             files={deliveryChallanFile}
             onChange={setDeliveryChallanFile}
             existingFileNames={existingAttachments?.DELIVERY_CHALLAN}
-          />
-          <FileUploadSlot
+          /> : null}
+          {isAdvance ? <FileUploadSlot
             label="Other"
             multiple
             maxFiles={MAX_OTHER_ATTACHMENTS}
             files={otherFiles}
             onChange={setOtherFiles}
             existingFileNames={existingAttachments?.OTHER}
-          />
+          /> : null}
         </div>
         <p className="text-sm font-medium text-[#0b1f3a]" aria-live="polite">
           {(attachmentTotalBytes / 1024 / 1024).toFixed(2)} MB of new attachments added
@@ -773,7 +768,9 @@ export function PaymentAdviceForm({
               ? "Resubmit"
               : isAdvance
                 ? "Submit Advance Payment Request"
-                : "Submit Payment Advice"}
+                : isCashVoucher
+                  ? "Submit Cash Payment Voucher"
+                  : "Submit Payment Advice"}
         </button>
       </div>
     </form>

@@ -47,7 +47,7 @@ export function LineItemsField({
         </div>
         <button
           type="button"
-          onClick={() => append({ description: "", amount: 0 })}
+          onClick={() => append({ description: "", amount: undefined as unknown as number })}
           className="rounded-md border border-[#0b1f3a] px-3 py-1.5 text-sm font-medium text-[#0b1f3a] hover:bg-[#0b1f3a]/5"
         >
           Add row

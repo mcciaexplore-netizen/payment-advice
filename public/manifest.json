@@ -1,7 +1,7 @@
 {
-  "name": "MCCIA Payment Advice",
-  "short_name": "MCCIA Payment Advice",
-  "description": "Submit and track Payment Advice forms for MCCIA Finance & Accounts department.",
+  "name": "MCCIA Payment Desk",
+  "short_name": "Payment Desk",
+  "description": "Submit payment requests to MCCIA Finance & Accounts department.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",

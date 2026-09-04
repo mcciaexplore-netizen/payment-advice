@@ -35,6 +35,7 @@ export type PaymentAdvicePdfData = {
   bankAccountNo: string | null;
   bankIfsc: string | null;
   beneficiaryName: string | null;
+  bankName: string | null;
   submittedByName: string;
   recommendingAuthorityName: string;
   // Both admin-recorded during the Finance Verification + Sanctioning
@@ -166,6 +167,7 @@ export function PaymentAdviceDocument({ data }: { data: PaymentAdvicePdfData }) 
         <Text>A/c No.: {data.bankAccountNo}</Text>
         <Text>IFSC: {data.bankIfsc}</Text>
         <Text>Beneficiary: {data.beneficiaryName}</Text>
+        <Text>Bank: {data.bankName}</Text>
       </>
     ) : (
       <Text>Cash</Text>

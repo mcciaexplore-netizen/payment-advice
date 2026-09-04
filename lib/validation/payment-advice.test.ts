@@ -54,6 +54,7 @@ const baseNeftSubmission = {
   bankAccountNo: "123456789012",
   bankIfsc: "HDFC0001234",
   beneficiaryName: "Acme Supplies",
+  bankName: "HDFC Bank",
   cashVoucherItems: [],
   basicAmount: 1000,
   gstAmount: 180,
@@ -65,6 +66,20 @@ const baseNeftSubmission = {
 describe("NEFT Basic/GST split validation", () => {
   it("accepts a NEFT submission when basicAmount + gstAmount equals amount", () => {
     expect(paymentAdviceFormSchema.safeParse(baseNeftSubmission).success).toBe(true);
+  });
+
+  it("requires Bank Name for a regular Payment Advice", () => {
+    const result = paymentAdviceFormSchema.safeParse({ ...baseNeftSubmission, bankName: "" });
+    expect(result.success).toBe(false);
+    if (!result.success) expect(result.error.issues.some((issue) => issue.path[0] === "bankName")).toBe(true);
+  });
+
+  it("allows Cash Voucher bill and payee-address fields to be omitted", () => {
+    const cash: Record<string, unknown> = { ...baseCashSubmission };
+    delete cash.billNo;
+    delete cash.billDate;
+    delete cash.payeeAddress;
+    expect(paymentAdviceFormSchema.safeParse(cash).success).toBe(true);
   });
 
   it("accepts gstAmount of exactly 0 (GST not applicable)", () => {

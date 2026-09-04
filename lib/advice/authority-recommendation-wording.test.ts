@@ -15,8 +15,14 @@ describe("authenticated Authority dashboard recommendation wording", () => {
     expect(detail).toContain("`Recommended ${formatDateTime");
   });
 
-  it("leaves the separate token-link approval component unchanged", () => {
+  it("uses recommendation wording on the token-link page without renaming internal workflow identifiers", () => {
     const tokenView = read("components/authority/AuthorityApprovalView.tsx");
-    expect(tokenView).toContain('{submitting ? "Approving…" : "Approve"}');
+    const tokenPage = read("app/authority-approval/[token]/page.tsx");
+    expect(tokenView).toContain('{submitting ? "Recommending…" : "Recommend"}');
+    expect(tokenView).toContain("Recommended. This has been forwarded to Finance");
+    expect(tokenView).toContain("You already recommended this");
+    expect(tokenPage).toContain("Recommendation Request");
+    expect(tokenPage).toContain("recommend it or send it back with remarks");
+    expect(tokenView).toContain("/approve`");
   });
 });

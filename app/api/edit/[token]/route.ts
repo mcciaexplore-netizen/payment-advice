@@ -97,7 +97,7 @@ export async function POST(
   ) as Record<DocType, number>;
   const countError = validateAttachmentCounts(byDocType, values.isAdvance, existingCounts);
   if (countError) return NextResponse.json({ error: countError }, { status: 400 });
-  const verificationError = await verifyUploadedAttachments(newAttachments);
+  const verificationError = await verifyUploadedAttachments(newAttachments, !values.isAdvance);
   if (verificationError) return NextResponse.json({ error: verificationError }, { status: 400 });
 
   const uploadedPathnames = newAttachments.map((attachment) => attachment.blobPathname);
@@ -134,8 +134,12 @@ export async function POST(
 
     // Bill & Reference doesn't exist for an Advance Payment — see
     // app/api/submit/route.ts for the same dual-representation reasoning.
-    const billNo = values.isAdvance ? (values.billNo ?? advanceNo ?? serialNo) : values.billNo!;
-    const billDate = values.isAdvance ? (values.billDate ?? values.formDate) : values.billDate!;
+    const billNo = values.isAdvance
+      ? (values.billNo ?? advanceNo ?? serialNo)
+      : values.paymentMode === "CASH"
+        ? (values.billNo ?? "")
+        : values.billNo!;
+    const billDate = values.isAdvance || values.paymentMode === "CASH" ? (values.billDate ?? values.formDate) : values.billDate!;
 
     await db.transaction(async (tx) => {
       await tx
@@ -162,7 +166,7 @@ export async function POST(
           sanctionedBy: null,
           vendorId: values.vendorId ?? null,
           payeeName: values.payeeName,
-          payeeAddress: values.payeeAddress,
+          payeeAddress: values.payeeAddress ?? "",
           payeeEmail: values.payeeEmail ?? null,
           payeeContactPerson: values.payeeContactPerson ?? null,
           payeeContactPhone: values.payeeContactPhone ?? null,
@@ -204,6 +208,7 @@ export async function POST(
           bankAccountNo: values.bankAccountNo ?? null,
           bankIfsc: values.bankIfsc ?? null,
           beneficiaryName: values.beneficiaryName ?? null,
+          bankName: values.bankName ?? null,
           submittedByName: values.submittedByName,
           submittedByEmail: values.submittedByEmail,
           submittedByDepartment: values.submittedByDepartment,

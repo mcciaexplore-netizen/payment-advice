@@ -51,7 +51,7 @@ export default async function AdvancePage() {
 
       <p className="text-sm text-gray-600">
         Requesting payment for a bill or invoice instead?{" "}
-        <Link href="/" className="font-medium text-[#0b1f3a] underline underline-offset-2">
+        <Link href="/payment-advice" className="font-medium text-[#0b1f3a] underline underline-offset-2">
           Use the regular Payment Advice form →
         </Link>
       </p>

@@ -32,7 +32,7 @@ export default async function AuthorityApprovalPage({
       <main className="mx-auto flex w-full max-w-lg flex-1 flex-col items-center justify-center gap-4 px-6 py-24 text-center">
         <h1 className="font-heading text-2xl text-[#0b1f3a]">This link is not valid</h1>
         <p className="text-sm text-gray-600">
-          This approval link does not exist. Please contact the Accounts department for help
+          This recommendation link does not exist. Please contact the Accounts department for help
           with this Payment Advice.
         </p>
       </main>
@@ -86,12 +86,12 @@ export default async function AuthorityApprovalPage({
           {advice.submittedByName} on {formatDate(advice.formDate)}
         </p>
         <h1 className="font-heading text-3xl text-[#0b1f3a]">
-          {documentLabelFor(advice.paymentMode as PaymentMode, advice.isAdvance)} Approval Request
+          {documentLabelFor(advice.paymentMode as PaymentMode, advice.isAdvance)} Recommendation Request
         </h1>
         <p className="mt-2 text-sm text-gray-600">
           You&apos;ve been selected as the Recommending Authority for this{" "}
           {documentLabelFor(advice.paymentMode as PaymentMode, advice.isAdvance)}. Please review the details below
-          and approve or send it back with remarks.
+          and recommend it or send it back with remarks.
         </p>
       </header>
 

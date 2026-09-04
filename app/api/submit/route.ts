@@ -57,7 +57,7 @@ export async function POST(req: NextRequest) {
   const byDocType = groupUploadedAttachments(attachmentInputs);
   const countError = validateAttachmentCounts(byDocType, values.isAdvance);
   if (countError) return NextResponse.json({ error: countError }, { status: 400 });
-  const verificationError = await verifyUploadedAttachments(attachmentInputs);
+  const verificationError = await verifyUploadedAttachments(attachmentInputs, !values.isAdvance);
   if (verificationError) return NextResponse.json({ error: verificationError }, { status: 400 });
 
   const now = new Date();
@@ -87,8 +87,12 @@ export async function POST(req: NextRequest) {
 
       // Allocation and row creation deliberately share this transaction. If
       // any insert below fails, the counter rolls back with the submission.
-      billNo = values.isAdvance ? (values.billNo ?? advanceNo ?? serialNo) : values.billNo!;
-      const billDate = values.isAdvance ? (values.billDate ?? values.formDate) : values.billDate!;
+      billNo = values.isAdvance
+        ? (values.billNo ?? advanceNo ?? serialNo)
+        : values.paymentMode === "CASH"
+          ? (values.billNo ?? "")
+          : values.billNo!;
+      const billDate = values.isAdvance || values.paymentMode === "CASH" ? (values.billDate ?? values.formDate) : values.billDate!;
 
       const [advice] = await tx
         .insert(paymentAdvices)
@@ -111,7 +115,7 @@ export async function POST(req: NextRequest) {
           formDate: values.formDate,
           vendorId: values.vendorId ?? null,
           payeeName: values.payeeName,
-          payeeAddress: values.payeeAddress,
+          payeeAddress: values.payeeAddress ?? "",
           payeeEmail: values.payeeEmail ?? null,
           payeeContactPerson: values.payeeContactPerson ?? null,
           payeeContactPhone: values.payeeContactPhone ?? null,
@@ -146,6 +150,7 @@ export async function POST(req: NextRequest) {
           bankAccountNo: values.bankAccountNo ?? null,
           bankIfsc: values.bankIfsc ?? null,
           beneficiaryName: values.beneficiaryName ?? null,
+          bankName: values.bankName ?? null,
           submittedByName: values.submittedByName,
           submittedByEmail: values.submittedByEmail,
           submittedByDepartment: values.submittedByDepartment,

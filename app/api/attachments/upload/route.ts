@@ -18,11 +18,11 @@ export async function POST(request: Request) {
       body,
       request,
       onBeforeGenerateToken: async (pathname) => {
-        if (!pathname.startsWith(PENDING_UPLOAD_PREFIX) || !pathname.toLowerCase().endsWith(".pdf")) {
-          throw new Error("Only PDF attachments are allowed.");
+        if (!pathname.startsWith(PENDING_UPLOAD_PREFIX) || !/\.(pdf|jpe?g|png)$/i.test(pathname)) {
+          throw new Error("Only PDF, JPEG, and PNG attachments are allowed.");
         }
         return {
-          allowedContentTypes: ["application/pdf"],
+          allowedContentTypes: ["application/pdf", "image/jpeg", "image/png"],
           maximumSizeInBytes: MAX_FILE_SIZE_BYTES,
           addRandomSuffix: true,
         };

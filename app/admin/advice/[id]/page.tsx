@@ -235,6 +235,7 @@ export default async function AdviceDetailPage({
                 <Row label="Bank A/c No." value={advice.bankAccountNo ?? "—"} />
                 <Row label="IFSC" value={advice.bankIfsc ?? "—"} />
                 <Row label="Beneficiary Name" value={advice.beneficiaryName ?? "—"} />
+                <Row label="Bank Name" value={advice.bankName ?? "—"} />
               </>
             ) : null}
           </Section>

@@ -2,9 +2,9 @@ import { get, head } from "@vercel/blob";
 import { MAX_FILE_SIZE_BYTES } from "@/lib/validation/payment-advice";
 import type { UploadedAttachment } from "@/lib/attachments/client-upload";
 
-const PDF_MAGIC = "%PDF-";
+const ALLOWED_CONTENT_TYPES = ["application/pdf", "image/jpeg", "image/png"];
 
-export async function verifyUploadedAttachments(uploads: UploadedAttachment[]) {
+export async function verifyUploadedAttachments(uploads: UploadedAttachment[], allowImages = false) {
   for (const upload of uploads) {
     let metadata;
     try {
@@ -19,8 +19,9 @@ export async function verifyUploadedAttachments(uploads: UploadedAttachment[]) {
     ) {
       return `Uploaded file metadata for "${upload.fileName}" does not match Blob storage.`;
     }
-    if (metadata.size > MAX_FILE_SIZE_BYTES || metadata.contentType !== "application/pdf") {
-      return `"${upload.fileName}" must be a PDF no larger than 10 MB.`;
+    const allowedTypes = allowImages ? ALLOWED_CONTENT_TYPES : ["application/pdf"];
+    if (metadata.size > MAX_FILE_SIZE_BYTES || !allowedTypes.includes(metadata.contentType)) {
+      return `"${upload.fileName}" must be a ${allowImages ? "PDF, JPEG, or PNG" : "PDF"} no larger than 10 MB.`;
     }
 
     try {
@@ -28,14 +29,19 @@ export async function verifyUploadedAttachments(uploads: UploadedAttachment[]) {
       if (!blob || blob.statusCode !== 200 || !blob.stream) throw new Error("Blob unavailable");
       const reader = blob.stream.getReader();
       const signature: number[] = [];
-      while (signature.length < 5) {
+      while (signature.length < 8) {
         const { value, done } = await reader.read();
         if (done) break;
-        signature.push(...value.slice(0, 5 - signature.length));
+        signature.push(...value.slice(0, 8 - signature.length));
       }
       await reader.cancel();
-      const prefix = new TextDecoder().decode(new Uint8Array(signature));
-      if (prefix !== PDF_MAGIC) return `"${upload.fileName}" is not a valid PDF file.`;
+      const bytes = new Uint8Array(signature);
+      const valid = metadata.contentType === "application/pdf"
+        ? new TextDecoder().decode(bytes.slice(0, 5)) === "%PDF-"
+        : metadata.contentType === "image/jpeg"
+          ? bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff
+          : bytes.length >= 8 && [137, 80, 78, 71, 13, 10, 26, 10].every((byte, index) => bytes[index] === byte);
+      if (!valid) return `"${upload.fileName}" is not a valid ${metadata.contentType === "application/pdf" ? "PDF" : "image"} file.`;
     } catch {
       return `Could not verify the uploaded file "${upload.fileName}". Please attach it again.`;
     }

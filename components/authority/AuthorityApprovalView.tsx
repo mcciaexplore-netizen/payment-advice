@@ -86,7 +86,7 @@ export function AuthorityApprovalView({
       const res = await fetch(`/api/authority-approval/${token}/approve`, { method: "POST" });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error ?? "Could not record your approval.");
+        setError(data.error ?? "Could not record your recommendation.");
         return;
       }
       setJustApproved(true);
@@ -125,7 +125,7 @@ export function AuthorityApprovalView({
   if (justApproved) {
     return (
       <ConfirmationBanner tone="approved">
-        Approved. This has been forwarded to Finance for processing. No further action needed
+        Recommended. This has been forwarded to Finance for processing. No further action needed
         from you.
       </ConfirmationBanner>
     );
@@ -143,7 +143,7 @@ export function AuthorityApprovalView({
   if (isApproved) {
     return (
       <ConfirmationBanner tone="approved">
-        You already approved this{approvedAt ? ` on ${formatDateTime(approvedAt)}` : ""}.
+        You already recommended this{approvedAt ? ` on ${formatDateTime(approvedAt)}` : ""}.
       </ConfirmationBanner>
     );
   }
@@ -210,7 +210,7 @@ export function AuthorityApprovalView({
               disabled={submitting}
               className="rounded-md bg-[#2e8b57] px-6 py-2.5 text-sm font-medium text-white hover:bg-[#2e8b57]/90 disabled:opacity-50"
             >
-              {submitting ? "Approving…" : "Approve"}
+              {submitting ? "Recommending…" : "Recommend"}
             </button>
             <button
               type="button"
@@ -255,7 +255,7 @@ export function AuthorityApprovalView({
             Confirm your email to continue
           </label>
           <p className="text-xs text-gray-500">
-            For security, please confirm the email address this approval was sent to before
+            For security, please confirm the email address this recommendation request was sent to before
             reviewing or actioning it.
           </p>
           <input

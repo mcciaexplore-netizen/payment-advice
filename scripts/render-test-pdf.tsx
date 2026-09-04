@@ -34,6 +34,7 @@ async function main() {
         bankAccountNo: "123456789012",
         bankIfsc: "HDFC0001234",
         beneficiaryName: "Acme Test Pvt Ltd",
+        bankName: "HDFC Bank",
         submittedByName: "Priya Sharma",
         recommendingAuthorityName: "Applied AI Studio — Mr. Test Head",
         verifiedBy: "Anita Deshmukh",

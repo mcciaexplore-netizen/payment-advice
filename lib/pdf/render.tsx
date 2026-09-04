@@ -50,6 +50,7 @@ export async function renderPaymentAdvicePdf(
         bankAccountNo: advice.bankAccountNo,
         bankIfsc: advice.bankIfsc,
         beneficiaryName: advice.beneficiaryName,
+        bankName: advice.bankName,
         submittedByName: advice.submittedByName,
         recommendingAuthorityName,
         verifiedBy: advice.verifiedBy,

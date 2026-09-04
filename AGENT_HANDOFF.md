@@ -47,9 +47,9 @@ Design system: Navy `#0B1F3A`, Forest green `#2E8B57`, Amber `#E8A33D`. Headings
 
 ## 3. Current State (update this every session)
 
-**Last updated:** 4 September 2026, by Claude Code (multi-role admin_users — Chintamani's account now holds both AUTHORITY and ALL, on the `multi-role-admin-users` dev branch, not yet merged to main)
+**Last updated:** 4 September 2026, by Codex (Payment Desk dedicated public forms on `dev`)
 
-### Shipped (dev branch, not yet merged to main) — Multi-role admin_users (Claude Code, 2026-09-04)
+### Shipped — Multi-role admin_users (Claude Code, 2026-09-04; merged to main as `294e407`)
 Requested because Chintamani Shrotri needed both his existing Authority Dashboard access AND full Finance Admin access on **one** login, not a second account — and the single `role` column on `admin_users` made that structurally impossible. Built as the general multi-role model, not a one-off for Chintamani. **Everything below is on branch `multi-role-admin-users`, verified via local build/dev-server testing — not yet merged to `main`, and the human has not yet approved that merge.** See the important infrastructure note first:
 
 **Infrastructure fact discovered before touching anything, changes how "verify on preview" had to work here:** `vercel env ls` shows this project's `DATABASE_URL` (and every other secret) is shared identically across Preview and Production — there is no separate preview database. A Vercel Preview deployment of this branch would hit the exact same live Neon DB as `main`. Given that, the only safe approach was to make the migration purely additive and keep the old code path on `main` completely unaffected until a human-approved merge: `main`'s currently-deployed code still reads only `admin_users.role`/`recommending_authority_id` (untouched, still correct), while this branch's code reads only the new `admin_user_roles` table. Both can coexist against the same DB safely for as long as needed before merging.
@@ -106,6 +106,15 @@ Migration `0015_spooky_prism.sql` — pure `CREATE TABLE`, zero changes to any e
 - **Did not** live-test Chintamani's own real account directly — attempting to temporarily swap his real password (the same pattern already used for Ganesh Mate's account in an earlier session) was refused by this session's own permission system as a real-account credential change. Flagged rather than worked around; see the open item below. His account's role grants were verified directly in the DB instead (both rows present, correct role/authority-link values, shown above) — the login/switcher *mechanism* itself is fully verified via the throwaway dual-role account above, which exercises the identical code path for the identical role combination.
 
 `tsc --noEmit`, ESLint, the full Vitest suite (347 passing, 7 pre-existing skipped — 17 new tests added: `lib/auth.test.ts` new file covering multi-role token round-tripping and the two new helpers; `lib/admin/role-scope.test.ts` extended for `defaultPaymentModeForRoles`; `lib/admin-login-route.test.ts` and `lib/authority-login-route.test.ts` updated for the roles-array session shape plus new dual-role test cases), and `next build` all clean.
+
+### Shipped (dev branch, Vercel preview pending) — Payment Desk landing + dedicated Payment Advice/Cash Voucher pages (Codex, 2026-09-04)
+- Synced `dev` to merged multi-role main `294e407`; confirmed `0015_spooky_prism` and `admin_user_roles`, then generated/applied additive migration `0016_keen_mentallo` for nullable historical-safe `payment_advices.bank_name`. Existing rows were not rewritten. Bank Name is required by shared client/server Zod validation only for new regular NEFT Payment Advice submissions and prints in the Payment Advice PDF.
+- Public umbrella branding is now **Payment Desk** in root metadata, manifest, and public headers. `/` is a formal two-card choice screen linking to `/payment-advice` and `/cash-voucher`, with the existing Advance banner relocated there. Finance Admin and Authority header branding remain independently scoped and untouched.
+- `/payment-advice` fixes `paymentMode=NEFT`, removes the mode chooser, retains the vendor Payee section and full bill/reference + Basic/GST + required Enclosures/Remarks fields, adds required Bank Name, makes Approval/Budget optional, and limits Documents to mandatory Tax Invoice plus optional Approval/Budget. Both accept PDF/JPEG/PNG, max 10 MB each.
+- `/cash-voucher` fixes `paymentMode=CASH`, hides Payee and auto-copies submitter name/email, shows optional Bill No./Date only (legacy NOT NULL DB fields safely receive empty/form-date snapshots), keeps optional Enclosures/Remarks and existing line-item total, and limits Documents to mandatory “Tax Invoice / Supplementary Document” plus optional Approval/Budget. Both accept PDF/JPEG/PNG.
+- Fixed Cash Add-row double append at its source: the initial blank row is seeded synchronously in `defaultValues`, not a Strict Mode-sensitive append effect; every click makes one append and blank amounts no longer render literal `0`. `/advance` retains its fields and PDF-only attachment behavior; only its confirmed regular-form link now targets `/payment-advice`. The post-submit “Submit another” link also targets `/payment-advice`.
+- Live production-backed test ran with email forced to preview: one NEFT and one Cash request accepted real PNG Blob attachments, persisted the correct payment modes/payee/bank/bill snapshots, and returned valid PDFs. All test advice/audit/attachment/item rows and Blob objects were deleted; counters restored exactly to Payment Advice 16 and Cash 6; zero QA rows remain. The first Cash attempt exposed and led to fixing the legacy Bill No. NOT NULL boundary; its transaction rolled back without consuming a Cash number.
+- In-app browser was unavailable, so no visual click-through is claimed. Rendered-route checks plus focused structural/validation tests cover the dedicated field sets and one-row-per-click implementation. TypeScript, ESLint, 354 tests (7 skipped), and production build clean. Vercel preview verification remains pending until this dev branch is pushed.
 
 ### Shipped — Phase 1 baseline (Claude Code)
 - Public form `/` (no login): submitter, payee (vendor typeahead), bill/reference, payment mode (NEFT/Cash), enclosures, mandatory Tax Invoice + Approval/Budget PDF attachments
@@ -932,6 +941,15 @@ Append one entry per session, newest at the top. Keep entries short — this is 
 (Note: this header was accidentally dropped in an earlier edit and restored 2026-08-01 by Claude Code — no content was lost, only the heading line.)
 
 ```
+2026-09-04 — Codex — Synced dev to merged multi-role main 294e407, added
+0016 bank_name, and restructured the public app as Payment Desk with dedicated
+/payment-advice and /cash-voucher forms. Removed their mode chooser; added the
+specified route-specific payee, bill, bank, document, image-upload, and Cash
+line-item behavior while leaving Advance fields unchanged. Live preview-email
+NEFT/Cash submissions and both PDFs passed; all QA rows/Blobs were deleted and
+counters restored to 16/6. Browser unavailable; Vercel preview still pending.
+tsc, ESLint, 354 tests (7 skipped), and build clean.
+
 2026-09-04 — Claude Code — Built multi-role admin_users on new dev branch
 `multi-role-admin-users` (NOT merged to main): new admin_user_roles table
 (one row per admin_user/role grant, unique(admin_user_id, role)), replacing

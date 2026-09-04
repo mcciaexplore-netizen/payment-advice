@@ -143,7 +143,7 @@ export default function SubmittedPage() {
 
       <div className="flex justify-center">
         <Link
-          href="/"
+          href="/payment-advice"
           className="rounded-md border border-[#0b1f3a] px-5 py-2.5 text-sm font-medium text-[#0b1f3a] hover:bg-[#0b1f3a]/5"
         >
           Submit another Payment Advice

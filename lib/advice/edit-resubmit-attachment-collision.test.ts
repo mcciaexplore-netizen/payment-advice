@@ -81,6 +81,7 @@ function buildFormData() {
     bankAccountNo: "1234567890",
     bankIfsc: "HDFC0001234",
     beneficiaryName: "Acme Supplies",
+    bankName: "HDFC Bank",
     formDate: "2026-07-01",
     cashVoucherItems: "[]",
     advanceParticulars: "[]",

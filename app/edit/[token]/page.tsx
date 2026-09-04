@@ -95,7 +95,7 @@ export default async function EditPage({
       </div>
 
       <PaymentAdviceForm
-        mode={advice.isAdvance ? "advance" : "standard"}
+        mode={advice.isAdvance ? "advance" : advice.paymentMode === "CASH" ? "cash-voucher" : "payment-advice"}
         recommendingAuthorities={authorities}
         editToken={token}
         existingAttachments={existingAttachments}
@@ -144,6 +144,7 @@ export default async function EditPage({
           bankAccountNo: advice.bankAccountNo ?? undefined,
           bankIfsc: advice.bankIfsc ?? undefined,
           beneficiaryName: advice.beneficiaryName ?? undefined,
+          bankName: advice.bankName ?? undefined,
           enclosures: advice.enclosures ?? undefined,
           specialRemarks: advice.specialRemarks ?? undefined,
           formDate: advice.formDate,

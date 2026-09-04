@@ -15,11 +15,11 @@ const outfit = Outfit({
 
 export const metadata: Metadata = {
   title: {
-    default: "MCCIA Payment Advice",
-    template: "%s · MCCIA Payment Advice",
+    default: "MCCIA Payment Desk",
+    template: "%s · MCCIA Payment Desk",
   },
   description:
-    "Submit and track Payment Advice forms for MCCIA Finance & Accounts department.",
+    "Submit Payment Advice, Cash Payment Voucher, and Advance Payment requests to MCCIA Finance & Accounts.",
   manifest: "/manifest.json",
   icons: {
     icon: [

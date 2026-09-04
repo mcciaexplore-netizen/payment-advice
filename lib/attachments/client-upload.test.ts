@@ -36,4 +36,15 @@ describe("client-upload attachment metadata", () => {
       validateAttachmentCounts(grouped, false, { TAX_INVOICE: 1, APPROVAL_BUDGET: 1 }),
     ).toBeNull();
   });
+
+  it("requires only the Tax Invoice for a regular submission", () => {
+    const parsed = parseUploadedAttachments(JSON.stringify([upload("TAX_INVOICE", "invoice.png")]));
+    expect("error" in parsed).toBe(false);
+    if ("error" in parsed) return;
+    expect(validateAttachmentCounts(groupUploadedAttachments(parsed.attachments), false)).toBeNull();
+  });
+
+  it("keeps Approval / Budget Letter mandatory for Advance Payment", () => {
+    expect(validateAttachmentCounts(groupUploadedAttachments([]), true)).toContain("mandatory");
+  });
 });

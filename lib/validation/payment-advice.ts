@@ -166,7 +166,7 @@ export const paymentAdviceFormSchema = z
     // Section 2 — payee
     vendorId: z.string().uuid().optional(),
     payeeName: requiredTrimmed("Payee / company name is required"),
-    payeeAddress: requiredTrimmed("Payee address is required"),
+    payeeAddress: optionalTrimmed(),
     payeeContactPerson: optionalTrimmed(),
     payeeContactPhone: optionalTrimmed().pipe(
       z
@@ -237,6 +237,7 @@ export const paymentAdviceFormSchema = z
         .optional(),
     ),
     beneficiaryName: optionalTrimmed(),
+    bankName: optionalTrimmed(),
 
     // Section 5 — enclosures & remarks
     enclosures: optionalTrimmed(),
@@ -286,6 +287,9 @@ export const paymentAdviceFormSchema = z
           message: "Beneficiary Name is required for NEFT",
         });
       }
+      if (!data.bankName) {
+        ctx.addIssue({ code: "custom", path: ["bankName"], message: "Bank Name is required for NEFT" });
+      }
     }
 
     if (data.isAdvance) {
@@ -332,20 +336,20 @@ export const paymentAdviceFormSchema = z
       // Bill & Reference — required for every non-advance submission; an
       // Advance Payment has no bill yet, so this whole section is hidden on
       // the form and skipped entirely when isAdvance is true (see above).
-      if (!data.billNo) {
+      if (data.paymentMode === "NEFT" && !data.billNo) {
         ctx.addIssue({
           code: "custom",
           path: ["billNo"],
           message: "Bill number is required",
         });
       }
-      if (!data.billDate) {
+      if (data.paymentMode === "NEFT" && !data.billDate) {
         ctx.addIssue({
           code: "custom",
           path: ["billDate"],
           message: "Bill date is required",
         });
-      } else if (isFutureDateString(data.billDate)) {
+      } else if (data.billDate && isFutureDateString(data.billDate)) {
         ctx.addIssue({
           code: "custom",
           path: ["billDate"],
@@ -354,6 +358,9 @@ export const paymentAdviceFormSchema = z
       }
 
       if (data.paymentMode === "NEFT") {
+        if (!data.payeeAddress) {
+          ctx.addIssue({ code: "custom", path: ["payeeAddress"], message: "Payee address is required" });
+        }
         if (!data.natureOfExpenditure) {
           ctx.addIssue({
             code: "custom",

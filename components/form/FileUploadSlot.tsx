@@ -3,11 +3,11 @@
 import { useRef, useState } from "react";
 import { MAX_FILE_SIZE_BYTES } from "@/lib/validation/payment-advice";
 
-function isPdf(file: File) {
-  const nameLooksLikePdf = file.name.toLowerCase().endsWith(".pdf");
-  const typeLooksLikePdf =
-    file.type === "application/pdf" || file.type === "";
-  return nameLooksLikePdf && typeLooksLikePdf;
+function isAllowedFile(file: File, allowImages: boolean) {
+  const extension = file.name.toLowerCase().match(/\.(pdf|jpe?g|png)$/)?.[1];
+  if (!extension) return false;
+  if (extension === "pdf") return file.type === "application/pdf" || file.type === "";
+  return allowImages && (file.type === "image/jpeg" || file.type === "image/png" || file.type === "");
 }
 
 export function FileUploadSlot({
@@ -19,6 +19,7 @@ export function FileUploadSlot({
   onChange,
   externalError,
   existingFileNames,
+  allowImages = false,
 }: {
   label: string;
   required?: boolean;
@@ -30,6 +31,7 @@ export function FileUploadSlot({
   /** Attachments already on file from a previous submission (edit/resubmit
    * flow). Shown for reference; uploading a new file here replaces them. */
   existingFileNames?: string[];
+  allowImages?: boolean;
 }) {
   const [localError, setLocalError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -50,8 +52,8 @@ export function FileUploadSlot({
         );
         break;
       }
-      if (!isPdf(file)) {
-        setLocalError(`"${file.name}" is not a PDF. Only PDF files are accepted.`);
+      if (!isAllowedFile(file, allowImages)) {
+        setLocalError(`"${file.name}" is not an accepted file. Use ${allowImages ? "PDF, JPEG, or PNG" : "PDF"}.`);
         continue;
       }
       if (file.size > MAX_FILE_SIZE_BYTES) {
@@ -120,7 +122,7 @@ export function FileUploadSlot({
             onClick={() => inputRef.current?.click()}
             className="rounded-md border border-dashed border-gray-400 px-3 py-1.5 text-sm text-[#0b1f3a] hover:bg-[#0b1f3a]/5"
           >
-            + Attach PDF
+            + Attach {allowImages ? "file" : "PDF"}
           </button>
         )}
       </div>
@@ -128,13 +130,13 @@ export function FileUploadSlot({
       <input
         ref={inputRef}
         type="file"
-        accept="application/pdf,.pdf"
+        accept={allowImages ? "application/pdf,image/jpeg,image/png,.pdf,.jpg,.jpeg,.png" : "application/pdf,.pdf"}
         multiple={multiple}
         className="hidden"
         onChange={(e) => handleFiles(e.target.files)}
       />
 
-      <p className="text-xs text-gray-500">PDF only, max 10 MB per file.</p>
+      <p className="text-xs text-gray-500">{allowImages ? "PDF, JPEG, or PNG" : "PDF only"}, max 10 MB per file.</p>
 
       {error ? (
         <p role="alert" className="text-sm font-medium text-[#b3261e]">
