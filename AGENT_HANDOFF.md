@@ -2108,4 +2108,32 @@ payloads working. Excel export open decisions are reporting-only and do not
 touch submission. No fix was made during this diagnostic-only session; the
 production risk is recorded in §4.
 
+2026-09-04 — Codex — Corrected the production reference-number architecture
+after Finance reported apparent missing/random Payment Advice numbers. Root
+cause: `serial_no` was a shared master counter consumed by Payment Advice,
+Cash Voucher, and Advance rows; allocation also committed before the advice
+insert, so a later insert failure could consume a number. Production now has
+three genuinely independent, consecutive business series: regular NEFT uses
+`MCCIA/2026-27/NNNN`, regular Cash uses `CASH/MCCIA/2026-27/NNNN`, and all
+Advances use `ADV/MCCIA/2026-27/NNNN`. `serial_no` is the canonical reference
+and mirrors the applicable type-specific number. Allocation plus the advice,
+attachment, line-item, and audit inserts now share one transaction, so a
+failed submission rolls its counter back. Resubmission preserves its number
+when its type is unchanged and allocates atomically from the destination
+series when its type changes.
+
+The user explicitly approved renumbering the 17 live FY 2026-27 records and
+notifying affected submitters. A timestamped, gitignored pre-migration backup
+is at `.local-backups/reference-renumbering-pre-migration-2026-09-04.json`.
+The locked production transaction renumbered in submitted-at order, updated
+type-specific mirror fields, the synthetic Advance bill reference, and audit
+JSON references, and added `REFERENCE_RENUMBERED` audit entries. Verified
+final state: Payment Advice 0001–0010 (counter 10), Cash Voucher 0001–0006
+(counter 6), Advance 0001 (counter 1), with no duplicate or missing values.
+Existing UUID-based Admin/Authority links remain valid; submitters whose
+human-readable references changed must be told the old→new mapping. Code
+commit `1947fce` deployed Ready on Vercel. TypeScript, ESLint, 323 tests (7
+skipped), and production build clean. Browser control was unavailable, so no
+visual dashboard claim was made; production DB read-back is authoritative.
+
 *End of handoff file. Both agents: read §0 again before starting work.*
