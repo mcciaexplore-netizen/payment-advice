@@ -472,7 +472,7 @@ export function PaymentAdviceForm({
         </div>
       </Section> : null}
 
-      <Section title={isAdvance ? "3. Advance details" : "3. Bill & reference"}>
+      <Section title={isAdvance ? "3. Advance details" : isCashVoucher ? "2. Bill & reference" : "3. Bill & reference"}>
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
           {!isAdvance ? (
             <>
@@ -680,7 +680,7 @@ export function PaymentAdviceForm({
         </div>
       </Section> : null}
 
-      <Section title="5. Enclosures & remarks">
+      <Section title={isCashVoucher ? "3. Enclosures & remarks" : "5. Enclosures & remarks"}>
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
           <Field
             label="Enclosures"
@@ -699,7 +699,7 @@ export function PaymentAdviceForm({
         </div>
       </Section>
 
-      <Section title="6. Documents">
+      <Section title={isCashVoucher ? "4. Documents" : "6. Documents"}>
         {attachmentError ? (
           <div className="mb-4 rounded-md border border-[#b3261e]/30 bg-[#b3261e]/5 px-4 py-3 text-sm font-medium text-[#b3261e]">
             {attachmentError}

@@ -18,6 +18,9 @@ describe("Payment Desk dedicated public pages", () => {
     expect(read("app/cash-voucher/page.tsx")).toContain('type="cash-voucher"');
     expect(form).toContain('paymentMode: isCashVoucher ? "CASH" : "NEFT"');
     expect(form).toContain('{isAdvance ? <Field label="Mode"');
+    expect(form).toContain('isCashVoucher ? "2. Bill & reference"');
+    expect(form).toContain('isCashVoucher ? "3. Enclosures & remarks"');
+    expect(form).toContain('isCashVoucher ? "4. Documents"');
   });
 
   it("seeds one blank Cash row and appends one blank row per click", () => {
