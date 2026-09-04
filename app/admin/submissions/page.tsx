@@ -18,7 +18,7 @@ import {
 import { PaymentMode, Status } from "@/lib/validation/payment-advice";
 import { getAdminSession } from "@/lib/admin-session";
 import { displayNoFor, submissionTypeLabelFor } from "@/lib/advice/document-identity";
-import { defaultPaymentModeForRole } from "@/lib/admin/role-scope";
+import { defaultPaymentModeForRoles } from "@/lib/admin/role-scope";
 import { SentBackIndicators } from "@/components/admin/SentBackIndicators";
 import { sentBackStatus } from "@/lib/advice/send-back-status";
 import { formatDateOnly } from "@/lib/date-time";
@@ -80,7 +80,7 @@ export default async function AdminListPage({
   // "All" selection submits paymentMode="" and is left alone. Any signed-in
   // user can still change or clear this filter; nothing is backend-blocked.
   if (sp.paymentMode === undefined && session) {
-    filterParams.paymentMode = defaultPaymentModeForRole(session.adminRole);
+    filterParams.paymentMode = defaultPaymentModeForRoles(session.roles);
   }
 
   const tabParam = Array.isArray(sp.tab) ? sp.tab[0] : sp.tab;

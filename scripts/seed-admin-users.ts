@@ -28,10 +28,10 @@ import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import { db } from "../lib/db";
-import { adminUsers, recommendingAuthorities } from "../lib/db/schema";
+import { adminUsers, adminUserRoles, recommendingAuthorities } from "../lib/db/schema";
 import { hashPassword } from "../lib/admin-users";
 import { ADMIN_ROLES, AdminRole } from "../lib/auth";
-import { inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 
 type SeedAccount = {
   fullName: string;
@@ -147,16 +147,56 @@ async function main() {
   for (const account of accountsToCreate) {
     const password = initialPasswordFor(account);
     const passwordHash = await hashPassword(password);
-    await db.insert(adminUsers).values({
-      fullName: account.fullName,
-      email: account.email.trim().toLowerCase(),
-      passwordHash,
+    const recommendingAuthorityId = account.authorityName
+      ? authorityRows.find((row) => row.authorityName === account.authorityName)!.id
+      : null;
+    const [created] = await db
+      .insert(adminUsers)
+      .values({
+        fullName: account.fullName,
+        email: account.email.trim().toLowerCase(),
+        passwordHash,
+        // Deprecated columns — still populated for backward compatibility
+        // during the transition; admin_user_roles below is the real source
+        // of truth for the app's auth logic. See AGENT_HANDOFF.md.
+        role: account.role,
+        recommendingAuthorityId,
+      })
+      .returning({ id: adminUsers.id });
+    await db.insert(adminUserRoles).values({
+      adminUserId: created.id,
       role: account.role,
-      recommendingAuthorityId: account.authorityName
-        ? authorityRows.find((row) => row.authorityName === account.authorityName)!.id
-        : null,
+      recommendingAuthorityId,
     });
     results.push({ ...account, password });
+  }
+
+  // Self-healing for the multi-role migration: every account in ACCOUNTS
+  // (newly created above, or pre-existing and left alone) must have a
+  // matching admin_user_roles row. A pre-existing account normally already
+  // does (backfilled once, see scripts/backfill-admin-user-roles.ts) — this
+  // just guards against re-running this seed against a DB where that
+  // backfill hasn't happened yet, without duplicating rows (unique
+  // (admin_user_id, role) is also enforced at the DB level).
+  const allUsersNow = await db
+    .select({ id: adminUsers.id, email: adminUsers.email })
+    .from(adminUsers)
+    .where(inArray(adminUsers.email, normalizedEmails));
+  for (const account of ACCOUNTS) {
+    const email = account.email.trim().toLowerCase();
+    const user = allUsersNow.find((u) => u.email === email);
+    if (!user) continue; // created above and already has its role row
+    const [existingRole] = await db
+      .select()
+      .from(adminUserRoles)
+      .where(and(eq(adminUserRoles.adminUserId, user.id), eq(adminUserRoles.role, account.role)))
+      .limit(1);
+    if (existingRole) continue;
+    const recommendingAuthorityId = account.authorityName
+      ? authorityRows.find((row) => row.authorityName === account.authorityName)!.id
+      : null;
+    await db.insert(adminUserRoles).values({ adminUserId: user.id, role: account.role, recommendingAuthorityId });
+    console.log(`Backfilled missing admin_user_roles row for ${email} (${account.role}).`);
   }
 
   if (results.length === 0) {

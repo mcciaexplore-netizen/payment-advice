@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { and, count, eq, sum } from "drizzle-orm";
 import { getAdminSession } from "@/lib/admin-session";
-import { defaultPaymentModeForRole } from "@/lib/admin/role-scope";
+import { defaultPaymentModeForRoles } from "@/lib/admin/role-scope";
 import { AdminTab, buildTabCondition } from "@/lib/admin/filters";
 import { db } from "@/lib/db";
 import { paymentAdvices } from "@/lib/db/schema";
@@ -36,7 +36,7 @@ export default async function AdminDashboardPage() {
   const session = await getAdminSession();
   if (!session) return null;
 
-  const roleMode = defaultPaymentModeForRole(session.adminRole);
+  const roleMode = defaultPaymentModeForRoles(session.roles);
   const roleScope = roleMode ? eq(paymentAdvices.paymentMode, roleMode) : undefined;
   const financialYear = financialYearFor(new Date());
 

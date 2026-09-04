@@ -389,7 +389,7 @@ export default async function AdviceDetailPage({
               paidBy: entry.paidBy,
             }))}
             currentUserFullName={session?.fullName ?? "Unknown"}
-            currentUserRole={session?.adminRole ?? "ALL"}
+            currentUserRoles={session?.roles ?? ["ALL"]}
           />
         </div>
       </div>

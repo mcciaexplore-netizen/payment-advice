@@ -2,10 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   ADMIN_SESSION_COOKIE,
   ADMIN_SESSION_MAX_AGE_SECONDS,
-  AdminRole,
   createAdminSessionToken,
 } from "@/lib/auth";
-import { findActiveAdminUserByEmail, recordAdminLogin, verifyPassword } from "@/lib/admin-users";
+import {
+  findActiveAdminUserByEmail,
+  getRolesForAdminUser,
+  recordAdminLogin,
+  verifyPassword,
+} from "@/lib/admin-users";
 
 export const runtime = "nodejs";
 
@@ -78,7 +82,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Incorrect email or password." }, { status: 401 });
   }
 
-  if (user.role === "AUTHORITY") {
+  const roleGrants = await getRolesForAdminUser(user.id);
+  const roles = roleGrants.map((r) => r.role);
+  // Eligible for the Finance Admin login iff the account holds at least one
+  // non-AUTHORITY role — an AUTHORITY-only account must use the separate
+  // Authority Approvals sign-in instead. A dual-role account (e.g. AUTHORITY
+  // + ALL) is allowed here and lands in Full Admin with both roles on its
+  // session, same as anyone else with more than one role.
+  if (!roles.some((r) => r !== "AUTHORITY")) {
     return NextResponse.json(
       { error: "Please use the Authority Approvals sign-in page." },
       { status: 403 },
@@ -87,13 +98,14 @@ export async function POST(req: NextRequest) {
 
   clearAttempts(ip);
   await recordAdminLogin(user.id);
+  const authorityGrant = roleGrants.find((r) => r.role === "AUTHORITY");
   const token = await createAdminSessionToken({
     adminUserId: user.id,
     fullName: user.fullName,
-    adminRole: user.role as AdminRole,
-    recommendingAuthorityId: null,
+    roles,
+    recommendingAuthorityId: authorityGrant?.recommendingAuthorityId ?? null,
   });
-  const res = NextResponse.json({ ok: true, fullName: user.fullName, role: user.role });
+  const res = NextResponse.json({ ok: true, fullName: user.fullName, roles });
   res.cookies.set(ADMIN_SESSION_COOKIE, token, {
     httpOnly: true,
     secure: true,

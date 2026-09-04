@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { BackLink } from "@/components/admin/BackLink";
 import { AuthorityQueueActions } from "@/components/authority/AuthorityQueueActions";
 import { getAdminSession } from "@/lib/admin-session";
+import { hasRole } from "@/lib/auth";
 import { displayNoFor, documentLabelFor } from "@/lib/advice/document-identity";
 import { db } from "@/lib/db";
 import {
@@ -45,7 +46,7 @@ export default async function AuthorityAdviceDetailPage({
   searchParams: Promise<{ from?: string }>;
 }) {
   const [{ id }, { from }, session] = await Promise.all([params, searchParams, getAdminSession()]);
-  if (session?.adminRole !== "AUTHORITY" || !session.recommendingAuthorityId) notFound();
+  if (!session || !hasRole(session, "AUTHORITY") || !session.recommendingAuthorityId) notFound();
 
   const advice = await db.select().from(paymentAdvices).where(and(
     eq(paymentAdvices.id, id),

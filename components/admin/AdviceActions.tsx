@@ -22,15 +22,17 @@ export type PaymentEntryDisplay = {
   paidBy: string;
 };
 
-/** Whether the current session's role "owns" this submission's payment
+/** Whether the current session's roles "own" this submission's payment
  * mode — a UI-only default, not a backend authorization wall (per the
- * human's explicit decision, see AGENT_HANDOFF.md): the ALL-role account
- * can mark either mode Payment Done, and each of PAYMENT_ADVICE/
- * CASH_VOUCHER only owns its matching mode. */
-function ownsSubmissionType(role: AdminRole, paymentMode: "NEFT" | "CASH"): boolean {
-  if (role === "ALL") return true;
-  if (role === "PAYMENT_ADVICE") return paymentMode === "NEFT";
-  return paymentMode === "CASH";
+ * human's explicit decision, see AGENT_HANDOFF.md): a session holding ALL
+ * (directly, or alongside AUTHORITY for a dual-role account) can mark
+ * either mode Payment Done, and PAYMENT_ADVICE/CASH_VOUCHER each own only
+ * their matching mode. Multi-role aware: checks list membership, not
+ * equality against a single role. */
+function ownsSubmissionType(roles: AdminRole[], paymentMode: "NEFT" | "CASH"): boolean {
+  if (roles.includes("ALL")) return true;
+  if (paymentMode === "NEFT") return roles.includes("PAYMENT_ADVICE");
+  return roles.includes("CASH_VOUCHER");
 }
 
 function formatDateTime(iso: string): string {
@@ -86,7 +88,7 @@ export function AdviceActions({
   totalPaid,
   paymentEntries,
   currentUserFullName,
-  currentUserRole,
+  currentUserRoles,
 }: {
   adviceId: string;
   status: Status;
@@ -110,7 +112,7 @@ export function AdviceActions({
   /** NEFT only — Cash never has payment_entries rows. */
   paymentEntries: PaymentEntryDisplay[];
   currentUserFullName: string;
-  currentUserRole: AdminRole;
+  currentUserRoles: AdminRole[];
 }) {
   const router = useRouter();
   // Same underlying billPassedFor field/column, just conditional label text
@@ -485,7 +487,7 @@ export function AdviceActions({
       {verifiedAt && paymentMode === "CASH" && !paymentDoneAt ? (
         <div className="flex flex-col gap-3 rounded-md border border-[#2e8b57]/30 bg-[#2e8b57]/5 p-4 text-sm">
           <p className="font-medium text-[#1e5c39]">Ready for Payment.</p>
-          {ownsSubmissionType(currentUserRole, paymentMode) ? (
+          {ownsSubmissionType(currentUserRoles, paymentMode) ? (
             <>
               <p className="text-[#1e5c39]">
                 Will be recorded as paid by <span className="font-medium">{currentUserFullName}</span>.
@@ -532,7 +534,7 @@ export function AdviceActions({
 
           <PaymentEntriesList entries={paymentEntries} />
 
-          {ownsSubmissionType(currentUserRole, paymentMode) ? (
+          {ownsSubmissionType(currentUserRoles, paymentMode) ? (
             !billPassedFor ? (
               <p className="text-xs text-gray-500">
                 &quot;{billPassedForLabel}&quot; above must be saved before recording a payment.

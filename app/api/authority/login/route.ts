@@ -4,7 +4,12 @@ import {
   ADMIN_SESSION_MAX_AGE_SECONDS,
   createAdminSessionToken,
 } from "@/lib/auth";
-import { findActiveAdminUserByEmail, recordAdminLogin, verifyPassword } from "@/lib/admin-users";
+import {
+  findActiveAdminUserByEmail,
+  getRolesForAdminUser,
+  recordAdminLogin,
+  verifyPassword,
+} from "@/lib/admin-users";
 
 export const runtime = "nodejs";
 
@@ -21,7 +26,9 @@ export async function POST(req: NextRequest) {
   if (!user || !passwordOk) {
     return NextResponse.json({ error: "Incorrect email or password." }, { status: 401 });
   }
-  if (user.role !== "AUTHORITY" || !user.recommendingAuthorityId) {
+  const roleGrants = await getRolesForAdminUser(user.id);
+  const authorityGrant = roleGrants.find((r) => r.role === "AUTHORITY");
+  if (!authorityGrant || !authorityGrant.recommendingAuthorityId) {
     return NextResponse.json(
       { error: "This account does not have access to Authority Recommendations." },
       { status: 403 },
@@ -32,8 +39,8 @@ export async function POST(req: NextRequest) {
   const token = await createAdminSessionToken({
     adminUserId: user.id,
     fullName: user.fullName,
-    adminRole: "AUTHORITY",
-    recommendingAuthorityId: user.recommendingAuthorityId,
+    roles: roleGrants.map((r) => r.role),
+    recommendingAuthorityId: authorityGrant.recommendingAuthorityId,
   });
   const response = NextResponse.json({ ok: true });
   response.cookies.set(ADMIN_SESSION_COOKIE, token, {

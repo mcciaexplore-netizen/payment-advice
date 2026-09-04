@@ -1,7 +1,8 @@
 import bcrypt from "bcryptjs";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { adminUsers } from "@/lib/db/schema";
+import { adminUsers, adminUserRoles } from "@/lib/db/schema";
+import type { AdminRole } from "@/lib/auth";
 
 // Pure-JS (no native bindings) so it bundles reliably for Vercel's
 // serverless Node runtime with no platform-specific compile step — unlike
@@ -32,4 +33,18 @@ export async function recordAdminLogin(adminUserId: string): Promise<void> {
     .update(adminUsers)
     .set({ lastLoginAt: new Date() })
     .where(eq(adminUsers.id, adminUserId));
+}
+
+/** The single source of truth for what roles a signed-in account holds —
+ * reads admin_user_roles, never admin_users' deprecated role/
+ * recommending_authority_id columns. Every login route calls this to build
+ * the session's `roles` list. */
+export async function getRolesForAdminUser(
+  adminUserId: string,
+): Promise<{ role: AdminRole; recommendingAuthorityId: string | null }[]> {
+  const rows = await db
+    .select({ role: adminUserRoles.role, recommendingAuthorityId: adminUserRoles.recommendingAuthorityId })
+    .from(adminUserRoles)
+    .where(eq(adminUserRoles.adminUserId, adminUserId));
+  return rows.map((r) => ({ role: r.role as AdminRole, recommendingAuthorityId: r.recommendingAuthorityId }));
 }

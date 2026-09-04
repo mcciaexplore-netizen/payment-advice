@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   findActiveAdminUserByEmail: vi.fn(),
+  getRolesForAdminUser: vi.fn(),
   recordAdminLogin: vi.fn(),
   verifyPassword: vi.fn(),
 }));
@@ -80,6 +81,7 @@ describe("POST /api/admin/login", () => {
   it("signs in a real active user, records last_login_at, and sets the session cookie", async () => {
     mocks.findActiveAdminUserByEmail.mockResolvedValueOnce(activeUser);
     mocks.verifyPassword.mockResolvedValueOnce(true);
+    mocks.getRolesForAdminUser.mockResolvedValueOnce([{ role: "PAYMENT_ADVICE", recommendingAuthorityId: null }]);
     const res = await POST(req({ email: "SUNIL@mcciapune.com", password: "correct-password" }));
     expect(res.status).toBe(200);
     expect(mocks.recordAdminLogin).toHaveBeenCalledWith("admin-1");
@@ -87,14 +89,28 @@ describe("POST /api/admin/login", () => {
     expect(setCookie).toContain("mccia_admin_session=");
     expect(setCookie).toContain("HttpOnly");
     const body = await res.json();
-    expect(body).toEqual({ ok: true, fullName: "Sunil Salunke", role: "PAYMENT_ADVICE" });
+    expect(body).toEqual({ ok: true, fullName: "Sunil Salunke", roles: ["PAYMENT_ADVICE"] });
   });
 
-  it("refuses an authority account at the Finance Admin login", async () => {
+  it("refuses an account whose only role is AUTHORITY at the Finance Admin login", async () => {
     mocks.findActiveAdminUserByEmail.mockResolvedValueOnce({ ...activeUser, role: "AUTHORITY", recommendingAuthorityId: "authority-1" });
     mocks.verifyPassword.mockResolvedValueOnce(true);
+    mocks.getRolesForAdminUser.mockResolvedValueOnce([{ role: "AUTHORITY", recommendingAuthorityId: "authority-1" }]);
     const res = await POST(req({ email: "authority@mcciapune.com", password: "correct-password" }));
     expect(res.status).toBe(403);
     expect(res.headers.get("set-cookie")).toBeNull();
+  });
+
+  it("allows a dual-role account (AUTHORITY + ALL) to sign in at the Finance Admin login, session carries both roles", async () => {
+    mocks.findActiveAdminUserByEmail.mockResolvedValueOnce({ ...activeUser, fullName: "Chintamani Shrotri", role: "AUTHORITY", recommendingAuthorityId: "authority-1" });
+    mocks.verifyPassword.mockResolvedValueOnce(true);
+    mocks.getRolesForAdminUser.mockResolvedValueOnce([
+      { role: "AUTHORITY", recommendingAuthorityId: "authority-1" },
+      { role: "ALL", recommendingAuthorityId: null },
+    ]);
+    const res = await POST(req({ email: "chintamani@mcciapune.com", password: "correct-password" }));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.roles).toEqual(["AUTHORITY", "ALL"]);
   });
 });

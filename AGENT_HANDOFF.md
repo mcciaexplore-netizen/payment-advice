@@ -47,7 +47,65 @@ Design system: Navy `#0B1F3A`, Forest green `#2E8B57`, Amber `#E8A33D`. Headings
 
 ## 3. Current State (update this every session)
 
-**Last updated:** 4 September 2026, by Codex (recommendation wording + PDF stamp layout)
+**Last updated:** 4 September 2026, by Claude Code (multi-role admin_users — Chintamani's account now holds both AUTHORITY and ALL, on the `multi-role-admin-users` dev branch, not yet merged to main)
+
+### Shipped (dev branch, not yet merged to main) — Multi-role admin_users (Claude Code, 2026-09-04)
+Requested because Chintamani Shrotri needed both his existing Authority Dashboard access AND full Finance Admin access on **one** login, not a second account — and the single `role` column on `admin_users` made that structurally impossible. Built as the general multi-role model, not a one-off for Chintamani. **Everything below is on branch `multi-role-admin-users`, verified via local build/dev-server testing — not yet merged to `main`, and the human has not yet approved that merge.** See the important infrastructure note first:
+
+**Infrastructure fact discovered before touching anything, changes how "verify on preview" had to work here:** `vercel env ls` shows this project's `DATABASE_URL` (and every other secret) is shared identically across Preview and Production — there is no separate preview database. A Vercel Preview deployment of this branch would hit the exact same live Neon DB as `main`. Given that, the only safe approach was to make the migration purely additive and keep the old code path on `main` completely unaffected until a human-approved merge: `main`'s currently-deployed code still reads only `admin_users.role`/`recommending_authority_id` (untouched, still correct), while this branch's code reads only the new `admin_user_roles` table. Both can coexist against the same DB safely for as long as needed before merging.
+
+**Schema — new table, old columns deprecated in place, not dropped:**
+```
+admin_user_roles
+  id                          uuid pk
+  admin_user_id               uuid not null references admin_users(id) on delete cascade
+  role                        text not null   -- 'PAYMENT_ADVICE' | 'CASH_VOUCHER' | 'ALL' | 'AUTHORITY'
+  recommending_authority_id   uuid references recommending_authorities(id)  -- only set when role = 'AUTHORITY'
+  created_at                  timestamptz default now()
+  unique(admin_user_id, role)
+```
+Migration `0015_spooky_prism.sql` — pure `CREATE TABLE`, zero changes to any existing table. `admin_users.role`/`recommending_authority_id` are marked `@deprecated` in `lib/db/schema.ts`'s doc comments and left exactly as they were (still `NOT NULL` role, still populated on every insert) — **chose deprecate-in-place over dropping**, per the human's own stated fallback, specifically because `main`'s deployed code still depends on them until this branch merges. Once merged and stable, dropping them is a clean, separate follow-up migration — flagged as an open item below, not done here.
+
+**Migration steps, in order, each verified before the next:**
+1. `scripts/backup-admin-users-pre-multirole.ts` — full JSON export of all 15 `admin_users` rows to `.local-backups/admin-users-pre-multirole-<timestamp>.json` (gitignored), same discipline as the prelaunch wipe backup. Run first, before any schema change.
+2. `npm run db:generate` + `npm run db:migrate` — created `admin_user_roles`, applied to the (shared) production DB. Zero effect on any existing row or on `main`'s running code.
+3. `scripts/backfill-admin-user-roles.ts` — one role row per existing `admin_users` row, copying its current `role`/`recommending_authority_id` exactly. Idempotent (skips a user who already has a matching row; throws on a mismatch rather than silently overwriting).
+4. `scripts/verify-admin-user-roles-backfill.ts` — row-by-row check, not assumed: confirms every `admin_users` row has exactly one matching `admin_user_roles` row (same role, same authority link), flags orphans, reports account role-counts. **Result: 15/15 rows matched, 0 mismatches, 0 orphans.**
+5. `scripts/add-chintamani-all-role.ts` — inserted exactly one new `admin_user_roles` row (`role: 'ALL'`) for Chintamani's existing `admin_user_id` (`chintamanis@mcciapune.com`) — confirmed via the script's own before/after log, and re-ran step 4 afterward: **16/16 rows matched, 0 mismatches, only `chintamanis@mcciapune.com` shows >1 role (2: AUTHORITY + ALL).** No new `admin_users` row was created.
+
+**Session/auth model (`lib/auth.ts`):** `AdminSessionPayload.adminRole: AdminRole` → `roles: AdminRole[]`. `recommendingAuthorityId` stays a top-level convenience field on the session (present iff `roles` includes `AUTHORITY`; sourced from that specific `admin_user_roles` row at login time, never from `admin_users`) — kept deliberately, since every AUTHORITY-scoping query in the codebase already keys off this one field and a user can hold at most one `AUTHORITY` role row (`unique(admin_user_id, role)`), so rewriting all of those queries to look it up per-request would have been unrequested extra churn for no behavior change. New helpers `hasRole(session, role)` and `hasFinanceRole(session)` (true iff any role other than `AUTHORITY`) replace every old `session.adminRole === X` / `!== X` equality check. `decodeAdminSessionToken()` now validates `roles` as a non-empty array of known role strings (and still enforces the `AUTHORITY` ⟺ `recommendingAuthorityId` pairing) — a stale single-role token (signed by `main`'s old code, or literally any pre-migration session) fails this and is treated as no session, same "reject stale format, force fresh login" convention this file already used for the original shared-password format.
+
+**Every `session.adminRole` / `user.role` check site found and updated — the full list, not just "done":**
+1. `lib/auth.ts` — `AdminSessionPayload` type, `decodeAdminSessionToken()` validation, new `hasRole()`/`hasFinanceRole()`.
+2. `lib/admin-users.ts` — new `getRolesForAdminUser(adminUserId)`, the single source of truth every login route now calls instead of reading `admin_users.role` directly.
+3. `app/api/admin/login/route.ts` — the "AUTHORITY accounts can't log in here" gate (`user.role === "AUTHORITY"` → `!roles.some(r => r !== "AUTHORITY")`, so a dual-role account like Chintamani's IS allowed here now); session construction; response body (`role` → `roles`).
+4. `app/api/authority/login/route.ts` — `user.role !== "AUTHORITY"` → finds the AUTHORITY grant among the account's roles; session construction.
+5. `proxy.ts` — all 4 role conditions: the authority-login already-logged-in redirect, the `/authority/*` gate, the admin-login already-logged-in redirect, and the final `/admin/*` Finance gate. All rewritten from equality checks to `hasRole`/`hasFinanceRole`.
+6. `app/api/authority/advice/[id]/approve/route.ts` — guard clause.
+7. `app/api/authority/advice/[id]/reject/route.ts` — guard clause.
+8. `app/api/authority/advice/[id]/attachments/[attachmentId]/route.ts` — guard clause.
+9. `app/authority/advice/[id]/page.tsx` — guard clause (the `notFound()` gate).
+10. `app/authority/layout.tsx` — header visibility check, plus the new "Full Admin" switcher link (shown only when the session also has a Finance role).
+11. `app/admin/layout.tsx` — the account-label computation (now joins every held role's label with " + " when there's more than one — single-role accounts see byte-for-byte the same label as before), plus the new "My Approvals" switcher link (shown only when the session also has `AUTHORITY`).
+12. `app/admin/page.tsx` — `defaultPaymentModeForRole` → `defaultPaymentModeForRoles`.
+13. `app/admin/submissions/page.tsx` — same.
+14. `lib/admin/role-scope.ts` — added `defaultPaymentModeForRoles(roles)`; the original singular function is kept (still directly unit-tested, still used internally) rather than changed in place.
+15. `components/admin/AdviceActions.tsx` — `ownsSubmissionType(role, mode)` → `ownsSubmissionType(roles, mode)`; the `currentUserRole: AdminRole` prop → `currentUserRoles: AdminRole[]`.
+16. `app/admin/advice/[id]/page.tsx` — the one call site passing that prop.
+17. `scripts/seed-admin-users.ts` — every new account creation now also inserts its `admin_user_roles` row (alongside the still-populated deprecated columns); added a self-healing pass that backfills a missing role row for any pre-existing `ACCOUNTS` entry too, so re-running this script against a not-yet-migrated environment doesn't silently skip the new table.
+
+**Explicitly checked and found to need NO change** (same field name, unrelated meaning): every other `recommendingAuthorityId` reference in the codebase is `payment_advices.recommending_authority_id` — which specific authority a *submission* is routed to for approval — a completely different concept from an *admin_users* account's own AUTHORITY-role link. `app/authority/page.tsx` already read `session.recommendingAuthorityId` directly (never `.adminRole`), and that field's shape/meaning is unchanged on the new session type, so it needed no edit.
+
+**UI — role switcher, no new session/cookie state at all.** Both "My Approvals" and "Full Admin" already exist as separate route trees (`/authority` and `/admin`) with independent `proxy.ts` gates keyed off the roles list, not off "which login page was used" or any "current view" flag. So the switcher is *only* two conditional nav links — `/admin/layout.tsx` shows "My Approvals" → `/authority` when the session has `AUTHORITY`; `/authority/layout.tsx` shows "Full Admin" → `/admin` when the session has any Finance role. Clicking either just navigates; the same JWT/cookie already carries every granted role, so nothing is reissued and nothing about the existing scoped queries (e.g. `/authority`'s own-pending-queue filter) needed to change. A single-role session never sees either link — verified live, not just reasoned about (see below).
+
+**Verified live**, against the real dev server + real Neon DB (not on a Vercel preview yet — see the merge open item below): built three throwaway accounts, all deleted afterward —
+- **Dual-role** (`AUTHORITY` + `ALL`, linked to a real authority): logged in via **both** `/api/admin/login` and `/api/authority/login` — both succeeded, both returned/set a session carrying `["AUTHORITY","ALL"]`. From either resulting session: `GET /admin` → 200, `GET /authority` → 200, `/admin`'s rendered HTML contains "My Approvals", `/authority`'s contains "Full Admin", account-label text read exactly `Test DualRole Account · Authority + All Access`.
+- **Single Finance role** (`PAYMENT_ADVICE` only): `/admin` → 200, `/authority` → 302 (blocked, unchanged), header label exactly `Test SingleRole Finance · Payment Advice` — byte-for-byte what a single-role account showed before this feature existed — and "My Approvals" is **absent** from the rendered HTML (grep count 0).
+- **Single AUTHORITY-only role**: `POST /api/admin/login` → 403 "Please use the Authority Approvals sign-in page." (unchanged); `POST /api/authority/login` → 200; `/authority` → 200, `/admin` → 302 (blocked, unchanged); "Full Admin" is **absent** from the rendered HTML (grep count 0).
+- Re-ran `scripts/verify-admin-user-roles-backfill.ts` after deleting all three test accounts (cascade-deleted their `admin_user_roles` rows via the FK) — back to exactly 15/16, only Chintamani >1 role, confirming no residue.
+- **Did not** live-test Chintamani's own real account directly — attempting to temporarily swap his real password (the same pattern already used for Ganesh Mate's account in an earlier session) was refused by this session's own permission system as a real-account credential change. Flagged rather than worked around; see the open item below. His account's role grants were verified directly in the DB instead (both rows present, correct role/authority-link values, shown above) — the login/switcher *mechanism* itself is fully verified via the throwaway dual-role account above, which exercises the identical code path for the identical role combination.
+
+`tsc --noEmit`, ESLint, the full Vitest suite (347 passing, 7 pre-existing skipped — 17 new tests added: `lib/auth.test.ts` new file covering multi-role token round-tripping and the two new helpers; `lib/admin/role-scope.test.ts` extended for `defaultPaymentModeForRoles`; `lib/admin-login-route.test.ts` and `lib/authority-login-route.test.ts` updated for the roles-array session shape plus new dual-role test cases), and `next build` all clean.
 
 ### Shipped — Phase 1 baseline (Claude Code)
 - Public form `/` (no login): submitter, payee (vendor typeahead), bill/reference, payment mode (NEFT/Cash), enclosures, mandatory Tax Invoice + Approval/Budget PDF attachments
@@ -553,7 +611,7 @@ Small, isolated wording fix. `lib/pdf/PaymentAdviceDocument.tsx`'s "Recommended 
 ### Shipped — Recommendation wording + larger digital PDF stamps (Codex, 2026-09-04)
 - Fixed the previously flagged Cash Voucher mismatch: its Recommended-by digital stamp now reads **RECOMMENDED**, matching Payment Advice and the printed box label.
 - The authenticated Authority Dashboard now consistently uses **Recommend/Recommended** across its login/header, pending/history/detail UI, action button, result text, and dashboard-route error wording. Internal route/action identifiers remain `approve`/`approvedAt` to preserve the existing workflow and schema.
-- Deliberately did **not** change the separate legacy email-token component at `/authority-approval/[token]`: it still says Approve/Approved. The human explicitly asked this to be flagged for routing rather than silently changed in this task; see §4.
+- Follow-up completed on the separate email-token page `/authority-approval/[token]`: all user-visible Approve/Approved/Approval wording now reads Recommend/Recommended/Recommendation consistently. Internal route, state, prop, and schema identifiers remain unchanged so the established workflow is untouched.
 - Enlarged the shared digital stamp and its typography. Payment Advice suppresses the redundant Date/Signature lines only in Submitted/Recommended/Verified cells. Cash Voucher suppresses its existing Date line only in Submitted/Recommended cells. Payment Advice's Sanctioned-by cell remains blank and retains both Date/Signature; Cash Voucher's Sanctioned-by cell remains blank and retains its original Date line. Cash's separate Payee Signature cell is also unchanged.
 - Real production-backed, read-only renders were visually inspected: Payment Advice `MCCIA/2026-27/0002` (Submitted + Recommended + Verified) and Cash Voucher `CASH/MCCIA/2026-27/0006` (Submitted + Recommended). Stamps fill their cells without clipping, required labels are absent only from stamped cells, and physical-signature cells remain intact. No DB rows were mutated.
 - Added focused source-boundary regression tests for stamp wording/signing-field preservation and authenticated-dashboard wording. TypeScript, ESLint, 328 tests (7 skipped), and production build clean.
@@ -742,6 +800,10 @@ Requested because every `admin_users` password (Sunil's, Abha's, the ALL account
 
 Status legend: 🔴 unverified / high risk · 🟡 unverified / lower risk · 🟢 verified
 
+- 🔴 **Multi-role admin_users is on the `multi-role-admin-users` dev branch, NOT merged to main, NOT yet on any Vercel deployment.** Everything described in the "Shipped (dev branch...)" entry above is real and verified locally (tsc/lint/tests/build, plus live dev-server testing with throwaway accounts), but `main`'s currently-deployed code is still the single-role model — completely unaffected, since the migration was deliberately additive-only. **Do not consider Chintamani's dual-role access live in production until a human explicitly approves merging this branch.** The DB changes (new table, backfill, his second role row) are already applied to the one shared production database (see the infrastructure note in that entry for why that's safe regardless of merge timing).
+- 🟡 **Could not live-test Chintamani's own real account's login/switcher directly** — this session's permission system refused a temporary password swap on his real account (the same pattern previously used for Ganesh Mate's account). Not worked around. His `admin_user_roles` rows are confirmed correct directly in the DB, and the identical role-combination mechanism (AUTHORITY + ALL) was fully live-tested end-to-end with a throwaway account instead. If the human wants Chintamani's actual login double-checked before or after merging, either they test it directly, or explicitly authorize an agent to do the temporary-password-swap-and-restore (same as Ganesh Mate's precedent).
+- ⬜ **Undecided (needs human decision):** once this branch is merged and stable in production for a while, should `admin_users.role`/`recommending_authority_id` be dropped, or kept deprecated indefinitely? Kept deprecated-not-dropped for now specifically because `main` still depends on them until merge — dropping is a clean, separate follow-up migration once nothing reads them anymore, not done in this session.
+- ⬜ **Undecided (needs human decision):** should the seed script's `ACCOUNTS` list gain a way to express more than one role per person declaratively (an array of roles instead of one), now that the underlying schema supports it? Today, granting a second role to a new (not-yet-created) account still needs a one-off script like `scripts/add-chintamani-all-role.ts` after the initial seed. Not built — flagged as a natural follow-up, not requested this session.
 - 🟢 **Independent reference series grouped in Admin submissions queue 2026-09-04:** `/admin/submissions` now orders by business document type first (Payment Advice → Cash Voucher → Advance Payment), then sorts within each group using that type's actual displayed reference (`serial_no`, `cash_voucher_no`, or `advance_no`) rather than applying `serial_no` blindly across all types. Group headers make the separation explicit; the lightweight per-row type badge remains. This grouping stays in force with other column sorts, which sort within each type instead of mixing independent number series. Sent Back retains oldest-first ordering within each type group. Authenticated rendered-HTML verification using the real PAYMENT_ADVICE account confirmed MCCIA/2026-27/0009, /0008, /0007 are contiguous under Payment Advice and ADV/MCCIA/2026-27/0001 begins only under the later Advance Payment header.
 - 🟢 **IST date handling + admin submission-type badges completed 2026-09-04:** all user-facing timestamp formatting now goes through shared `lib/date-time.ts` helpers with explicit `timeZone: "Asia/Kolkata"`; PostgreSQL `date` fields remain calendar-only and are never timezone-shifted. This covers Admin and Authority queues/details/actions, authority token review, PDF Submitted/Approved/Verified stamps, and all notification-email form dates. The public form's default/max date and date-validation “today” use the IST calendar day. Admin analytics' current FY and weekly buckets also use IST calendar keys. Most critically, `financialYearFor()` now derives calendar year/month in IST rather than from the server's local getters: executable boundary verification confirms `2026-03-31T19:00:00Z` = `01/04/2026, 12:30 am` IST → FY `2026-27`, while one millisecond before IST midnight remains `2025-26`. No stored dates or historical rows were rewritten. The `/admin/submissions` reference cell now includes a subtle `Payment Advice` / `Cash Voucher` / `Advance Payment` badge derived from `paymentMode + isAdvance`; a read-only authenticated render against real production rows confirmed all three labels alongside real references. Browser-control was unavailable, so no visual screenshot is claimed; the real rendered HTML, live production data mapping, boundary execution, tests, and build were verified.
 - 🟢 **Production upload-size mismatch resolved 2026-09-04:** the real Cash Voucher failure around 13:16 IST was caused by all PDFs travelling through `/api/submit` despite Vercel's 4.5 MB Function request limit. `PaymentAdviceForm` now uploads every PDF directly from the browser with Vercel Blob's short-lived client-token flow (`/api/attachments/upload`), then sends only verified pathname/URL/name/size/doc-type metadata to `/api/submit` or `/api/edit/[token]`. The token itself enforces private PDF-only uploads and the existing 10 MB per-file maximum; final routes independently `head` each Blob, compare metadata, and read its `%PDF-` signature before saving. The shared component covers regular NEFT Payment Advice, Cash Voucher, and `/advance`; the edit route uses the same contract while retaining untouched existing files and replacing only newly uploaded document types. Serial allocation timing is unchanged: pre-submit files use random `pending-uploads/...` paths, which is safe because every attachment reader uses the DB-stored pathname. UI shows a running MB total and an upload phase; 413/non-JSON responses now produce an accurate size message. Partial client uploads are cleaned up when final submission fails, and server-side failures retain the existing cleanup. Live-tested the real token exchange/direct Blob transfer with two 3 MB PDF payloads (6,291,456 bytes combined, above the old ceiling); both objects were deleted and verified absent afterward. No production advice or serial was consumed. Browser-control was unavailable, so interactive visual click-through remains unclaimed; unit/integration coverage plus full tsc/lint/tests/build passed.
@@ -808,7 +870,7 @@ Status legend: 🔴 unverified / high risk · 🟡 unverified / lower risk · �
 - 🟡 **`NAME_EMAIL_LIST`/`admin_users`-style per-person attribution for `payment_entries.paid_by` reuses the exact same snapshot-not-FK pattern as `verified_by`/`payment_done_by`/`sanctioned_by`** — a name string, not a real FK to `admin_users`. Same known limitation as those older fields: renaming/deactivating an admin user later never retroactively changes what's printed on a historical entry. Not new to this session, just noting it applies here too.
 - 🟢 **Payment Advice PDF's "Recommended by" stamp fixed 2026-08-17 — corrected from "APPROVED" to "RECOMMENDED", matching the box's own label.** See the "Shipped" entry above for the fix and live verification against a real approved production row.
 - 🟢 **Cash Voucher Recommended-by stamp mismatch fixed 2026-09-04.** It now reads RECOMMENDED; both PDF types were rendered from real records and visually verified after the shared stamp was enlarged and redundant labels were removed only from digitally stamped boxes.
-- 🟡 **The separate email-token page `/authority-approval/[token]` still uses Approve/Approved wording.** The authenticated `/authority` dashboard now uses Recommend/Recommended consistently, but the human explicitly requested that the original token page be inspected and reported rather than silently changed if separately owned. Route this same terminology change to that page's owner if full cross-surface consistency is desired.
+- 🟢 **The separate email-token page `/authority-approval/[token]` now uses Recommend/Recommended wording (2026-09-04).** Verified read-only through the real recommended record `MCCIA/2026-27/0002`: HTTP 200, “Recommendation Request” and “already recommended” rendered, with no legacy visible Approve/Approved wording. Routes and approval-state identifiers remain unchanged internally.
 - 🟢 **Advance Payment feature shipped and live-verified end-to-end 2026-08-17 — both a NEFT-routed and a Cash-routed advance, plus explicit regression checks on regular (non-advance) submissions.** See the "Shipped" entry above for full detail: schema, the shared `ADVANCE` numbering series, `document-identity.ts` extension with a full 11-call-site audit (plus one pre-existing gap found and fixed), the public form's 3-way mode picker + Particulars/Purpose/Previous-Pending block, PDF extensions to both existing templates (no third template), and confirmation that the multi-part payment-capping logic needed zero code changes to work for advances.
 - ⬜ **Undecided (needs human decision):** should Excel export gain columns for `is_advance`/`advance_no`/Particulars? Currently not exported, per the standing "ask before adding Excel columns" rule — same open question already pending for `basic_amount`/`gst_amount`/`total_paid` above.
 - 🟡 **Settlement (reconciling actual spend against an advance afterward, returning/claiming balance) is explicitly not built** — out of scope per the brief. `previous_pending_advance_amount`/`_since` are purely self-declared by the submitter, never system-verified against anything, since no Settlement tracking exists to verify against. If/when Settlement is built, it's a separate future feature layered on top of this one, not a gap in this session's work.
@@ -817,6 +879,9 @@ Status legend: 🔴 unverified / high risk · 🟡 unverified / lower risk · �
 
 ## 5. Do Not Touch Without Asking
 
+- **`admin_users.role`/`recommending_authority_id` are DEPRECATED (2026-09-04, `multi-role-admin-users` branch) but deliberately NOT dropped — `main`'s currently-deployed code still reads them as its only source of truth until this branch merges.** `admin_user_roles` is the new, real source of truth for every role check; no new code should read the two old columns. Don't drop them until the branch has merged and been stable in production for a while (a clean follow-up migration at that point), and don't add a second, parallel way of granting roles — always go through `admin_user_roles`.
+- **A session's `roles: AdminRole[]` (as of the same branch) must be checked with `hasRole()`/`hasFinanceRole()` from `lib/auth.ts`, never `session.adminRole === X`** — that field no longer exists on the type. `recommendingAuthorityId` stays a top-level convenience field on the session (populated from the account's AUTHORITY role row at login, since a user can hold at most one AUTHORITY grant) — don't remove it in favor of a per-request `admin_user_roles` lookup; every existing AUTHORITY-scoping query already keys off this one field and rewriting all of them was explicitly out of scope.
+- **The "My Approvals" / "Full Admin" role switcher (`app/admin/layout.tsx`, `app/authority/layout.tsx`) is just two conditional nav links — there is no "current view" cookie, query param, or session field.** `/admin` and `/authority` are independently gated by `proxy.ts` off the roles list, not off which link was clicked or which login page was used. Don't add view-tracking state for this; it isn't needed and would be a second source of truth to keep in sync with the roles list.
 - `lib/auth.ts` — admin JWT session logic. **As of 2026-08-01, split across 3 files, deliberately, not an accident to "clean up":** `lib/auth.ts` (Edge-safe — signs/verifies the JWT only, imported by `proxy.ts` which runs on the Edge runtime), `lib/admin-users.ts` (Node-only — bcrypt + DB lookups), `lib/admin-session.ts` (Node-only — reads the cookie via `next/headers` for Server Components/Route Handlers). Don't merge these back into one file; `next/headers`/`bcryptjs` in the Edge-loaded file would break the build or bloat the Edge bundle for no reason.
 - `lib/serial.ts` — serial number allocation (gapless guarantee is load-bearing; a "cleanup" here can silently break FY rollover)
 - Anything in `lib/db/migrations/` — always ask before editing or regenerating an existing migration; only ever *add* new ones
@@ -867,14 +932,52 @@ Append one entry per session, newest at the top. Keep entries short — this is 
 (Note: this header was accidentally dropped in an earlier edit and restored 2026-08-01 by Claude Code — no content was lost, only the heading line.)
 
 ```
+2026-09-04 — Claude Code — Built multi-role admin_users on new dev branch
+`multi-role-admin-users` (NOT merged to main): new admin_user_roles table
+(one row per admin_user/role grant, unique(admin_user_id, role)), replacing
+the single role+recommending_authority_id columns as the source of truth.
+Discovered Preview and Production share one DATABASE_URL (no separate
+preview DB) via `vercel env ls` — kept the migration purely additive and
+the old columns deprecated-not-dropped so main's deployed code stays
+completely unaffected until a human approves the merge. Backed up all 15
+admin_users rows first, ran the migration, backfilled 15/15 role rows
+losslessly (verified row-by-row, 0 mismatches), then added Chintamani
+Shrotri's second role (ALL, same admin_user_id, no new account) —
+re-verified 16/16, only his account >1 role. Rewrote lib/auth.ts's session
+to carry roles: AdminRole[] plus new hasRole()/hasFinanceRole() helpers,
+and updated all 17 call sites that checked session.adminRole/user.role
+(both login routes, proxy.ts's 4 gates, 3 authority action routes, the
+authority detail page, both layouts, both admin landing pages, the role-
+scope helper, AdviceActions' ownsSubmissionType, and the seed script) —
+full list in AGENT_HANDOFF.md's §3 entry. Added the "My Approvals"/"Full
+Admin" switcher as two plain nav links (no new session/cookie state) since
+both dashboards were already independently role-gated by proxy.ts. Live-
+tested with 3 throwaway accounts (dual-role, Finance-only, Authority-only)
+against the real dev server + real Neon DB: dual-role logs in via either
+page and reaches both dashboards with the switcher visible; both single-
+role accounts show zero behavior change and no switcher, exactly as
+before. Could NOT live-test Chintamani's real account directly — this
+session's permission system refused a temporary password swap on his real
+account (same pattern previously used for Ganesh Mate); not worked
+around, flagged as an open item. tsc, ESLint, 347 tests (7 skipped, 17
+new), and production build all clean. Not yet pushed/merged — awaiting
+the human's review before any Vercel preview or merge to main.
+
+2026-09-04 — Codex — Completed the terminology follow-up on the original
+`/authority-approval/[token]` page: user-visible Approve/Approved/Approval text
+is now Recommend/Recommended/Recommendation, while internal routes and workflow
+identifiers remain untouched. Read-only live verification against real record
+MCCIA/2026-27/0002 returned 200 with the new wording and no legacy visible
+Approve/Approved text. No production data was mutated.
+
 2026-09-04 — Codex — Fixed the Cash Voucher Recommended-by stamp to say
 RECOMMENDED, renamed authenticated Authority Dashboard UI language from
 Approve/Approved to Recommend/Recommended, enlarged the shared digital stamps,
 and removed redundant signing labels only from digitally stamped PDF cells.
 Sanctioned-by physical-signature cells stayed unchanged. Visually verified real
 production-backed Payment Advice 0002 and Cash Voucher 0006 renders without DB
-writes. The separate email-token page still says Approve/Approved and is
-explicitly flagged for its owner. tsc, ESLint, 328 tests (7 skipped), and
+writes. The separate email-token page was initially flagged, then updated in
+the immediately newer follow-up entry above. tsc, ESLint, 328 tests (7 skipped), and
 production build clean.
 
 2026-09-04 — Codex — Applied the explicitly confirmed lowercase-first-name +

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { ADMIN_SESSION_COOKIE, decodeAdminSessionToken } from "@/lib/auth";
+import { ADMIN_SESSION_COOKIE, decodeAdminSessionToken, hasFinanceRole, hasRole } from "@/lib/auth";
 
 const PUBLIC_ADMIN_PATHS = new Set(["/admin/login", "/api/admin/login"]);
 const PUBLIC_AUTHORITY_PATHS = new Set(["/authority/login", "/api/authority/login"]);
@@ -21,14 +21,14 @@ export async function proxy(req: NextRequest) {
   }
 
   if (PUBLIC_AUTHORITY_PATHS.has(pathname)) {
-    if (pathname === "/authority/login" && session?.adminRole === "AUTHORITY") {
+    if (pathname === "/authority/login" && hasRole(session, "AUTHORITY")) {
       return NextResponse.redirect(new URL("/authority", req.url), 302);
     }
     return NextResponse.next();
   }
 
   if (isAuthorityPath) {
-    if (!session || session.adminRole !== "AUTHORITY" || !session.recommendingAuthorityId) {
+    if (!hasRole(session, "AUTHORITY") || !session?.recommendingAuthorityId) {
       if (pathname.startsWith("/api/authority/")) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
       }
@@ -38,13 +38,13 @@ export async function proxy(req: NextRequest) {
   }
 
   if (PUBLIC_ADMIN_PATHS.has(pathname)) {
-    if (pathname === "/admin/login" && session && session.adminRole !== "AUTHORITY") {
+    if (pathname === "/admin/login" && hasFinanceRole(session)) {
       return NextResponse.redirect(new URL("/admin", req.url), 302);
     }
     return NextResponse.next();
   }
 
-  if (!session || session.adminRole === "AUTHORITY") {
+  if (!hasFinanceRole(session)) {
     if (pathname.startsWith("/api/admin")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

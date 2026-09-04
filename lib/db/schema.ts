@@ -14,13 +14,22 @@ import {
 
 /** Real per-person Finance and Recommending Authority logins. Finance roles
  * use the admin area; AUTHORITY users are strictly scoped to the linked
- * recommending-authority queue. */
+ * recommending-authority queue.
+ *
+ * `role`/`recommendingAuthorityId` below are DEPRECATED as of the
+ * multi-role migration (see `adminUserRoles`) — kept in place, nullable-
+ * in-spirit-but-not-in-schema, deliberately not dropped yet. All new code
+ * must read roles from `admin_user_roles`, never from these two columns.
+ * See AGENT_HANDOFF.md for why they were kept rather than dropped. */
 export const adminUsers = pgTable("admin_users", {
   id: uuid("id").primaryKey().defaultRandom(),
   fullName: text("full_name").notNull(),
   email: text("email").notNull().unique(),
   passwordHash: text("password_hash").notNull(),
+  /** @deprecated Superseded by `adminUserRoles`. Retained only as a
+   * pre-migration historical snapshot; no code should read this anymore. */
   role: text("role").notNull(), // 'PAYMENT_ADVICE' | 'CASH_VOUCHER' | 'ALL' | 'AUTHORITY'
+  /** @deprecated Superseded by `adminUserRoles.recommendingAuthorityId`. */
   recommendingAuthorityId: uuid("recommending_authority_id").references(
     () => recommendingAuthorities.id,
   ),
@@ -30,6 +39,31 @@ export const adminUsers = pgTable("admin_users", {
     .notNull(),
   lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
 });
+
+/** One row per (admin_user, role) grant — replaces admin_users' old single
+ * `role`/`recommending_authority_id` columns with a proper one-to-many
+ * structure, so one login (e.g. Chintamani's) can hold both an AUTHORITY
+ * grant (scoped to his own recommending_authority_id) and an ALL grant
+ * (full Finance Admin access) without a second account. `unique(admin_user_id,
+ * role)` matches the real-world rule this was built for: a person can hold
+ * each role at most once, but multiple different roles simultaneously.
+ * `recommendingAuthorityId` is only ever set on the row where `role =
+ * 'AUTHORITY'` — every other role's row leaves it null. */
+export const adminUserRoles = pgTable(
+  "admin_user_roles",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    adminUserId: uuid("admin_user_id")
+      .notNull()
+      .references(() => adminUsers.id, { onDelete: "cascade" }),
+    role: text("role").notNull(), // 'PAYMENT_ADVICE' | 'CASH_VOUCHER' | 'ALL' | 'AUTHORITY'
+    recommendingAuthorityId: uuid("recommending_authority_id").references(
+      () => recommendingAuthorities.id,
+    ),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  },
+  (table) => [unique().on(table.adminUserId, table.role)],
+);
 
 export const vendors = pgTable("vendors", {
   id: uuid("id").primaryKey().defaultRandom(),

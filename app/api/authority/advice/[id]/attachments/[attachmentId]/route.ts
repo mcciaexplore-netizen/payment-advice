@@ -4,12 +4,13 @@ import { get } from "@vercel/blob";
 import { db } from "@/lib/db";
 import { attachments, paymentAdvices } from "@/lib/db/schema";
 import { getAdminSession } from "@/lib/admin-session";
+import { hasRole } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string; attachmentId: string }> }) {
   const session = await getAdminSession();
-  if (session?.adminRole !== "AUTHORITY" || !session.recommendingAuthorityId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!session || !hasRole(session, "AUTHORITY") || !session.recommendingAuthorityId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { id, attachmentId } = await params;
   const [advice] = await db.select({ id: paymentAdvices.id }).from(paymentAdvices).where(and(eq(paymentAdvices.id, id), eq(paymentAdvices.recommendingAuthorityId, session.recommendingAuthorityId))).limit(1);
   if (!advice) return NextResponse.json({ error: "Not found" }, { status: 404 });

@@ -3,12 +3,23 @@ import Image from "next/image";
 import Link from "next/link";
 import { AccountMenu } from "@/components/account/AccountMenu";
 import { getAdminSession } from "@/lib/admin-session";
+import { hasRole } from "@/lib/auth";
 
 const ROLE_LABELS: Record<string, string> = {
   PAYMENT_ADVICE: "Payment Advice",
   CASH_VOUCHER: "Cash Voucher",
   ALL: "All Access",
+  AUTHORITY: "Authority",
 };
+
+/** Single-role accounts (the common case) see exactly the label they always
+ * have — `${name} · ${label}` — no visible change from before multi-role
+ * support existed. An account with more than one role (e.g. Chintamani:
+ * AUTHORITY + ALL) sees every held role joined with " + ". */
+function roleSummaryLabel(fullName: string, roles: string[]): string {
+  const labels = roles.map((r) => ROLE_LABELS[r] ?? r);
+  return `${fullName} · ${labels.join(" + ")}`;
+}
 
 // `absolute` bypasses the root layout's "%s · MCCIA Payment Advice" title
 // template entirely, so admin tabs read "MCCIA Finance Admin" rather than
@@ -48,9 +59,14 @@ export default async function AdminLayout({ children }: { children: React.ReactN
               <Link href="/admin/staff" className="hover:text-white">
                 Staff &amp; Authorities
               </Link>
+              {hasRole(session, "AUTHORITY") ? (
+                <Link href="/authority" className="hover:text-white">
+                  My Approvals
+                </Link>
+              ) : null}
               <div className="border-l border-white/20 pl-6">
                 <AccountMenu
-                  label={`${session.fullName} · ${ROLE_LABELS[session.adminRole] ?? session.adminRole}`}
+                  label={roleSummaryLabel(session.fullName, session.roles)}
                   changePasswordHref="/admin/change-password"
                 />
               </div>
