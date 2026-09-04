@@ -5,7 +5,7 @@ import {
   validateAttachmentCounts,
 } from "@/lib/attachments/client-upload";
 
-const upload = (docType: "TAX_INVOICE" | "APPROVAL_BUDGET", fileName: string) => ({
+const upload = (docType: "TAX_INVOICE" | "APPROVAL_BUDGET" | "OTHER", fileName: string) => ({
   docType,
   fileName,
   blobPathname: `pending-uploads/batch/${fileName}`,
@@ -42,6 +42,17 @@ describe("client-upload attachment metadata", () => {
     expect("error" in parsed).toBe(false);
     if ("error" in parsed) return;
     expect(validateAttachmentCounts(groupUploadedAttachments(parsed.attachments), false)).toBeNull();
+  });
+
+  it("allows optional Other Documents for Payment Advice but not Cash Voucher", () => {
+    const grouped = groupUploadedAttachments([
+      upload("TAX_INVOICE", "invoice.pdf"),
+      upload("OTHER", "supporting-document.pdf"),
+    ]);
+    expect(validateAttachmentCounts(grouped, false, undefined, "NEFT")).toBeNull();
+    expect(validateAttachmentCounts(grouped, false, undefined, "CASH")).toContain(
+      "available only for Payment Advice",
+    );
   });
 
   it("keeps Approval / Budget Letter mandatory for Advance Payment", () => {

@@ -4,6 +4,7 @@ import {
   MAX_FILE_SIZE_BYTES,
   MAX_OTHER_ATTACHMENTS,
   type DocType,
+  type PaymentMode,
 } from "@/lib/validation/payment-advice";
 
 export const PENDING_UPLOAD_PREFIX = "pending-uploads/";
@@ -45,6 +46,7 @@ export function validateAttachmentCounts(
   byDocType: Record<DocType, UploadedAttachment[]>,
   isAdvance: boolean,
   existingCounts?: Partial<Record<DocType, number>>,
+  paymentMode?: PaymentMode,
 ): string | null {
   if (byDocType.TAX_INVOICE.length > 1) return "Only one Tax Invoice file is allowed.";
   if (byDocType.APPROVAL_BUDGET.length > 1)
@@ -54,8 +56,10 @@ export function validateAttachmentCounts(
     return "Only one Delivery Challan file is allowed.";
   if (byDocType.OTHER.length > MAX_OTHER_ATTACHMENTS)
     return `At most ${MAX_OTHER_ATTACHMENTS} "Other" files are allowed.`;
-  if (!isAdvance && (byDocType.PURCHASE_ORDER.length || byDocType.DELIVERY_CHALLAN.length || byDocType.OTHER.length))
+  if (!isAdvance && (byDocType.PURCHASE_ORDER.length || byDocType.DELIVERY_CHALLAN.length))
     return "Only Tax Invoice / Supplementary Document and Approval / Budget Letter attachments are allowed.";
+  if (!isAdvance && paymentMode === "CASH" && byDocType.OTHER.length)
+    return "Other Documents attachments are available only for Payment Advice.";
 
   if (!isAdvance && byDocType.TAX_INVOICE.length === 0 && !existingCounts?.TAX_INVOICE)
     return "Tax Invoice / Supplementary Document is a mandatory attachment (exactly one file).";

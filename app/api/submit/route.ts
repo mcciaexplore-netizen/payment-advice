@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
   }
   const attachmentInputs = attachmentResult.attachments;
   const byDocType = groupUploadedAttachments(attachmentInputs);
-  const countError = validateAttachmentCounts(byDocType, values.isAdvance);
+  const countError = validateAttachmentCounts(byDocType, values.isAdvance, undefined, values.paymentMode);
   if (countError) return NextResponse.json({ error: countError }, { status: 400 });
   const verificationError = await verifyUploadedAttachments(attachmentInputs, !values.isAdvance);
   if (verificationError) return NextResponse.json({ error: verificationError }, { status: 400 });

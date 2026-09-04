@@ -21,6 +21,8 @@ describe("Payment Desk dedicated public pages", () => {
     expect(form).toContain('isCashVoucher ? "2. Bill & reference"');
     expect(form).toContain('isCashVoucher ? "3. Enclosures & remarks"');
     expect(form).toContain('isCashVoucher ? "4. Documents"');
+    expect(form).toContain('label="Other Documents"');
+    expect(form).toContain("!isAdvance && !isCashVoucher");
   });
 
   it("seeds one blank Cash row and appends one blank row per click", () => {

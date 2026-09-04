@@ -110,7 +110,7 @@ Migration `0015_spooky_prism.sql` — pure `CREATE TABLE`, zero changes to any e
 ### Shipped (dev branch, Vercel preview Ready) — Payment Desk landing + dedicated Payment Advice/Cash Voucher pages (Codex, 2026-09-04)
 - Synced `dev` to merged multi-role main `294e407`; confirmed `0015_spooky_prism` and `admin_user_roles`, then generated/applied additive migration `0016_keen_mentallo` for nullable historical-safe `payment_advices.bank_name`. Existing rows were not rewritten. Bank Name is required by shared client/server Zod validation only for new regular NEFT Payment Advice submissions and prints in the Payment Advice PDF.
 - Public umbrella branding is now **Payment Desk** in root metadata, manifest, and public headers. `/` is a formal two-card choice screen linking to `/payment-advice` and `/cash-voucher`, with the existing Advance banner relocated there. Finance Admin and Authority header branding remain independently scoped and untouched.
-- `/payment-advice` fixes `paymentMode=NEFT`, removes the mode chooser, retains the vendor Payee section and full bill/reference + Basic/GST + required Enclosures/Remarks fields, adds required Bank Name, makes Approval/Budget optional, and limits Documents to mandatory Tax Invoice plus optional Approval/Budget. Both accept PDF/JPEG/PNG, max 10 MB each.
+- `/payment-advice` fixes `paymentMode=NEFT`, removes the mode chooser, retains the vendor Payee section and full bill/reference + Basic/GST + required Enclosures/Remarks fields, adds required Bank Name, and provides mandatory Tax Invoice plus optional Approval/Budget and up to three optional Other Documents. All accept PDF/JPEG/PNG, max 10 MB each.
 - `/cash-voucher` fixes `paymentMode=CASH`, hides Payee and auto-copies submitter name/email, shows optional Bill No./Date only (legacy NOT NULL DB fields safely receive empty/form-date snapshots), keeps optional Enclosures/Remarks and existing line-item total, and limits Documents to mandatory “Tax Invoice / Supplementary Document” plus optional Approval/Budget. Both accept PDF/JPEG/PNG.
 - Cash Voucher section numbering is route-aware and consecutive after its removed Payee/Payment Mode sections: 1. Submitter details, 2. Bill & reference, 3. Enclosures & remarks, 4. Documents. Payment Advice remains 1–6 with Payee and Bank Details; Advance numbering remains unchanged.
 - Fixed Cash Add-row double append at its source: the initial blank row is seeded synchronously in `defaultValues`, not a Strict Mode-sensitive append effect; every click makes one append and blank amounts no longer render literal `0`. `/advance` retains its fields and PDF-only attachment behavior; only its confirmed regular-form link now targets `/payment-advice`. The post-submit “Submit another” link also targets `/payment-advice`.
@@ -942,6 +942,11 @@ Append one entry per session, newest at the top. Keep entries short — this is 
 (Note: this header was accidentally dropped in an earlier edit and restored 2026-08-01 by Claude Code — no content was lost, only the heading line.)
 
 ```
+2026-09-04 — Codex — Restored optional Other Documents (up to three files) on
+the dedicated Payment Advice form and its edit/resubmit path. Server validation
+accepts OTHER metadata for NEFT while continuing to reject it for Cash Voucher;
+Tax Invoice remains the only mandatory Payment Advice document.
+
 2026-09-04 — Codex — Corrected the dedicated Cash Voucher form's inherited
 section numbers after Payee and Payment Mode were removed: Bill & reference is
 now 2, Enclosures & remarks 3, and Documents 4. Payment Advice and Advance

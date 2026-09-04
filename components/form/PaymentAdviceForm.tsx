@@ -748,6 +748,15 @@ export function PaymentAdviceForm({
             onChange={setOtherFiles}
             existingFileNames={existingAttachments?.OTHER}
           /> : null}
+          {!isAdvance && !isCashVoucher ? <FileUploadSlot
+            label="Other Documents"
+            multiple
+            maxFiles={MAX_OTHER_ATTACHMENTS}
+            allowImages
+            files={otherFiles}
+            onChange={setOtherFiles}
+            existingFileNames={existingAttachments?.OTHER}
+          /> : null}
         </div>
         <p className="text-sm font-medium text-[#0b1f3a]" aria-live="polite">
           {(attachmentTotalBytes / 1024 / 1024).toFixed(2)} MB of new attachments added

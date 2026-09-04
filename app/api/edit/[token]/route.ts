@@ -95,7 +95,12 @@ export async function POST(
   const existingCounts = Object.fromEntries(
     DOC_TYPES.map((docType) => [docType, existingByDocType.get(docType)?.length ?? 0]),
   ) as Record<DocType, number>;
-  const countError = validateAttachmentCounts(byDocType, values.isAdvance, existingCounts);
+  const countError = validateAttachmentCounts(
+    byDocType,
+    values.isAdvance,
+    existingCounts,
+    values.paymentMode,
+  );
   if (countError) return NextResponse.json({ error: countError }, { status: 400 });
   const verificationError = await verifyUploadedAttachments(newAttachments, !values.isAdvance);
   if (verificationError) return NextResponse.json({ error: verificationError }, { status: 400 });
