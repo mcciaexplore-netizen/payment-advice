@@ -107,14 +107,14 @@ Migration `0015_spooky_prism.sql` — pure `CREATE TABLE`, zero changes to any e
 
 `tsc --noEmit`, ESLint, the full Vitest suite (347 passing, 7 pre-existing skipped — 17 new tests added: `lib/auth.test.ts` new file covering multi-role token round-tripping and the two new helpers; `lib/admin/role-scope.test.ts` extended for `defaultPaymentModeForRoles`; `lib/admin-login-route.test.ts` and `lib/authority-login-route.test.ts` updated for the roles-array session shape plus new dual-role test cases), and `next build` all clean.
 
-### Shipped (dev branch, Vercel preview pending) — Payment Desk landing + dedicated Payment Advice/Cash Voucher pages (Codex, 2026-09-04)
+### Shipped (dev branch, Vercel preview Ready) — Payment Desk landing + dedicated Payment Advice/Cash Voucher pages (Codex, 2026-09-04)
 - Synced `dev` to merged multi-role main `294e407`; confirmed `0015_spooky_prism` and `admin_user_roles`, then generated/applied additive migration `0016_keen_mentallo` for nullable historical-safe `payment_advices.bank_name`. Existing rows were not rewritten. Bank Name is required by shared client/server Zod validation only for new regular NEFT Payment Advice submissions and prints in the Payment Advice PDF.
 - Public umbrella branding is now **Payment Desk** in root metadata, manifest, and public headers. `/` is a formal two-card choice screen linking to `/payment-advice` and `/cash-voucher`, with the existing Advance banner relocated there. Finance Admin and Authority header branding remain independently scoped and untouched.
 - `/payment-advice` fixes `paymentMode=NEFT`, removes the mode chooser, retains the vendor Payee section and full bill/reference + Basic/GST + required Enclosures/Remarks fields, adds required Bank Name, makes Approval/Budget optional, and limits Documents to mandatory Tax Invoice plus optional Approval/Budget. Both accept PDF/JPEG/PNG, max 10 MB each.
 - `/cash-voucher` fixes `paymentMode=CASH`, hides Payee and auto-copies submitter name/email, shows optional Bill No./Date only (legacy NOT NULL DB fields safely receive empty/form-date snapshots), keeps optional Enclosures/Remarks and existing line-item total, and limits Documents to mandatory “Tax Invoice / Supplementary Document” plus optional Approval/Budget. Both accept PDF/JPEG/PNG.
 - Fixed Cash Add-row double append at its source: the initial blank row is seeded synchronously in `defaultValues`, not a Strict Mode-sensitive append effect; every click makes one append and blank amounts no longer render literal `0`. `/advance` retains its fields and PDF-only attachment behavior; only its confirmed regular-form link now targets `/payment-advice`. The post-submit “Submit another” link also targets `/payment-advice`.
 - Live production-backed test ran with email forced to preview: one NEFT and one Cash request accepted real PNG Blob attachments, persisted the correct payment modes/payee/bank/bill snapshots, and returned valid PDFs. All test advice/audit/attachment/item rows and Blob objects were deleted; counters restored exactly to Payment Advice 16 and Cash 6; zero QA rows remain. The first Cash attempt exposed and led to fixing the legacy Bill No. NOT NULL boundary; its transaction rolled back without consuming a Cash number.
-- In-app browser was unavailable, so no visual click-through is claimed. Rendered-route checks plus focused structural/validation tests cover the dedicated field sets and one-row-per-click implementation. TypeScript, ESLint, 354 tests (7 skipped), and production build clean. Vercel preview verification remains pending until this dev branch is pushed.
+- In-app browser was unavailable, so no visual click-through is claimed. Rendered-route checks plus focused structural/validation tests cover the dedicated field sets and one-row-per-click implementation. TypeScript, ESLint, 354 tests (7 skipped), and production build clean. Commit `6ad3fc6` is on `origin/dev`; Vercel preview `payment-advice-5afwuf140-mccias-projects.vercel.app` is Ready and authenticated checks returned HTTP 200 for `/`, `/payment-advice`, `/cash-voucher`, and `/advance`.
 
 ### Shipped — Phase 1 baseline (Claude Code)
 - Public form `/` (no login): submitter, payee (vendor typeahead), bill/reference, payment mode (NEFT/Cash), enclosures, mandatory Tax Invoice + Approval/Budget PDF attachments
@@ -947,8 +947,9 @@ Append one entry per session, newest at the top. Keep entries short — this is 
 specified route-specific payee, bill, bank, document, image-upload, and Cash
 line-item behavior while leaving Advance fields unchanged. Live preview-email
 NEFT/Cash submissions and both PDFs passed; all QA rows/Blobs were deleted and
-counters restored to 16/6. Browser unavailable; Vercel preview still pending.
-tsc, ESLint, 354 tests (7 skipped), and build clean.
+counters restored to 16/6. Browser unavailable; the protected Vercel preview is
+Ready and all four public routes returned 200 through Vercel's authenticated
+bypass. tsc, ESLint, 354 tests (7 skipped), and build clean.
 
 2026-09-04 — Claude Code — Built multi-role admin_users on new dev branch
 `multi-role-admin-users` (NOT merged to main): new admin_user_roles table
