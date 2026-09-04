@@ -2,6 +2,7 @@ import { Document, Image, Page, StyleSheet, Text, View } from "@react-pdf/render
 import fs from "node:fs";
 import path from "node:path";
 import { Stamp, StampColor } from "@/lib/pdf/Stamp";
+import { formatDateOnly, formatIstDate } from "@/lib/date-time";
 
 export type CashVoucherPdfData = {
   // Resolved primary document number — cash_voucher_no normally, or
@@ -76,8 +77,7 @@ function resolveLogoPath(): string | null {
 }
 
 function formatDate(date: string) {
-  const [year, month, day] = date.split("-");
-  return `${day}/${month}/${year}`;
+  return formatDateOnly(date);
 }
 
 function formatAmount(amount: string) {
@@ -181,10 +181,7 @@ export function CashVoucherDocument({ data }: { data: CashVoucherPdfData }) {
 /** ISO timestamp -> dd/mm/yyyy, for stamp dates (distinct from formatDate
  * above, which formats the plain YYYY-MM-DD form date). */
 function formatDate2(iso: string): string {
-  const d = new Date(iso);
-  const dd = String(d.getDate()).padStart(2, "0");
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  return `${dd}/${mm}/${d.getFullYear()}`;
+  return formatIstDate(iso);
 }
 
 function Signature({

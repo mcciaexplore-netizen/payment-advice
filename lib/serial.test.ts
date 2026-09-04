@@ -10,6 +10,14 @@ import {
 } from "./serial";
 
 describe("financialYearFor", () => {
+  it("uses the IST boundary when UTC is still on March 31", () => {
+    expect(financialYearFor(new Date("2026-03-31T19:00:00.000Z"))).toBe("2026-27");
+  });
+
+  it("keeps the old FY until midnight IST", () => {
+    expect(financialYearFor(new Date("2026-03-31T18:29:59.999Z"))).toBe("2025-26");
+  });
+
   it("treats 31 March as the last day of the FY that started the previous April", () => {
     expect(financialYearFor(new Date(2027, 2, 31))).toBe("2026-27");
   });

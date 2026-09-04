@@ -20,12 +20,39 @@ describe("email templates", () => {
       natureOfExpenditure: "Event printing",
       billReference: "INV-101",
       paymentMode: "NEFT",
-      formDate: "30/07/2026",
+      formDate: "2026-07-30",
       approvalLink: "https://example.test/approval/token",
     });
     expect(message.subject).toBe("Approval Required: Payment Advice MCCIA/2026-27/0001");
     expect(message.html).toContain("Event printing");
+    expect(message.html).toContain("30/07/2026");
+    expect(message.html).not.toContain("2026-07-30");
+    expect(message.html).not.toContain("This is a resubmission");
     expect(message.html).not.toContain("{{");
+  });
+
+  it("clearly marks an authority approval email for a resubmission and includes escaped prior remarks", () => {
+    const message = renderAuthorityApprovalEmail({
+      displayNo: "MCCIA/2026-27/0001",
+      documentLabel: "Payment Advice",
+      authorityName: "Asha Rao",
+      submittedByName: "Priya Sharma",
+      payeeName: "Acme Supplies",
+      amount: "1,250.00",
+      natureOfExpenditure: "Event printing",
+      billReference: "INV-101",
+      paymentMode: "NEFT",
+      formDate: "30/07/2026",
+      approvalLink: "https://example.test/approval/token",
+      revisionCount: 2,
+      previousRemarks: "Correct GST <script>alert(1)</script>",
+    });
+    expect(message.subject).toBe(
+      "[Resubmission — Revision 2] Approval Required: Payment Advice MCCIA/2026-27/0001",
+    );
+    expect(message.html).toContain("This is a resubmission (revision 2)");
+    expect(message.html).toContain("Previous remarks: Correct GST &lt;script&gt;alert(1)&lt;/script&gt;");
+    expect(message.html).not.toContain("<script>alert(1)</script>");
   });
 
   it("uses 'Cash Payment Voucher' + cash_voucher_no in the authority approval subject/body for Cash submissions", () => {

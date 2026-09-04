@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { Stamp } from "@/lib/pdf/Stamp";
 import { billPassedForLabelFor } from "@/lib/advice/document-identity";
+import { formatDateOnly, formatIstDate } from "@/lib/date-time";
 
 export type PaymentAdvicePdfData = {
   // Resolved primary document number — serial_no normally, or advance_no
@@ -133,18 +134,7 @@ const styles = StyleSheet.create({
 });
 
 function formatDMY(iso: string | null): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  const dd = String(d.getDate()).padStart(2, "0");
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const yyyy = d.getFullYear();
-  return `${dd}/${mm}/${yyyy}`;
-}
-
-function formatDateOnly(dateStr: string | null): string {
-  if (!dateStr) return "";
-  const [y, m, d] = dateStr.split("-");
-  return `${d}/${m}/${y}`;
+  return iso ? formatIstDate(iso) : "";
 }
 
 function formatAmount(value: string | null): string {

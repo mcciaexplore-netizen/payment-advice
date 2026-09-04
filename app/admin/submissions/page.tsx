@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Fragment } from "react";
 import { and, count, sum } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { paymentAdvices } from "@/lib/db/schema";
@@ -7,7 +8,7 @@ import {
   ADMIN_LIST_PAGE_SIZE,
   AdminTab,
   buildAdviceWhere,
-  buildOrderBy,
+  buildAdminListOrderBy,
   buildTabCondition,
   isAdminTab,
   parseAdviceFilterParams,
@@ -16,17 +17,15 @@ import {
 } from "@/lib/admin/filters";
 import { PaymentMode, Status } from "@/lib/validation/payment-advice";
 import { getAdminSession } from "@/lib/admin-session";
-import { displayNoFor } from "@/lib/advice/document-identity";
+import { displayNoFor, submissionTypeLabelFor } from "@/lib/advice/document-identity";
 import { defaultPaymentModeForRole } from "@/lib/admin/role-scope";
+import { SentBackIndicators } from "@/components/admin/SentBackIndicators";
+import { sentBackStatus } from "@/lib/advice/send-back-status";
+import { formatDateOnly } from "@/lib/date-time";
 
 type SearchParamsRecord = Record<string, string | string[] | undefined>;
 
 export const dynamic = "force-dynamic";
-
-function formatDate(value: string) {
-  const [y, m, d] = value.split("-");
-  return `${d}/${m}/${y}`;
-}
 
 function formatAmount(value: string) {
   return Number(value).toLocaleString("en-IN", { minimumFractionDigits: 2 });
@@ -90,7 +89,7 @@ export default async function AdminListPage({
   const where = and(baseWhere, buildTabCondition(tab));
   const sort = Array.isArray(sp.sort) ? sp.sort[0] : sp.sort;
   const dir = Array.isArray(sp.dir) ? sp.dir[0] : sp.dir;
-  const orderBy = buildOrderBy(sort, dir);
+  const orderBy = buildAdminListOrderBy(tab, sort, dir);
 
   const pageParam = Array.isArray(sp.page) ? sp.page[0] : sp.page;
   const page = Math.max(1, Number(pageParam) || 1);
@@ -123,10 +122,12 @@ export default async function AdminListPage({
         submittedByDepartment: paymentAdvices.submittedByDepartment,
         status: paymentAdvices.status,
         adminRemarks: paymentAdvices.adminRemarks,
+        sentBackAt: paymentAdvices.sentBackAt,
+        editTokenExpiresAt: paymentAdvices.editTokenExpiresAt,
       })
       .from(paymentAdvices)
       .where(where)
-      .orderBy(orderBy)
+      .orderBy(...orderBy)
       .limit(ADMIN_LIST_PAGE_SIZE)
       .offset((page - 1) * ADMIN_LIST_PAGE_SIZE),
     db
@@ -351,18 +352,36 @@ export default async function AdminListPage({
                 </td>
               </tr>
             ) : (
-              rows.map((row) => (
-                <tr key={row.id} className="border-b border-gray-100 last:border-0 hover:bg-gray-50">
+              rows.map((row, index) => {
+                const sendBack = sentBackStatus(row.sentBackAt, row.editTokenExpiresAt);
+                const typeLabel = submissionTypeLabelFor(row.paymentMode as PaymentMode, row.isAdvance);
+                const previousRow = rows[index - 1];
+                const previousTypeLabel = previousRow
+                  ? submissionTypeLabelFor(previousRow.paymentMode as PaymentMode, previousRow.isAdvance)
+                  : null;
+                return (
+                <Fragment key={row.id}>
+                {typeLabel !== previousTypeLabel ? (
+                  <tr className="border-y border-gray-200 bg-[#0b1f3a]/5">
+                    <td colSpan={tab === "sent_back" ? 10 : 9} className="px-4 py-2 text-xs font-semibold uppercase tracking-wide text-[#0b1f3a]">
+                      {typeLabel}
+                    </td>
+                  </tr>
+                ) : null}
+                <tr className={`border-b border-gray-100 last:border-0 hover:bg-gray-50 ${tab === "sent_back" && sendBack?.isExpired ? "bg-red-50/70" : tab === "sent_back" && sendBack?.isStale ? "bg-amber-50/70" : ""}`}>
                   <td className="whitespace-nowrap px-4 py-3 font-medium text-[#0b1f3a]">
-                    {displayNoFor(
-                      row.paymentMode as PaymentMode,
-                      row.serialNo,
-                      row.cashVoucherNo,
-                      row.isAdvance,
-                      row.advanceNo,
-                    )}
+                    <div>{displayNoFor(
+                        row.paymentMode as PaymentMode,
+                        row.serialNo,
+                        row.cashVoucherNo,
+                        row.isAdvance,
+                        row.advanceNo,
+                      )}</div>
+                    <span className="mt-1 inline-flex rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-normal text-gray-600">
+                      {typeLabel}
+                    </span>
                   </td>
-                  <td className="whitespace-nowrap px-4 py-3">{formatDate(row.formDate)}</td>
+                  <td className="whitespace-nowrap px-4 py-3">{formatDateOnly(row.formDate)}</td>
                   <td className="px-4 py-3">{row.payeeName}</td>
                   <td className="whitespace-nowrap px-4 py-3 text-right">₹ {formatAmount(row.amount)}</td>
                   <td className="whitespace-nowrap px-4 py-3">
@@ -371,7 +390,12 @@ export default async function AdminListPage({
                   </td>
                   <td className="px-4 py-3">{row.submittedByName}</td>
                   <td className="px-4 py-3">{row.submittedByDepartment}</td>
-                  <td className="whitespace-nowrap px-4 py-3"><StatusChip status={row.status as Status} /></td>
+                  <td className="px-4 py-3">
+                    <div className="flex flex-col items-start gap-2">
+                      <StatusChip status={row.status as Status} />
+                      {tab === "sent_back" ? <SentBackIndicators sentBackAt={row.sentBackAt} editTokenExpiresAt={row.editTokenExpiresAt} /> : null}
+                    </div>
+                  </td>
                   {tab === "sent_back" ? (
                     <td className="max-w-[240px] truncate px-4 py-3" title={row.adminRemarks ?? ""}>
                       {row.adminRemarks ?? "—"}
@@ -383,7 +407,9 @@ export default async function AdminListPage({
                     </Link>
                   </td>
                 </tr>
-              ))
+                </Fragment>
+                );
+              })
             )}
           </tbody>
         </table>

@@ -29,6 +29,13 @@ export function documentLabelFor(paymentMode: PaymentMode, isAdvance = false): s
   return paymentMode === "CASH" ? "Cash Payment Voucher" : "Payment Advice";
 }
 
+/** Short, unambiguous queue badge; unlike documentLabelFor this deliberately
+ * collapses both Advance sub-routes into the one business submission type. */
+export function submissionTypeLabelFor(paymentMode: PaymentMode, isAdvance = false): string {
+  if (isAdvance) return "Advance Payment";
+  return paymentMode === "CASH" ? "Cash Voucher" : "Payment Advice";
+}
+
 /** Falls back to serialNo if cashVoucherNo/advanceNo are unexpectedly null
  * for a row that should have one (should never happen post-cutover, but
  * stays safe rather than ever rendering "undefined"/blank as the primary

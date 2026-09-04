@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { and, eq } from "drizzle-orm";
-import { put, del } from "@vercel/blob";
+import { del } from "@vercel/blob";
 import { db } from "@/lib/db";
 import {
   paymentAdvices,
@@ -17,63 +17,20 @@ import { allocateAdvanceNumber, allocateCashVoucherNumber } from "@/lib/serial";
 import { parsePaymentAdviceFormData } from "@/lib/form-data";
 import {
   paymentAdviceFormSchema,
-  MAX_FILE_SIZE_BYTES,
-  MAX_OTHER_ATTACHMENTS,
+  DOC_TYPES,
   DocType,
 } from "@/lib/validation/payment-advice";
+import {
+  groupUploadedAttachments,
+  parseUploadedAttachments,
+  validateAttachmentCounts,
+} from "@/lib/attachments/client-upload";
+import { verifyUploadedAttachments } from "@/lib/attachments/verify-uploaded";
 
 export const runtime = "nodejs";
 
-const PDF_MAGIC = "%PDF-";
-const DOC_TYPES: DocType[] = [
-  "TAX_INVOICE",
-  "APPROVAL_BUDGET",
-  "PURCHASE_ORDER",
-  "DELIVERY_CHALLAN",
-  "OTHER",
-];
-
-async function looksLikePdf(file: File): Promise<boolean> {
-  const head = new Uint8Array(await file.slice(0, 5).arrayBuffer());
-  return new TextDecoder().decode(head) === PDF_MAGIC;
-}
-
 function clientIp(req: NextRequest): string | null {
   return req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null;
-}
-
-async function collectNewAttachments(
-  formData: FormData,
-): Promise<{ error: string } | { byDocType: Record<DocType, File[]> }> {
-  const byDocType = {
-    TAX_INVOICE: formData.getAll("attachment_TAX_INVOICE") as File[],
-    APPROVAL_BUDGET: formData.getAll("attachment_APPROVAL_BUDGET") as File[],
-    PURCHASE_ORDER: formData.getAll("attachment_PURCHASE_ORDER") as File[],
-    DELIVERY_CHALLAN: formData.getAll("attachment_DELIVERY_CHALLAN") as File[],
-    OTHER: formData.getAll("attachment_OTHER") as File[],
-  } satisfies Record<DocType, File[]>;
-
-  if (byDocType.TAX_INVOICE.length > 1) return { error: "Only one Tax Invoice file is allowed." };
-  if (byDocType.APPROVAL_BUDGET.length > 1)
-    return { error: "Only one Approval / Budget Letter file is allowed." };
-  if (byDocType.PURCHASE_ORDER.length > 1) return { error: "Only one Purchase Order file is allowed." };
-  if (byDocType.DELIVERY_CHALLAN.length > 1)
-    return { error: "Only one Delivery Challan file is allowed." };
-  if (byDocType.OTHER.length > MAX_OTHER_ATTACHMENTS)
-    return { error: `At most ${MAX_OTHER_ATTACHMENTS} "Other" files are allowed.` };
-
-  for (const files of Object.values(byDocType)) {
-    for (const file of files) {
-      if (file.size > MAX_FILE_SIZE_BYTES) {
-        return { error: `"${file.name}" is larger than 10 MB.` };
-      }
-      if (!(await looksLikePdf(file))) {
-        return { error: `"${file.name}" is not a valid PDF file.` };
-      }
-    }
-  }
-
-  return { byDocType };
 }
 
 export async function POST(
@@ -112,11 +69,12 @@ export async function POST(
   }
   const values = parsed.data;
 
-  const attachmentResult = await collectNewAttachments(formData);
+  const attachmentResult = parseUploadedAttachments(formData.get("uploadedAttachments"));
   if ("error" in attachmentResult) {
     return NextResponse.json({ error: attachmentResult.error }, { status: 400 });
   }
-  const { byDocType } = attachmentResult;
+  const newAttachments = attachmentResult.attachments;
+  const byDocType = groupUploadedAttachments(newAttachments);
 
   const existingAttachments = await db
     .select()
@@ -130,60 +88,17 @@ export async function POST(
     existingByDocType.set(docType, list);
   }
 
-  // Tax Invoice is not required for advances — see app/api/submit/route.ts.
-  const hasTaxInvoice =
-    values.isAdvance ||
-    byDocType.TAX_INVOICE.length === 1 ||
-    (existingByDocType.get("TAX_INVOICE")?.length ?? 0) > 0;
-  const hasApprovalBudget =
-    byDocType.APPROVAL_BUDGET.length === 1 ||
-    (existingByDocType.get("APPROVAL_BUDGET")?.length ?? 0) > 0;
-  if (!hasTaxInvoice) {
-    return NextResponse.json(
-      { error: "Tax Invoice is a mandatory attachment (exactly one PDF)." },
-      { status: 400 },
-    );
-  }
-  if (!hasApprovalBudget) {
-    return NextResponse.json(
-      { error: "Approval / Budget Letter is a mandatory attachment (exactly one PDF)." },
-      { status: 400 },
-    );
-  }
+  const existingCounts = Object.fromEntries(
+    DOC_TYPES.map((docType) => [docType, existingByDocType.get(docType)?.length ?? 0]),
+  ) as Record<DocType, number>;
+  const countError = validateAttachmentCounts(byDocType, values.isAdvance, existingCounts);
+  if (countError) return NextResponse.json({ error: countError }, { status: 400 });
+  const verificationError = await verifyUploadedAttachments(newAttachments);
+  if (verificationError) return NextResponse.json({ error: verificationError }, { status: 400 });
 
-  const uploadedPathnames: string[] = [];
+  const uploadedPathnames = newAttachments.map((attachment) => attachment.blobPathname);
   try {
-    const newAttachmentRecords: {
-      docType: DocType;
-      fileName: string;
-      blobPathname: string;
-      blobUrl: string;
-      sizeBytes: number;
-    }[] = [];
-
-    for (const docType of DOC_TYPES) {
-      for (const file of byDocType[docType]) {
-        const pathname = `advices/${advice.serialNo}/${docType}-${file.name}`;
-        // addRandomSuffix avoids colliding with the attachment this is
-        // replacing (or any other prior upload) when the filename matches —
-        // the deterministic path alone isn't unique across resubmissions.
-        // The actual (suffixed) pathname/URL vercel returns is what's
-        // stored on the row below; nothing reconstructs this path later.
-        const blob = await put(pathname, file, {
-          access: "private",
-          contentType: "application/pdf",
-          addRandomSuffix: true,
-        });
-        uploadedPathnames.push(blob.pathname);
-        newAttachmentRecords.push({
-          docType,
-          fileName: file.name,
-          blobPathname: blob.pathname,
-          blobUrl: blob.url,
-          sizeBytes: file.size,
-        });
-      }
-    }
+    const newAttachmentRecords = newAttachments;
 
     const now = new Date();
     const oldBlobPathnamesToDelete: string[] = [];
@@ -381,6 +296,8 @@ export async function POST(
         paymentMode: values.paymentMode,
         formDate: values.formDate,
         approvalLink: `${origin}/authority-approval/${authorityToken}`,
+        revisionCount: advice.revisionCount + 1,
+        previousRemarks: advice.adminRemarks,
       },
       authority?.email ?? null,
       advice.id,

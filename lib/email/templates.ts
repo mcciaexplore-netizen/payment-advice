@@ -1,3 +1,5 @@
+import { formatDateOnly } from "@/lib/date-time";
+
 /** Escapes every dynamic value before it is interpolated into email HTML. */
 function escapeHtml(value: string | number): string {
   return String(value)
@@ -45,6 +47,8 @@ export interface AuthorityApprovalEmailData {
   paymentMode: string;
   formDate: string;
   approvalLink: string;
+  revisionCount?: number;
+  previousRemarks?: string | null;
 }
 
 export interface SentBackEmailData {
@@ -74,21 +78,29 @@ export interface SubmissionConfirmationEmailData {
   cashVoucherPdfLink?: string;
 }
 
-const AUTHORITY_APPROVAL_TEMPLATE = shell("#E8A33D", `<tr><td style="padding:32px;"><p style="margin:0 0 4px;font-size:13px;color:#6B7280;text-transform:uppercase;letter-spacing:.5px;">{{document_label}} Approval Request</p><h1 style="margin:0 0 20px;font-family:Georgia,'Times New Roman',serif;font-size:22px;color:#0B1F3A;">{{display_no}}</h1><p style="margin:0 0 20px;font-size:15px;line-height:1.6;color:#1F2937;">Dear {{authority_name}},<br><br>You've been selected as the Recommending Authority for this {{document_label}}, submitted by <strong>{{submitted_by_name}}</strong> on {{form_date}}. Please review the details below and approve or send it back with remarks.</p>${details([["Payee", "{{payee_name}}"], ["Amount", "₹ {{amount}}"], ["Nature of Expenditure", "{{nature_of_expenditure}}"], ["Bill / Reference No.", "{{bill_reference}}"], ["Payment Mode", "{{payment_mode}}"]])}${button("{{approval_link}}", "Review &amp; Approve")}<p style="margin:0;font-size:12px;line-height:1.6;color:#9CA3AF;text-align:center;">This link is unique to you and does not require a login.<br>If the button doesn't work, copy this link into your browser:<br><a href="{{approval_link}}" style="color:#2E8B57;word-break:break-all;">{{approval_link}}</a></p></td></tr>`);
+const AUTHORITY_APPROVAL_TEMPLATE = shell("#E8A33D", `<tr><td style="padding:32px;"><p style="margin:0 0 4px;font-size:13px;color:#6B7280;text-transform:uppercase;letter-spacing:.5px;">{{document_label}} Approval Request</p><h1 style="margin:0 0 20px;font-family:Georgia,'Times New Roman',serif;font-size:22px;color:#0B1F3A;">{{display_no}}</h1>{{resubmission_note}}<p style="margin:0 0 20px;font-size:15px;line-height:1.6;color:#1F2937;">Dear {{authority_name}},<br><br>You've been selected as the Recommending Authority for this {{document_label}}, submitted by <strong>{{submitted_by_name}}</strong> on {{form_date}}. Please review the details below and approve or send it back with remarks.</p>${details([["Payee", "{{payee_name}}"], ["Amount", "₹ {{amount}}"], ["Nature of Expenditure", "{{nature_of_expenditure}}"], ["Bill / Reference No.", "{{bill_reference}}"], ["Payment Mode", "{{payment_mode}}"]])}${button("{{approval_link}}", "Review &amp; Approve")}<p style="margin:0;font-size:12px;line-height:1.6;color:#9CA3AF;text-align:center;">This link is unique to you and does not require a login.<br>If the button doesn't work, copy this link into your browser:<br><a href="{{approval_link}}" style="color:#2E8B57;word-break:break-all;">{{approval_link}}</a></p></td></tr>`);
 
 const SENT_BACK_TEMPLATE = shell("#E8A33D", `<tr><td style="padding:32px;"><p style="margin:0 0 4px;font-size:13px;color:#B45309;text-transform:uppercase;letter-spacing:.5px;font-weight:600;">Action Required</p><h1 style="margin:0 0 20px;font-family:Georgia,'Times New Roman',serif;font-size:22px;color:#0B1F3A;">{{document_label}} {{display_no}} Sent Back</h1><p style="margin:0 0 20px;font-size:15px;line-height:1.6;color:#1F2937;">Dear {{submitted_by_name}},<br><br>Your {{document_label}} submission has been sent back by <strong>{{sent_back_by}}</strong> and needs corrections before it can proceed. Please review the remarks below, make the necessary changes, and resubmit.</p><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#FFFBEB;border:1px solid #FDE68A;border-radius:6px;margin-bottom:24px;"><tr><td style="padding:16px;"><p style="margin:0 0 6px;font-size:12px;color:#92400E;text-transform:uppercase;letter-spacing:.5px;font-weight:600;">Remarks</p><p style="margin:0;font-size:14px;line-height:1.6;color:#78350F;">{{remarks}}</p></td></tr></table>${details([["Payee", "{{payee_name}}"], ["Amount", "₹ {{amount}}"]])}${button("{{edit_link}}", "Edit &amp; Resubmit")}<p style="margin:0;font-size:12px;line-height:1.6;color:#9CA3AF;text-align:center;">This link expires in 14 days and does not require a login.<br>If the button doesn't work, copy this link into your browser:<br><a href="{{edit_link}}" style="color:#2E8B57;word-break:break-all;">{{edit_link}}</a></p></td></tr>`);
 
 const SUBMISSION_CONFIRMATION_TEMPLATE = shell("#2E8B57", `<tr><td style="padding:32px;"><p style="margin:0 0 4px;font-size:13px;color:#2E8B57;text-transform:uppercase;letter-spacing:.5px;font-weight:600;">Submission Confirmed</p><h1 style="margin:0 0 20px;font-family:Georgia,'Times New Roman',serif;font-size:22px;color:#0B1F3A;">{{display_no}}</h1><p style="margin:0 0 20px;font-size:15px;line-height:1.6;color:#1F2937;">Dear {{submitted_by_name}},<br><br>Your {{document_label}} has been submitted successfully. It has been routed to <strong>{{authority_name}}</strong> (Recommending Authority) for approval. You'll be notified once it's actioned.</p>${details([["Payee", "{{payee_name}}"], ["Amount", "₹ {{amount}}"], ["Payment Mode", "{{payment_mode}}"], ["Date", "{{form_date}}"]])}<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:8px;">{{payment_advice_button}}{{cash_voucher_button}}</table><p style="margin:20px 0 0;font-size:13px;line-height:1.6;color:#6B7280;text-align:center;">Remember to attach the corresponding documents (Bill, etc.) as required. For Cash payments, funds are typically disbursed within 3–4 business days after approval.</p></td></tr>`);
 
 export function renderAuthorityApprovalEmail(data: AuthorityApprovalEmailData) {
+  const revisionCount = data.revisionCount ?? 0;
+  const previousRemarks = data.previousRemarks
+    ? `<p style="margin:8px 0 0;line-height:1.5;">Previous remarks: ${escapeHtml(data.previousRemarks)}</p>`
+    : "";
+  const resubmissionNote = revisionCount >= 1
+    ? `<div style="margin:0 0 20px;padding:14px 16px;background:#FFFBEB;border:1px solid #FDE68A;border-radius:6px;color:#78350F;font-size:14px;"><strong>This is a resubmission (revision ${revisionCount}) after being sent back with corrections.</strong>${previousRemarks}</div>`
+    : "";
+  const template = AUTHORITY_APPROVAL_TEMPLATE.replace("{{resubmission_note}}", resubmissionNote);
   return {
-    subject: `Approval Required: ${data.documentLabel} ${data.displayNo}`,
-    html: replaceTokens(AUTHORITY_APPROVAL_TEMPLATE, {
+    subject: `${revisionCount >= 1 ? `[Resubmission — Revision ${revisionCount}] ` : ""}Approval Required: ${data.documentLabel} ${data.displayNo}`,
+    html: replaceTokens(template, {
       display_no: data.displayNo, document_label: data.documentLabel, authority_name: data.authorityName,
       submitted_by_name: data.submittedByName, payee_name: data.payeeName,
       amount: data.amount, nature_of_expenditure: data.natureOfExpenditure,
       bill_reference: data.billReference, payment_mode: data.paymentMode,
-      form_date: data.formDate, approval_link: data.approvalLink,
+      form_date: formatDateOnly(data.formDate), approval_link: data.approvalLink,
     }),
   };
 }
@@ -124,7 +136,7 @@ export function renderVerifiedEmail(data: VerifiedEmailData) {
     html: replaceTokens(VERIFIED_TEMPLATE, {
       display_no: data.displayNo, submitted_by_name: data.submittedByName,
       verified_by: data.verifiedBy, document_label: data.documentLabel,
-      payee_name: data.payeeName, amount: data.amount, form_date: data.formDate,
+      payee_name: data.payeeName, amount: data.amount, form_date: formatDateOnly(data.formDate),
     }),
   };
 }
@@ -148,7 +160,7 @@ export function renderPaymentDoneEmail(data: PaymentDoneEmailData) {
     html: replaceTokens(PAYMENT_DONE_TEMPLATE, {
       display_no: data.displayNo, submitted_by_name: data.submittedByName,
       document_label: data.documentLabel, payee_name: data.payeeName,
-      amount: data.amount, form_date: data.formDate,
+      amount: data.amount, form_date: formatDateOnly(data.formDate),
     }),
   };
 }
@@ -197,7 +209,7 @@ export function renderPaymentEntryEmail(data: PaymentEntryEmailData) {
       total_paid: data.totalPaid,
       bill_passed_for: data.billPassedFor,
       remaining: data.remaining,
-      form_date: data.formDate,
+      form_date: formatDateOnly(data.formDate),
     }),
   };
 }
@@ -218,7 +230,7 @@ export function renderSubmissionConfirmationEmail(data: SubmissionConfirmationEm
     html: replaceTokens(template, {
       display_no: data.displayNo, document_label: data.documentLabel, authority_name: data.authorityName,
       submitted_by_name: data.submittedByName, payee_name: data.payeeName,
-      amount: data.amount, payment_mode: data.paymentMode, form_date: data.formDate,
+      amount: data.amount, payment_mode: data.paymentMode, form_date: formatDateOnly(data.formDate),
       payment_advice_pdf_link: data.paymentAdvicePdfLink,
       cash_voucher_pdf_link: data.cashVoucherPdfLink,
     }),

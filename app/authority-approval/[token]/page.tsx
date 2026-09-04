@@ -7,13 +7,12 @@ import { authorityActionError } from "@/lib/advice/authority-token";
 import { identityCookieName } from "@/lib/advice/authority-identity";
 import { displayNoFor, documentLabelFor } from "@/lib/advice/document-identity";
 import { PaymentMode } from "@/lib/validation/payment-advice";
+import { ResubmissionNotice } from "@/components/authority/ResubmissionNotice";
+import { formatDateOnly } from "@/lib/date-time";
 
 export const dynamic = "force-dynamic";
 
-function formatDate(value: string) {
-  const [y, m, d] = value.split("-");
-  return `${d}/${m}/${y}`;
-}
+const formatDate = formatDateOnly;
 
 export default async function AuthorityApprovalPage({
   params,
@@ -95,6 +94,11 @@ export default async function AuthorityApprovalPage({
           and approve or send it back with remarks.
         </p>
       </header>
+
+      <ResubmissionNotice
+        revisionCount={advice.revisionCount}
+        previousRemarks={advice.adminRemarks}
+      />
 
       <AuthorityApprovalView
         token={token}

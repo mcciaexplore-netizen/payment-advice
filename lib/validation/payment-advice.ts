@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { todayInIst } from "@/lib/date-time";
 
 const GSTIN_RE = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
 const IFSC_RE = /^[A-Z]{4}0[A-Z0-9]{6}$/;
@@ -23,9 +24,7 @@ function pastOrTodayDateString(message: string) {
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/, "Enter a valid date")
     .refine((v) => {
-      const today = new Date();
-      today.setHours(23, 59, 59, 999);
-      return new Date(v) <= today;
+      return v <= todayInIst();
     }, message);
 }
 
@@ -64,18 +63,17 @@ function optionalNumber(message: string) {
  * only conditionally required (so can't use a Zod-level `.refine()` on the
  * base schema — the check has to run inside superRefine instead). */
 function isFutureDateString(value: string): boolean {
-  const today = new Date();
-  today.setHours(23, 59, 59, 999);
-  return new Date(value) > today;
+  return value > todayInIst();
 }
 
-export const docTypeSchema = z.enum([
+export const DOC_TYPES = [
   "TAX_INVOICE",
   "APPROVAL_BUDGET",
   "PURCHASE_ORDER",
   "DELIVERY_CHALLAN",
   "OTHER",
-]);
+] as const;
+export const docTypeSchema = z.enum(DOC_TYPES);
 export type DocType = z.infer<typeof docTypeSchema>;
 
 export const paymentModeSchema = z.enum(["NEFT", "CASH"]);

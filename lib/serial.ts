@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import type { Database } from "./db";
 import { serialCounters } from "./db/schema";
+import { istCalendarParts } from "./date-time";
 
 // Accepts either the top-level db handle or a transaction callback's `tx`
 // argument — both expose `.execute()`, which is all this module needs.
@@ -15,9 +16,8 @@ const ADVANCE_SERIES = "ADVANCE";
  * Jan-Mar belong to the FY that started the previous calendar year.
  */
 export function financialYearFor(date: Date): string {
-  const year = date.getFullYear();
-  const month = date.getMonth(); // 0-indexed; 0 = Jan, 3 = Apr
-  const startYear = month >= 3 ? year : year - 1;
+  const { year, month } = istCalendarParts(date);
+  const startYear = month >= 4 ? year : year - 1;
   const endYearShort = String((startYear + 1) % 100).padStart(2, "0");
   return `${startYear}-${endYearShort}`;
 }

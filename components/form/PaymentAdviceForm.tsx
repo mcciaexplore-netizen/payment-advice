@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useFieldArray, useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { format } from "date-fns";
+import { upload } from "@vercel/blob/client";
 import { Field } from "@/components/ui/Field";
 import { Input, Textarea } from "@/components/ui/Input";
 import { VendorTypeahead, VendorSearchResult } from "@/components/form/VendorTypeahead";
@@ -15,6 +15,12 @@ import { LineItemsField } from "@/components/form/LineItemsField";
 import { storeSubmissionSummary } from "@/lib/submission-summary";
 import { resolveAutoFillEmail } from "@/lib/form/staff-email-autofill";
 import { resolveSourceFieldAutoFill } from "@/lib/form/source-field-autofill";
+import {
+  safeUploadFileName,
+  type UploadedAttachment,
+} from "@/lib/attachments/client-upload";
+import { ATTACHMENT_SIZE_ERROR, readSubmitResponse } from "@/lib/form/submit-response";
+import { todayInIst } from "@/lib/date-time";
 import {
   paymentAdviceFormSchema,
   PaymentAdviceFormInput,
@@ -29,7 +35,7 @@ type RecommendingAuthority = {
   authorityName: string;
 };
 
-const today = format(new Date(), "yyyy-MM-dd");
+const today = todayInIst();
 
 export function PaymentAdviceForm({
   mode,
@@ -57,6 +63,7 @@ export function PaymentAdviceForm({
   const isAdvance = mode === "advance";
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
+  const [uploadingAttachments, setUploadingAttachments] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   const [taxInvoice, setTaxInvoice] = useState<File[]>([]);
@@ -134,6 +141,20 @@ export function PaymentAdviceForm({
   );
   const previousPendingAdvanceAmount =
     useWatch({ control, name: "previousPendingAdvanceAmount" }) ?? 0;
+  const attachmentGroups = useMemo(
+    () => [
+      { docType: "TAX_INVOICE" as const, files: taxInvoice },
+      { docType: "APPROVAL_BUDGET" as const, files: approvalBudget },
+      { docType: "PURCHASE_ORDER" as const, files: purchaseOrder },
+      { docType: "DELIVERY_CHALLAN" as const, files: deliveryChallanFile },
+      { docType: "OTHER" as const, files: otherFiles },
+    ],
+    [taxInvoice, approvalBudget, purchaseOrder, deliveryChallanFile, otherFiles],
+  );
+  const attachmentTotalBytes = attachmentGroups.reduce(
+    (total, group) => total + group.files.reduce((sum, file) => sum + file.size, 0),
+    0,
+  );
 
   useEffect(() => {
     if (isAdvance || paymentMode !== "CASH") return;
@@ -284,27 +305,52 @@ export function PaymentAdviceForm({
     formData.append("advanceParticulars", JSON.stringify(values.advanceParticulars));
     if (editToken) formData.append("editToken", editToken);
 
-    taxInvoice.forEach((f) => formData.append("attachment_TAX_INVOICE", f));
-    approvalBudget.forEach((f) => formData.append("attachment_APPROVAL_BUDGET", f));
-    purchaseOrder.forEach((f) => formData.append("attachment_PURCHASE_ORDER", f));
-    deliveryChallanFile.forEach((f) => formData.append("attachment_DELIVERY_CHALLAN", f));
-    otherFiles.forEach((f) => formData.append("attachment_OTHER", f));
-
     setSubmitting(true);
+    const uploadedAttachments: UploadedAttachment[] = [];
     try {
+      setUploadingAttachments(true);
+      const uploadBatchId = crypto.randomUUID();
+      for (const { docType, files } of attachmentGroups) {
+        for (const file of files) {
+          const blob = await upload(
+            `pending-uploads/${uploadBatchId}/${docType}-${safeUploadFileName(file.name)}`,
+            file,
+            {
+              access: "private",
+              handleUploadUrl: "/api/attachments/upload",
+              multipart: file.size > 4 * 1024 * 1024,
+            },
+          );
+          uploadedAttachments.push({
+            docType,
+            fileName: file.name,
+            blobPathname: blob.pathname,
+            blobUrl: blob.url,
+            sizeBytes: file.size,
+          });
+        }
+      }
+      setUploadingAttachments(false);
+      formData.append("uploadedAttachments", JSON.stringify(uploadedAttachments));
+
       const res = await fetch(editToken ? `/api/edit/${editToken}` : "/api/submit", {
         method: "POST",
         body: formData,
       });
-      const data = await res.json();
+      const { data, sizeError } = await readSubmitResponse(res);
       if (!res.ok) {
-        setSubmitError(data.error ?? "Something went wrong. Please try again.");
+        await cleanupPendingUploads(uploadedAttachments);
+        setSubmitError(
+          sizeError
+            ? ATTACHMENT_SIZE_ERROR
+            : data.error ?? "Something went wrong while submitting. Please try again.",
+        );
         window.scrollTo({ top: 0, behavior: "smooth" });
         return;
       }
       storeSubmissionSummary({
-        id: data.id,
-        serialNo: data.serialNo,
+        id: data.id!,
+        serialNo: data.serialNo!,
         cashVoucherNo: data.cashVoucherNo ?? null,
         isAdvance: values.isAdvance,
         advanceNo: data.advanceNo ?? null,
@@ -319,14 +365,21 @@ export function PaymentAdviceForm({
           : values.paymentMode === "CASH"
             ? values.cashVoucherItems.map((item) => item.description).join("; ")
             : values.natureOfExpenditure ?? "",
-        authorityToken: data.authorityToken,
-        authorityName: data.authorityName,
+        authorityToken: data.authorityToken!,
+        authorityName: data.authorityName!,
       });
-      router.push(`/submitted/${encodeURIComponent(data.serialNo)}`);
-    } catch {
-      setSubmitError("Could not reach the server. Please check your connection and try again.");
+      router.push(`/submitted/${encodeURIComponent(data.serialNo!)}`);
+    } catch (error) {
+      await cleanupPendingUploads(uploadedAttachments);
+      const message = error instanceof Error ? error.message : "";
+      setSubmitError(
+        /too large|size|413|maximum/i.test(message)
+          ? ATTACHMENT_SIZE_ERROR
+          : "Could not upload or submit your documents. Please check your connection and try again.",
+      );
       window.scrollTo({ top: 0, behavior: "smooth" });
     } finally {
+      setUploadingAttachments(false);
       setSubmitting(false);
     }
   }
@@ -701,6 +754,9 @@ export function PaymentAdviceForm({
             existingFileNames={existingAttachments?.OTHER}
           />
         </div>
+        <p className="text-sm font-medium text-[#0b1f3a]" aria-live="polite">
+          {(attachmentTotalBytes / 1024 / 1024).toFixed(2)} MB of new attachments added
+        </p>
       </Section>
 
       <div className="flex justify-end border-t border-gray-200 pt-6">
@@ -710,7 +766,9 @@ export function PaymentAdviceForm({
           className="rounded-md bg-[#0b1f3a] px-6 py-3 text-base font-medium text-white shadow-sm transition hover:bg-[#0b1f3a]/90 disabled:opacity-50"
         >
           {submitting
-            ? "Submitting…"
+            ? uploadingAttachments
+              ? "Uploading attachments…"
+              : "Submitting…"
             : editToken
               ? "Resubmit"
               : isAdvance
@@ -720,6 +778,15 @@ export function PaymentAdviceForm({
       </div>
     </form>
   );
+}
+
+async function cleanupPendingUploads(uploads: UploadedAttachment[]) {
+  if (uploads.length === 0) return;
+  await fetch("/api/attachments/cleanup", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ pathnames: uploads.map((upload) => upload.blobPathname) }),
+  }).catch(() => undefined);
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {

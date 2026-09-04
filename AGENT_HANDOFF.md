@@ -47,7 +47,7 @@ Design system: Navy `#0B1F3A`, Forest green `#2E8B57`, Amber `#E8A33D`. Headings
 
 ## 3. Current State (update this every session)
 
-**Last updated:** 3 September 2026, by Codex (awaiting confirmation of predictable passwords for new Authority batch)
+**Last updated:** 4 September 2026, by Codex (applied confirmed first-name Authority passwords)
 
 ### Shipped — Phase 1 baseline (Claude Code)
 - Public form `/` (no login): submitter, payee (vendor typeahead), bill/reference, payment mode (NEFT/Cash), enclosures, mandatory Tax Invoice + Approval/Budget PDF attachments
@@ -661,7 +661,7 @@ Pure simplification, requested because the preset-category-dropdown + conditiona
 - `admin_users.role` now accepts `AUTHORITY`; new nullable FK `recommending_authority_id` links only those accounts to `recommending_authorities` (migration `0014_easy_magdalene.sql`, applied live). JWT payloads carry the linked ID and validate that AUTHORITY sessions have it while Finance sessions do not. Proxy routing strictly separates `/admin*` from `/authority*`.
 - New `/authority/login` and `/authority` dashboard use the existing email+bcrypt+JWT pattern. Default view shows only the logged-in authority's currently pending submissions; History is read-only and shows their approved/sent-back decisions. Both queue queries and every action/attachment endpoint scope by the session's linked authority ID. No Finance pipeline states are shown.
 - Extracted `performAuthorityApproval()` / `performAuthorityRejection()` into `lib/advice/authority-actions.ts`; both the old token routes and new authenticated routes call these same functions. The `/authority-approval/[token]` route, token behavior, and email identity-confirmation gate were not removed or bypassed.
-- `scripts/seed-admin-users.ts` now idempotently covers all three Finance accounts plus all **12 active AUTHORITY accounts**. Every authority name must exactly match one existing `recommending_authorities` row; matching active accounts are skipped without changing passwords, conflicting rows abort, and passwords are generated/printed only for newly inserted accounts. Current AUTHORITY accounts (all active and uniquely linked): ANIRUDDHA BRAHMA, Chintamani Shrotri, DG, Ganesh Mate, MANGESH KULKARNI, Neeraj Thakur, Nikhil Jain, PRASHANT JOGALEKAR, RAJNIKANT  GAIKWAD, Satavisha Natu, SHANTANU JAGTAP, and SUDHANWA KOPARDEKAR. The exact inactive `AI Studio` authority remains deliberately excluded and has no login.
+- `scripts/seed-admin-users.ts` now idempotently covers all three Finance accounts plus all **12 active AUTHORITY accounts**. Every authority name must exactly match one existing `recommending_authorities` row; matching active accounts are skipped without changing passwords, conflicting rows abort, and passwords are generated/printed only for newly inserted accounts. The eight-account 2026 expansion batch deliberately uses lowercase first name + `@2026` for easy initial distribution; the three Finance and original four Authority accounts retain random initial-password generation. Current AUTHORITY accounts (all active and uniquely linked): ANIRUDDHA BRAHMA, Chintamani Shrotri, DG, Ganesh Mate, MANGESH KULKARNI, Neeraj Thakur, Nikhil Jain, PRASHANT JOGALEKAR, RAJNIKANT  GAIKWAD, Satavisha Natu, SHANTANU JAGTAP, and SUDHANWA KOPARDEKAR. The exact inactive `AI Studio` authority remains deliberately excluded and has no login.
 - Live verification: two temporary accounts linked to Aniruddha and Chintamani proved no cross-visibility. Real pending `MCCIA/2026-27/0046` appeared only for Aniruddha, was approved via the authenticated route, disappeared from Pending, appeared in History, and its unchanged token URL still returned 200 with "You already approved this." Temporary accounts were deleted afterward. TypeScript, ESLint, 279 tests (7 pre-existing skipped), and production build pass.
 
 ### Shipped — Change Password, self-service for any admin_users account (Claude Code, 2026-09-03)
@@ -734,8 +734,11 @@ Requested because every `admin_users` password (Sunil's, Abha's, the ALL account
 
 Status legend: 🔴 unverified / high risk · 🟡 unverified / lower risk · 🟢 verified
 
+- 🟢 **Independent reference series grouped in Admin submissions queue 2026-09-04:** `/admin/submissions` now orders by business document type first (Payment Advice → Cash Voucher → Advance Payment), then sorts within each group using that type's actual displayed reference (`serial_no`, `cash_voucher_no`, or `advance_no`) rather than applying `serial_no` blindly across all types. Group headers make the separation explicit; the lightweight per-row type badge remains. This grouping stays in force with other column sorts, which sort within each type instead of mixing independent number series. Sent Back retains oldest-first ordering within each type group. Authenticated rendered-HTML verification using the real PAYMENT_ADVICE account confirmed MCCIA/2026-27/0009, /0008, /0007 are contiguous under Payment Advice and ADV/MCCIA/2026-27/0001 begins only under the later Advance Payment header.
+- 🟢 **IST date handling + admin submission-type badges completed 2026-09-04:** all user-facing timestamp formatting now goes through shared `lib/date-time.ts` helpers with explicit `timeZone: "Asia/Kolkata"`; PostgreSQL `date` fields remain calendar-only and are never timezone-shifted. This covers Admin and Authority queues/details/actions, authority token review, PDF Submitted/Approved/Verified stamps, and all notification-email form dates. The public form's default/max date and date-validation “today” use the IST calendar day. Admin analytics' current FY and weekly buckets also use IST calendar keys. Most critically, `financialYearFor()` now derives calendar year/month in IST rather than from the server's local getters: executable boundary verification confirms `2026-03-31T19:00:00Z` = `01/04/2026, 12:30 am` IST → FY `2026-27`, while one millisecond before IST midnight remains `2025-26`. No stored dates or historical rows were rewritten. The `/admin/submissions` reference cell now includes a subtle `Payment Advice` / `Cash Voucher` / `Advance Payment` badge derived from `paymentMode + isAdvance`; a read-only authenticated render against real production rows confirmed all three labels alongside real references. Browser-control was unavailable, so no visual screenshot is claimed; the real rendered HTML, live production data mapping, boundary execution, tests, and build were verified.
+- 🟢 **Production upload-size mismatch resolved 2026-09-04:** the real Cash Voucher failure around 13:16 IST was caused by all PDFs travelling through `/api/submit` despite Vercel's 4.5 MB Function request limit. `PaymentAdviceForm` now uploads every PDF directly from the browser with Vercel Blob's short-lived client-token flow (`/api/attachments/upload`), then sends only verified pathname/URL/name/size/doc-type metadata to `/api/submit` or `/api/edit/[token]`. The token itself enforces private PDF-only uploads and the existing 10 MB per-file maximum; final routes independently `head` each Blob, compare metadata, and read its `%PDF-` signature before saving. The shared component covers regular NEFT Payment Advice, Cash Voucher, and `/advance`; the edit route uses the same contract while retaining untouched existing files and replacing only newly uploaded document types. Serial allocation timing is unchanged: pre-submit files use random `pending-uploads/...` paths, which is safe because every attachment reader uses the DB-stored pathname. UI shows a running MB total and an upload phase; 413/non-JSON responses now produce an accurate size message. Partial client uploads are cleaned up when final submission fails, and server-side failures retain the existing cleanup. Live-tested the real token exchange/direct Blob transfer with two 3 MB PDF payloads (6,291,456 bytes combined, above the old ceiling); both objects were deleted and verified absent afterward. No production advice or serial was consumed. Browser-control was unavailable, so interactive visual click-through remains unclaimed; unit/integration coverage plus full tsc/lint/tests/build passed.
 - 🟢 **Authority Dashboard account expansion completed 2026-09-03:** the human explicitly included DG and confirmed `engineer@mcciapune.com` for RAJNIKANT  GAIKWAD. Eight missing accounts were seeded, producing 12 active, uniquely linked AUTHORITY accounts in total; exact inactive `AI Studio` remains excluded. Live production login/dashboard checks passed for new Ganesh Mate and Nikhil Jain accounts. Both rendered their own identities and empty scoped queues and neither exposed the real `MCCIA/2026-27/0001` submission assigned to original authority Chintamani Shrotri. The original 3 Finance + 4 Authority accounts were explicitly skipped by the seed, not updated. No test submission was created.
-- 🟡 **Predictable initial passwords for the eight-account expansion batch await human confirmation:** those accounts already exist with random generated passwords from the completed expansion above, so the next operation will reset only their hashes after explicit confirmation, not create duplicate accounts. Proposed rule is the exact authority full name lowercased with every space removed, then `@2026`; all eight names reduce cleanly. No forced-change/login redirect will be added. Exact proposed values were shown to the human in the 2026-09-03 checkpoint response; do not write them into this tracked handoff.
+- 🟢 **Predictable initial passwords applied to the eight-account expansion batch 2026-09-04:** after reviewing and explicitly confirming every generated value (including literal `dg@2026` for role-label DG), the human chose lowercase first name + `@2026` deliberately for ease of distribution. Only those eight existing password hashes were reset, together in one transaction; no duplicate accounts were created. A pre-reset hash backup is retained under `.local-backups/authority-password-reset-2026-09-04T06-50-44.541Z.json` (gitignored). All eight final bcrypt hashes were verified against the approved values. No forced-change flag, login redirect, or blocking behavior exists. Ganesh Mate live-tested normal login/dashboard access, voluntarily changed his password through the shared Change Password flow, authenticated with the replacement, then changed it back; his approved initial password was re-verified afterward.
 - 🟢 **Change Password (self-service, any `admin_users` role) shipped and live-verified end-to-end 2026-09-03 by Claude Code** — see the "Shipped" entry above for the full detail: the shared `/api/account/change-password` route, the `proxy.ts` addition that authorizes it for any signed-in role, the account-menu dropdown now in both Finance Admin's and Authority's headers, and the live test that changed a real throwaway account's password, confirmed the session stayed valid, then confirmed via logout/login that the old password stopped working and the new one worked. Whichever of the four real AUTHORITY accounts get seeded per the item just above will have Change Password available immediately — no further wiring needed once they exist.
 - 🟡 **Change Password has no "forgot password" / admin-reset path** — if someone forgets their current password, there is still no self-service recovery; the only fix is a human directly updating `password_hash` in the DB, or (for a non-critical account) deactivating and re-seeding. Not built — out of scope for what was asked (self-service change while already logged in), flagged as a natural follow-up.
 
@@ -855,6 +858,21 @@ Append one entry per session, newest at the top. Keep entries short — this is 
 (Note: this header was accidentally dropped in an earlier edit and restored 2026-08-01 by Claude Code — no content was lost, only the heading line.)
 
 ```
+2026-09-04 — Codex — Applied the explicitly confirmed lowercase-first-name +
+@2026 passwords to the 8 Authority expansion accounts, hashing all values with
+the existing bcrypt helper and updating them in one transaction after a local
+gitignored hash backup. All 8 final hashes verified. Ganesh live-login showed
+normal dashboard access/no forced redirect; voluntary Change Password worked,
+and the approved initial password was restored and re-verified. Seed behavior
+now preserves this deliberate distribution rule for future creation. tsc,
+ESLint, 305 tests (7 skipped), and production build clean.
+
+2026-09-04 — Codex — Recomputed, but did not apply, the Authority expansion
+batch's predictable passwords after the human revised the rule from full name
+to lowercase first name + @2026. Seven personal names are unambiguous; DG has
+no first name, so the displayed final list explicitly proposes literal dg and
+awaits confirmation. No live passwords or accounts were changed.
+
 2026-09-03 — Codex — Prepared, but did not apply, the requested predictable
 password pattern for the eight newly added Authority accounts. Confirmed the
 prior audit is final: DG included, AI Studio excluded, engineer@ confirmed for
@@ -2029,5 +2047,65 @@ production rows were left untouched, not deleted. Committed and pushed.
 | Rs./Ps. columns, Total | Rs./Ps. columns, Total | kept, Total now auto-summed from line items |
 
 ---
+
+2026-09-04 — Codex — Grouped the three independent reference-number series
+throughout `/admin/submissions`. Added a stable type-first SQL ordering and
+type-aware displayed-reference expression, so Payment Advice (`serial_no`),
+Cash Voucher (`cash_voucher_no`), and Advance Payment (`advance_no`) are each
+contiguous and sort internally without being compared as one series. Added
+lightweight group-header rows while retaining per-reference badges. Other
+column sorts now operate within the stable groups; Sent Back remains
+oldest-first within each group. Authenticated local rendering with the real
+PAYMENT_ADVICE account confirmed /0009 → /0008 → /0007 together, followed by
+ADV/.../0001 only under its Advance Payment group. Tests/build clean.
+
+2026-09-04 — Codex — Standardized all displayed/business-calendar dates on
+India Standard Time and added submission-type badges to the Admin queue.
+Introduced `lib/date-time.ts` as the single `Intl`/`Asia/Kolkata` source for
+IST calendar parts, date/date-time display, and date-only calendar helpers.
+Replaced environment-dependent formatting across Admin/Authority lists,
+detail/action views, token approval, both PDF templates, all email templates,
+the public form default/max date, validation, Admin analytics, and serial FY
+selection. PostgreSQL date-only values stay date-only; no historical data was
+updated. Exact boundary test: `2026-03-31T19:00:00Z` renders as 01/04/2026
+00:30 IST and maps to FY 2026-27; the instant immediately before IST midnight
+maps to 2025-26. `/admin/submissions` now renders a subtle Payment Advice /
+Cash Voucher / Advance Payment badge below each display reference. A read-only
+authenticated local render backed by real production rows confirmed all three
+labels against MCCIA/2026-27/0008, CASH/MCCIA/2026-27/0004, and
+ADV/MCCIA/2026-27/0001. Browser control was unavailable, so no screenshot is
+claimed. TypeScript, ESLint, 322 tests (7 skipped), and build clean.
+
+2026-09-04 — Codex — Resolved the 4.5 MB production attachment-upload
+incident using Vercel's documented client-upload architecture. Added the
+short-lived `/api/attachments/upload` token route (private PDF only, 10 MB
+per file), browser-direct uploads in the one shared form used by regular
+Payment Advice, Cash Voucher, and Advance Payment, and metadata-only final
+requests for both `/api/submit` and `/api/edit/[token]`. Final routes verify
+each stored Blob's pathname, URL, size, content type, and `%PDF-` signature;
+resubmission still retains old files unless their document type is replaced.
+Added running attachment-total UI, distinct upload progress copy, non-JSON
+response parsing, explicit 413 messaging, and pending-upload cleanup. Serial
+allocation was not moved or otherwise changed; pre-submit objects use random
+`pending-uploads/...` paths because attachment readers already rely on the
+DB pathname. Live real-Blob test uploaded two 3 MB PDFs (6,291,456 combined),
+then deleted and verified both absent; no advice row or serial was consumed.
+Browser-control was unavailable, so no visual click-through is claimed.
+TypeScript, ESLint, 318 tests (7 skipped), and production build clean.
+
+2026-09-04 — Codex — Diagnosed the production Cash Voucher submission
+failure reported at approximately 13:16 IST without creating test data or
+mutating production. Vercel runtime logs showed no `/api/submit` invocation
+or 4xx/5xx function error around the attempt; Neon was reachable and had a
+successful later write. Reconciled 3 advice rows, 7 attachment rows, 7 Blob
+objects, audit history, and serial counters: the failed attempt left no DB
+row, Blob, audit event, or counter gap. Code/platform inspection identified
+the unresolved 10-MB-per-file UI validation versus Vercel's 4.5-MB total
+Function request-body limit; requests exceeding that cap are rejected before
+application logging or serial allocation. The successful Cash submission's
+two saved attachment rows total only 272,406 bytes, consistent with small
+payloads working. Excel export open decisions are reporting-only and do not
+touch submission. No fix was made during this diagnostic-only session; the
+production risk is recorded in §4.
 
 *End of handoff file. Both agents: read §0 again before starting work.*

@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gt, gte, ilike, isNotNull, isNull, lte, or, SQL } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, ilike, isNotNull, isNull, lte, or, sql, SQL } from "drizzle-orm";
 import { paymentAdvices } from "@/lib/db/schema";
 import { statusSchema, paymentModeSchema } from "@/lib/validation/payment-advice";
 
@@ -92,6 +92,29 @@ export function isSortColumn(value: string | null | undefined): value is SortCol
 export function buildOrderBy(sort?: string, dir?: string) {
   const column = isSortColumn(sort) ? SORTABLE_COLUMNS[sort] : paymentAdvices.createdAt;
   return dir === "asc" ? asc(column) : desc(column);
+}
+
+/** Sent Back is an operational follow-up queue, so its useful default is
+ * oldest send-back first. Explicit user-selected column/direction sorting
+ * still wins, exactly as it does in every other tab. */
+export function buildAdminListOrderBy(tab: AdminTab, sort?: string, dir?: string) {
+  const typeGroup = sql<number>`case
+    when ${paymentAdvices.isAdvance} = true then 3
+    when ${paymentAdvices.paymentMode} = 'CASH' then 2
+    else 1
+  end`;
+  const displayedReference = sql<string>`case
+    when ${paymentAdvices.isAdvance} = true then coalesce(${paymentAdvices.advanceNo}, ${paymentAdvices.serialNo})
+    when ${paymentAdvices.paymentMode} = 'CASH' then coalesce(${paymentAdvices.cashVoucherNo}, ${paymentAdvices.serialNo})
+    else ${paymentAdvices.serialNo}
+  end`;
+  const direction = dir === "asc" ? asc : desc;
+  const withinGroup = sort === "serialNo"
+    ? direction(displayedReference)
+    : tab === "sent_back" && !isSortColumn(sort)
+      ? asc(paymentAdvices.sentBackAt)
+      : buildOrderBy(sort, dir);
+  return [asc(typeGroup), withinGroup, desc(paymentAdvices.createdAt)] as const;
 }
 
 export const ADMIN_LIST_PAGE_SIZE = 25;

@@ -14,9 +14,11 @@ import { StatusChip } from "@/components/admin/StatusChip";
 import { AdviceActions } from "@/components/admin/AdviceActions";
 import { BackLink } from "@/components/admin/BackLink";
 import { NameCorrectionAction } from "@/components/admin/NameCorrectionAction";
+import { SentBackIndicators } from "@/components/admin/SentBackIndicators";
 import { PaymentMode, Status, SANCTIONER_NAMES } from "@/lib/validation/payment-advice";
 import { getAdminSession } from "@/lib/admin-session";
 import { billPassedForLabelFor, displayNoFor, documentLabelFor } from "@/lib/advice/document-identity";
+import { formatDateOnly, formatIstDateTime } from "@/lib/date-time";
 
 export const dynamic = "force-dynamic";
 
@@ -28,22 +30,8 @@ const DOC_TYPE_LABELS: Record<string, string> = {
   OTHER: "Other",
 };
 
-function formatDate(value: string | null) {
-  if (!value) return "—";
-  const [y, m, d] = value.split("-");
-  return `${d}/${m}/${y}`;
-}
-
-function formatDateTime(value: Date | null) {
-  if (!value) return "—";
-  return value.toLocaleString("en-IN", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
+const formatDate = formatDateOnly;
+const formatDateTime = formatIstDateTime;
 
 function formatAmount(value: string | null) {
   if (value === null) return "—";
@@ -363,10 +351,15 @@ export default async function AdviceDetailPage({
         </div>
 
         <div className="flex flex-col gap-4">
-          {advice.status === "SENT_BACK" && advice.adminRemarks ? (
+          {advice.status === "SENT_BACK" ? (
             <div className="rounded-md border border-[#e8a33d]/40 bg-[#e8a33d]/10 p-4 text-sm text-[#8a5a12]">
-              <p className="font-medium">Admin Remarks</p>
-              <p className="mt-1">{advice.adminRemarks}</p>
+              <SentBackIndicators sentBackAt={advice.sentBackAt} editTokenExpiresAt={advice.editTokenExpiresAt} />
+              {advice.adminRemarks ? (
+                <>
+                  <p className="mt-3 font-medium">Send-back remarks</p>
+                  <p className="mt-1 whitespace-pre-wrap">{advice.adminRemarks}</p>
+                </>
+              ) : null}
             </div>
           ) : null}
           <AdviceActions

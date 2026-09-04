@@ -10,8 +10,10 @@
  * written in (mcciaexplore@gmail.com). Authority entries must exactly match
  * one existing recommending_authorities row before any account is inserted.
  *
- * Generates a strong random password per account, prints each one ONCE to
- * the console and to a local, gitignored report file
+ * Generates a strong random password per account except for the confirmed
+ * 2026 Authority expansion batch, whose deliberately distribution-friendly
+ * initial password is lowercase first name + "@2026". Prints each initial
+ * password ONCE to the console and to a local, gitignored report file
  * (scripts/admin-users-report.md — never committed, delete after copying
  * the passwords out) — only the bcrypt hash is ever written to the DB.
  * Re-running skips an exact matching active account without changing its
@@ -31,7 +33,13 @@ import { hashPassword } from "../lib/admin-users";
 import { ADMIN_ROLES, AdminRole } from "../lib/auth";
 import { inArray } from "drizzle-orm";
 
-type SeedAccount = { fullName: string; email: string; role: AdminRole; authorityName?: string };
+type SeedAccount = {
+  fullName: string;
+  email: string;
+  role: AdminRole;
+  authorityName?: string;
+  predictableInitialPassword?: boolean;
+};
 
 const ACCOUNTS: SeedAccount[] = [
   { fullName: "Sunil Salunke", email: "sunils@mcciapune.com", role: "PAYMENT_ADVICE" },
@@ -41,14 +49,14 @@ const ACCOUNTS: SeedAccount[] = [
   { fullName: "Chintamani Shrotri", email: "chintamanis@mcciapune.com", role: "AUTHORITY", authorityName: "Chintamani Shrotri" },
   { fullName: "PRASHANT JOGALEKAR", email: "prashantj@mcciapune.com", role: "AUTHORITY", authorityName: "PRASHANT JOGALEKAR" },
   { fullName: "SHANTANU JAGTAP", email: "shantanuj@mcciapune.com", role: "AUTHORITY", authorityName: "SHANTANU JAGTAP" },
-  { fullName: "DG", email: "dg@mcciapune.com", role: "AUTHORITY", authorityName: "DG" },
-  { fullName: "Ganesh Mate", email: "ganeshm@mcciapune.com", role: "AUTHORITY", authorityName: "Ganesh Mate" },
-  { fullName: "MANGESH KULKARNI", email: "mangeshk@mcciapune.com", role: "AUTHORITY", authorityName: "MANGESH KULKARNI" },
-  { fullName: "Neeraj Thakur", email: "neerajt@mcciapune.com", role: "AUTHORITY", authorityName: "Neeraj Thakur" },
-  { fullName: "Nikhil Jain", email: "nikhilj@mcciapune.com", role: "AUTHORITY", authorityName: "Nikhil Jain" },
-  { fullName: "RAJNIKANT  GAIKWAD", email: "engineer@mcciapune.com", role: "AUTHORITY", authorityName: "RAJNIKANT  GAIKWAD" },
-  { fullName: "SUDHANWA KOPARDEKAR", email: "sudhanwak@mcciapune.com", role: "AUTHORITY", authorityName: "SUDHANWA KOPARDEKAR" },
-  { fullName: "Satavisha Natu", email: "satavishan@mcciapune.com", role: "AUTHORITY", authorityName: "Satavisha Natu" },
+  { fullName: "DG", email: "dg@mcciapune.com", role: "AUTHORITY", authorityName: "DG", predictableInitialPassword: true },
+  { fullName: "Ganesh Mate", email: "ganeshm@mcciapune.com", role: "AUTHORITY", authorityName: "Ganesh Mate", predictableInitialPassword: true },
+  { fullName: "MANGESH KULKARNI", email: "mangeshk@mcciapune.com", role: "AUTHORITY", authorityName: "MANGESH KULKARNI", predictableInitialPassword: true },
+  { fullName: "Neeraj Thakur", email: "neerajt@mcciapune.com", role: "AUTHORITY", authorityName: "Neeraj Thakur", predictableInitialPassword: true },
+  { fullName: "Nikhil Jain", email: "nikhilj@mcciapune.com", role: "AUTHORITY", authorityName: "Nikhil Jain", predictableInitialPassword: true },
+  { fullName: "RAJNIKANT  GAIKWAD", email: "engineer@mcciapune.com", role: "AUTHORITY", authorityName: "RAJNIKANT  GAIKWAD", predictableInitialPassword: true },
+  { fullName: "SUDHANWA KOPARDEKAR", email: "sudhanwak@mcciapune.com", role: "AUTHORITY", authorityName: "SUDHANWA KOPARDEKAR", predictableInitialPassword: true },
+  { fullName: "Satavisha Natu", email: "satavishan@mcciapune.com", role: "AUTHORITY", authorityName: "Satavisha Natu", predictableInitialPassword: true },
 ];
 
 function generatePassword(): string {
@@ -56,6 +64,15 @@ function generatePassword(): string {
   // shell-unsafe symbols, comfortably high entropy for a human-typed
   // password shared once over a private channel.
   return crypto.randomBytes(20).toString("base64url");
+}
+
+function initialPasswordFor(account: SeedAccount): string {
+  if (!account.predictableInitialPassword) return generatePassword();
+  const firstName = account.fullName.trim().split(/\s+/)[0]?.toLowerCase();
+  if (!firstName || !/^[a-z]+$/.test(firstName)) {
+    throw new Error(`Cannot derive an unambiguous first-name password for "${account.fullName}".`);
+  }
+  return `${firstName}@2026`;
 }
 
 async function main() {
@@ -128,7 +145,7 @@ async function main() {
   const results: { fullName: string; email: string; role: AdminRole; password: string }[] = [];
 
   for (const account of accountsToCreate) {
-    const password = generatePassword();
+    const password = initialPasswordFor(account);
     const passwordHash = await hashPassword(password);
     await db.insert(adminUsers).values({
       fullName: account.fullName,

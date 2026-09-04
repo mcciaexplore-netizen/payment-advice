@@ -6,6 +6,13 @@ import { AdminTab, buildTabCondition } from "@/lib/admin/filters";
 import { db } from "@/lib/db";
 import { paymentAdvices } from "@/lib/db/schema";
 import { financialYearFor } from "@/lib/serial";
+import {
+  addCalendarDays,
+  calendarDayOfWeek,
+  calendarDaysBetween,
+  formatDateOnlyShort,
+  todayInIst,
+} from "@/lib/date-time";
 
 export const dynamic = "force-dynamic";
 
@@ -53,12 +60,10 @@ export default async function AdminDashboardPage() {
   ]);
 
   const now = new Date();
-  const weekStart = new Date(now);
-  weekStart.setHours(0, 0, 0, 0);
-  weekStart.setDate(weekStart.getDate() - weekStart.getDay() - 12 * 7);
+  const today = todayInIst(now);
+  const weekStart = addCalendarDays(today, -calendarDayOfWeek(today) - 12 * 7);
   const weeks = Array.from({ length: 13 }, (_, index) => {
-    const start = new Date(weekStart);
-    start.setDate(start.getDate() + index * 7);
+    const start = addCalendarDays(weekStart, index * 7);
     return { start, count: 0 };
   });
 
@@ -95,7 +100,7 @@ export default async function AdminDashboardPage() {
       approvalCount += 1;
     }
 
-    const weekIndex = Math.floor((row.submittedAt.getTime() - weekStart.getTime()) / (7 * 24 * 60 * 60 * 1000));
+    const weekIndex = Math.floor(calendarDaysBetween(weekStart, todayInIst(row.submittedAt)) / 7);
     if (weekIndex >= 0 && weekIndex < weeks.length) weeks[weekIndex].count += 1;
   }
 
@@ -132,10 +137,10 @@ export default async function AdminDashboardPage() {
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Panel title="Submissions over time" subtitle="Weekly count · last 90 days">
           <div className="flex h-48 items-end gap-2 border-b border-gray-200 pt-6">
-            {weeks.map((week) => <div key={week.start.toISOString()} className="flex min-w-0 flex-1 flex-col items-center justify-end gap-2">
+            {weeks.map((week) => <div key={week.start} className="flex min-w-0 flex-1 flex-col items-center justify-end gap-2">
               <span className="text-xs font-medium text-[#0b1f3a]">{week.count || ""}</span>
               <div className="w-full rounded-t bg-[#2e8b57]" style={{ height: `${Math.max(week.count ? 8 : 2, (week.count / maxWeeklyCount) * 120)}px` }} />
-              <span className="hidden text-[10px] text-gray-500 sm:block">{week.start.toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}</span>
+              <span className="hidden text-[10px] text-gray-500 sm:block">{formatDateOnlyShort(week.start)}</span>
             </div>)}
           </div>
         </Panel>

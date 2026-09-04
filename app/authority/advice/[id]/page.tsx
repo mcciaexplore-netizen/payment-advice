@@ -13,6 +13,8 @@ import {
   recommendingAuthorities,
 } from "@/lib/db/schema";
 import { PaymentMode } from "@/lib/validation/payment-advice";
+import { ResubmissionNotice } from "@/components/authority/ResubmissionNotice";
+import { formatDateOnly, formatIstDate, formatIstDateTime } from "@/lib/date-time";
 
 export const dynamic = "force-dynamic";
 
@@ -26,20 +28,10 @@ const DOC_TYPE_LABELS: Record<string, string> = {
 
 function formatDate(value: string | Date | null) {
   if (!value) return "—";
-  if (value instanceof Date) return value.toLocaleDateString("en-IN");
-  const [year, month, day] = value.split("-");
-  return `${day}/${month}/${year}`;
+  return value instanceof Date ? formatIstDate(value) : formatDateOnly(value);
 }
 
-function formatDateTime(value: Date | null) {
-  return value?.toLocaleString("en-IN", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  }) ?? "—";
-}
+const formatDateTime = formatIstDateTime;
 
 function formatAmount(value: string | null) {
   return value === null ? "—" : `₹ ${Number(value).toLocaleString("en-IN", { minimumFractionDigits: 2 })}`;
@@ -89,6 +81,8 @@ export default async function AuthorityAdviceDetailPage({
         </div>
         <DecisionStatus advice={advice} />
       </header>
+
+      <ResubmissionNotice revisionCount={advice.revisionCount} previousRemarks={advice.adminRemarks} />
 
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
         <div className="flex flex-col gap-8 lg:col-span-2">

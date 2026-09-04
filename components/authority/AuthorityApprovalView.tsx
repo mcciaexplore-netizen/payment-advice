@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { formatIstDate } from "@/lib/date-time";
 
 type ReviewFields = {
   payeeName: string;
@@ -15,11 +16,7 @@ type ReviewFields = {
 type ReviewDoc = { id: string; fileName: string; label: string };
 
 function formatDateTime(iso: string) {
-  return new Date(iso).toLocaleString("en-IN", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  });
+  return formatIstDate(iso);
 }
 
 export function AuthorityApprovalView({

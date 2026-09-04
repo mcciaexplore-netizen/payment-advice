@@ -6,12 +6,13 @@ import { getAdminSession } from "@/lib/admin-session";
 import { displayNoFor } from "@/lib/advice/document-identity";
 import { pipelineStageFor } from "@/lib/advice/pipeline-stage";
 import { PaymentMode } from "@/lib/validation/payment-advice";
+import { formatIstDate } from "@/lib/date-time";
 
 export const dynamic = "force-dynamic";
 type AuthorityView = "pending" | "history" | "my-submissions";
 
 function date(value: Date | string) {
-  return new Date(value).toLocaleDateString("en-IN");
+  return formatIstDate(value);
 }
 
 export default async function AuthorityDashboard({ searchParams }: { searchParams: Promise<{ view?: string }> }) {
@@ -42,6 +43,7 @@ export default async function AuthorityDashboard({ searchParams }: { searchParam
     authorityRemarks: paymentAdvices.authorityRemarks, adminRemarks: paymentAdvices.adminRemarks,
     financeReceivedAt: paymentAdvices.financeReceivedAt, verifiedAt: paymentAdvices.verifiedAt,
     paymentDoneAt: paymentAdvices.paymentDoneAt, totalPaid: paymentAdvices.totalPaid,
+    revisionCount: paymentAdvices.revisionCount,
   }).from(paymentAdvices).where(where).orderBy(desc(paymentAdvices.submittedAt));
 
   const subtitle = view === "history" ? "Your previous approval decisions"
@@ -70,7 +72,7 @@ export default async function AuthorityDashboard({ searchParams }: { searchParam
           <tbody className="divide-y divide-gray-100">{rows.map((row) => (
             <tr key={row.id} className="align-top">
               <td className="p-3 font-medium text-[#0b1f3a]">{displayNoFor(row.paymentMode as PaymentMode, row.serialNo, row.cashVoucherNo, row.isAdvance, row.advanceNo)}</td>
-              <td className="p-3"><div className="font-medium">{row.payeeName}</div><div className="mt-1 max-w-xs text-xs text-gray-600">{row.nature}</div></td>
+              <td className="p-3"><div className="font-medium">{row.payeeName}</div><div className="mt-1 max-w-xs text-xs text-gray-600">{row.nature}</div>{view === "pending" && row.revisionCount >= 1 ? <div className="mt-2 max-w-sm rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs text-amber-900"><strong>Resubmission — revision {row.revisionCount}</strong>{row.adminRemarks ? <div className="mt-1">Previous remarks: {row.adminRemarks}</div> : null}</div> : null}</td>
               <td className="p-3 whitespace-nowrap">₹ {Number(row.amount).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
               <td className="p-3 whitespace-nowrap">{view !== "my-submissions" ? <div>{row.submittedBy}</div> : null}<div className="text-xs text-gray-500">{date(row.submittedAt)}</div></td>
               <td className="p-3">{view === "pending" ? <ViewLink adviceId={row.id} from="pending" /> : view === "history" ? (

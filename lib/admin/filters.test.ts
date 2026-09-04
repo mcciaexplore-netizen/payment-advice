@@ -1,6 +1,7 @@
 import { SQL } from "drizzle-orm";
+import { PgDialect } from "drizzle-orm/pg-core";
 import { describe, expect, it } from "vitest";
-import { ADMIN_TABS, buildTabCondition, isAdminTab } from "./filters";
+import { ADMIN_TABS, buildAdminListOrderBy, buildTabCondition, isAdminTab } from "./filters";
 
 /** Drizzle SQL condition objects are circular (they reference the table)
  * and have no useful toString(), so the only reliable way to inspect what
@@ -15,6 +16,20 @@ function extractBoundParams(chunk: unknown, out: unknown[] = []): unknown[] {
   const obj = chunk as { value?: unknown; constructor?: { name?: string }; queryChunks?: unknown };
   if (obj.constructor?.name === "Param" && obj.value !== undefined) out.push(obj.value);
   if (obj.queryChunks) extractBoundParams(obj.queryChunks, out);
+  return out;
+}
+
+function extractColumnNames(chunk: unknown, out = new Set<string>(), seen = new Set<object>()) {
+  if (!chunk || typeof chunk !== "object") return out;
+  if (seen.has(chunk as object)) return out;
+  seen.add(chunk as object);
+  if (Array.isArray(chunk)) {
+    for (const child of chunk) extractColumnNames(child, out, seen);
+    return out;
+  }
+  const record = chunk as Record<string, unknown>;
+  if (typeof record.name === "string") out.add(record.name);
+  for (const value of Object.values(record)) extractColumnNames(value, out, seen);
   return out;
 }
 
@@ -135,5 +150,26 @@ describe("buildTabCondition", () => {
       expect(params).not.toContain(true);
       expect(params).not.toContain(false);
     }
+  });
+});
+
+describe("buildAdminListOrderBy", () => {
+  it("defaults Sent Back to oldest sent_back_at first", () => {
+    const order = buildAdminListOrderBy("sent_back");
+    expect(extractColumnNames(order)).toContain("sent_back_at");
+    expect(new PgDialect().sqlToQuery(order[1]).sql).toContain('"sent_back_at" asc');
+  });
+
+  it("preserves explicit sorting in Sent Back", () => {
+    expect(extractColumnNames(buildAdminListOrderBy("sent_back", "amount", "desc"))).toContain("amount");
+  });
+
+  it("groups independent reference series before sorting within each group", () => {
+    const order = buildAdminListOrderBy("all", "serialNo", "desc");
+    const dialect = new PgDialect();
+    expect(dialect.sqlToQuery(order[0]).sql).toContain("case");
+    expect(dialect.sqlToQuery(order[1]).sql).toContain('"advance_no"');
+    expect(dialect.sqlToQuery(order[1]).sql).toContain('"cash_voucher_no"');
+    expect(dialect.sqlToQuery(order[1]).sql).toContain("desc");
   });
 });

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Status } from "@/lib/validation/payment-advice";
 import { AdminRole } from "@/lib/auth";
 import { billPassedForLabelFor } from "@/lib/advice/document-identity";
+import { formatIstDate } from "@/lib/date-time";
 
 const ROLE_LABELS: Record<AdminRole, string> = {
   PAYMENT_ADVICE: "a Payment Advice",
@@ -33,11 +34,7 @@ function ownsSubmissionType(role: AdminRole, paymentMode: "NEFT" | "CASH"): bool
 }
 
 function formatDateTime(iso: string): string {
-  return new Date(iso).toLocaleDateString("en-IN", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  });
+  return formatIstDate(iso);
 }
 
 function formatMoney(value: string | number): string {
@@ -307,7 +304,7 @@ export function AdviceActions({
           <p className="text-sm text-gray-600">
             Payment Done{doneBy ? ` — ${doneBy}` : ""}
             {doneAt
-              ? ` on ${new Date(doneAt).toLocaleDateString("en-IN", { day: "2-digit", month: "2-digit", year: "numeric" })}`
+              ? ` on ${formatIstDate(doneAt)}`
               : ""}
             .
           </p>
@@ -418,11 +415,7 @@ export function AdviceActions({
       {authorityApprovedAt ? (
         <div className="rounded-md border border-[#2e8b57]/30 bg-[#2e8b57]/5 p-3 text-sm text-[#1e5c39]">
           Approved by {authorityName} on{" "}
-          {new Date(authorityApprovedAt).toLocaleDateString("en-IN", {
-            day: "2-digit",
-            month: "2-digit",
-            year: "numeric",
-          })}
+          {formatIstDate(authorityApprovedAt)}
           .
         </div>
       ) : (
@@ -481,11 +474,7 @@ export function AdviceActions({
       {verifiedAt ? (
         <div className="rounded-md border border-[#2e8b57]/30 bg-[#2e8b57]/5 p-3 text-sm text-[#1e5c39]">
           Verified by {verifiedBy} on{" "}
-          {new Date(verifiedAt).toLocaleDateString("en-IN", {
-            day: "2-digit",
-            month: "2-digit",
-            year: "numeric",
-          })}
+          {formatIstDate(verifiedAt)}
           .
         </div>
       ) : null}

@@ -1,5 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { billPassedForLabelFor, displayNoFor, documentLabelFor } from "./document-identity";
+import {
+  billPassedForLabelFor,
+  displayNoFor,
+  documentLabelFor,
+  submissionTypeLabelFor,
+} from "./document-identity";
+
+describe("submissionTypeLabelFor", () => {
+  it("labels each queue submission type without requiring users to parse its prefix", () => {
+    expect(submissionTypeLabelFor("NEFT", false)).toBe("Payment Advice");
+    expect(submissionTypeLabelFor("CASH", false)).toBe("Cash Voucher");
+    expect(submissionTypeLabelFor("NEFT", true)).toBe("Advance Payment");
+    expect(submissionTypeLabelFor("CASH", true)).toBe("Advance Payment");
+  });
+});
 
 describe("documentLabelFor", () => {
   it("returns 'Payment Advice' for NEFT", () => {
