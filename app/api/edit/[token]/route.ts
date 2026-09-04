@@ -13,7 +13,11 @@ import {
 import { notifyAuthorityApproval } from "@/lib/email/notify";
 import { generateAuthorityToken } from "@/lib/advice/authority-token";
 import { displayNoFor, documentLabelFor } from "@/lib/advice/document-identity";
-import { allocateAdvanceNumber, allocateCashVoucherNumber } from "@/lib/serial";
+import {
+  allocateAdvanceNumber,
+  allocateCashVoucherNumber,
+  allocatePaymentAdviceNumber,
+} from "@/lib/serial";
 import { parsePaymentAdviceFormData } from "@/lib/form-data";
 import {
   paymentAdviceFormSchema,
@@ -104,26 +108,33 @@ export async function POST(
     const oldBlobPathnamesToDelete: string[] = [];
     const { token: authorityToken, expiresAt: authorityTokenExpiresAt } = generateAuthorityToken();
 
-    // A resubmission can flip payment mode. If it now needs a Cash Voucher
-    // number and never had one (was NEFT before, or predates this series),
-    // allocate one now — same gapless mechanism as at original submission.
-    // If it's flipping away from CASH, the old number no longer applies.
-    const cashVoucherNo =
-      values.paymentMode === "CASH"
-        ? advice.cashVoucherNo ??
-          (await db.transaction((tx) => allocateCashVoucherNumber(tx, advice.financialYear)))
-        : null;
-    // Same pattern for the Advance series — independent of the NEFT/Cash
-    // sub-route, allocated once (first time isAdvance becomes true on this
-    // row) and nulled out if a resubmission flips isAdvance back to false.
-    const advanceNo = values.isAdvance
-      ? advice.advanceNo ??
-        (await db.transaction((tx) => allocateAdvanceNumber(tx, advice.financialYear)))
-      : null;
+    // Keep the canonical reference in the submission type's independent
+    // series. A type change on resubmission allocates from the destination
+    // series; staying in the same type retains the existing reference.
+    let serialNo: string;
+    let cashVoucherNo: string | null = null;
+    let advanceNo: string | null = null;
+    if (values.isAdvance) {
+      advanceNo = advice.isAdvance
+        ? advice.advanceNo ?? advice.serialNo
+        : await db.transaction((tx) => allocateAdvanceNumber(tx, advice.financialYear));
+      serialNo = advanceNo;
+    } else if (values.paymentMode === "CASH") {
+      cashVoucherNo = !advice.isAdvance && advice.paymentMode === "CASH"
+        ? advice.cashVoucherNo ?? advice.serialNo
+        : await db.transaction((tx) => allocateCashVoucherNumber(tx, advice.financialYear));
+      serialNo = cashVoucherNo;
+    } else if (!advice.isAdvance && advice.paymentMode === "NEFT") {
+      serialNo = advice.serialNo;
+    } else {
+      serialNo = await db.transaction((tx) =>
+        allocatePaymentAdviceNumber(tx, advice.financialYear),
+      );
+    }
 
     // Bill & Reference doesn't exist for an Advance Payment — see
     // app/api/submit/route.ts for the same dual-representation reasoning.
-    const billNo = values.isAdvance ? (values.billNo ?? advanceNo ?? advice.serialNo) : values.billNo!;
+    const billNo = values.isAdvance ? (values.billNo ?? advanceNo ?? serialNo) : values.billNo!;
     const billDate = values.isAdvance ? (values.billDate ?? values.formDate) : values.billDate!;
 
     await db.transaction(async (tx) => {
@@ -131,6 +142,7 @@ export async function POST(
         .update(paymentAdvices)
         .set({
           formDate: values.formDate,
+          serialNo,
           // A resubmission is a materially new submission — the Authority's
           // prior approve/reject decision no longer applies, and a fresh
           // token is issued so an already-actioned link can't be reused to
@@ -260,7 +272,7 @@ export async function POST(
         action: "RESUBMITTED",
         actor: values.submittedByName,
         ipAddress: clientIp(req),
-        details: { serialNo: advice.serialNo, revisionCount: advice.revisionCount + 1 },
+        details: { serialNo, revisionCount: advice.revisionCount + 1 },
       });
     });
 
@@ -277,7 +289,7 @@ export async function POST(
       {
         displayNo: displayNoFor(
           values.paymentMode,
-          advice.serialNo,
+          serialNo,
           cashVoucherNo,
           values.isAdvance,
           advanceNo,
@@ -304,7 +316,7 @@ export async function POST(
     );
 
     return NextResponse.json({
-      serialNo: advice.serialNo,
+      serialNo,
       cashVoucherNo,
       advanceNo,
       id: advice.id,

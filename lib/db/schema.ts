@@ -196,10 +196,8 @@ export const paymentAdvices = pgTable("payment_advices", {
   bankIfsc: text("bank_ifsc"),
   beneficiaryName: text("beneficiary_name"),
   // Own gapless series (CASH/MCCIA/<FY>/NNNN, via serial_counters' CASH_VOUCHER
-  // row), allocated only for payment_mode = 'CASH', at submission time,
-  // alongside serial_no. serial_no stays the DB/audit-log/Excel identifier
-  // for every submission regardless of mode; this is purely what prints on
-  // the Cash Voucher PDF.
+  // row), allocated only for regular payment_mode = 'CASH' submissions.
+  // serial_no mirrors this value and acts as the canonical reference.
   cashVoucherNo: text("cash_voucher_no"),
 
   // People
@@ -364,8 +362,8 @@ export const paymentEntries = pgTable("payment_entries", {
 });
 
 /** One row per (financial year, series) pair. 'PAYMENT_ADVICE' is the
- * original series (MCCIA/<FY>/NNNN, every submission); 'CASH_VOUCHER' is the
- * independent series (CASH/MCCIA/<FY>/NNNN, CASH-mode submissions only).
+ * regular-NEFT series (MCCIA/<FY>/NNNN); 'CASH_VOUCHER' is the independent
+ * regular-Cash series (CASH/MCCIA/<FY>/NNNN).
  * 'ADVANCE' (ADV/MCCIA/<FY>/NNNN) is a third independent series for
  * isAdvance = true submissions — one shared counter regardless of whether
  * the advance routes to NEFT or Cash, not two separate ADV series. All

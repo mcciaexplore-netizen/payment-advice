@@ -13,7 +13,12 @@ import {
 import { notifyAuthorityApproval, notifySubmissionConfirmation } from "@/lib/email/notify";
 import { generateAuthorityToken } from "@/lib/advice/authority-token";
 import { displayNoFor, documentLabelFor } from "@/lib/advice/document-identity";
-import { allocateAdvanceNumber, allocateCashVoucherNumber, allocateSerialNumber } from "@/lib/serial";
+import {
+  allocateAdvanceNumber,
+  allocateCashVoucherNumber,
+  allocateSerialNumber,
+  financialYearFor,
+} from "@/lib/serial";
 import { parsePaymentAdviceFormData } from "@/lib/form-data";
 import {
   paymentAdviceFormSchema,
@@ -56,42 +61,11 @@ export async function POST(req: NextRequest) {
   if (verificationError) return NextResponse.json({ error: verificationError }, { status: 400 });
 
   const now = new Date();
-  let serialNo: string;
-  let financialYear: string;
-  let cashVoucherNo: string | null;
-  let advanceNo: string | null;
-  try {
-    ({ serialNo, financialYear, cashVoucherNo, advanceNo } = await db.transaction(async (tx) => {
-      const allocated = await allocateSerialNumber(tx, now);
-      const voucherNo =
-        values.paymentMode === "CASH"
-          ? await allocateCashVoucherNumber(tx, allocated.financialYear)
-          : null;
-      // One shared ADVANCE series regardless of NEFT/Cash sub-route —
-      // allocated alongside whichever underlying number also gets
-      // allocated, same dual-numbering precedent as Cash Voucher.
-      const advNo = values.isAdvance
-        ? await allocateAdvanceNumber(tx, allocated.financialYear)
-        : null;
-      return { ...allocated, cashVoucherNo: voucherNo, advanceNo: advNo };
-    }));
-  } catch (err) {
-    console.error("Failed to allocate serial number", err);
-    return NextResponse.json(
-      { error: "Could not allocate a serial number. Please try again." },
-      { status: 500 },
-    );
-  }
-
-  // Bill & Reference doesn't exist for an Advance Payment (no bill yet, same
-  // reasoning as Tax Invoice not being required) — the form hides that whole
-  // section and the schema no longer requires billNo/billDate when isAdvance.
-  // Mirrored into these still-NOT-NULL columns using the advance number and
-  // form date, same dual-representation pattern purposeOfAdvance uses for
-  // nature_of_expenditure, so every existing reader (PDF, admin list search,
-  // Excel export, emails) keeps working unchanged for advances too.
-  const billNo = values.isAdvance ? (values.billNo ?? advanceNo ?? serialNo) : values.billNo!;
-  const billDate = values.isAdvance ? (values.billDate ?? values.formDate) : values.billDate!;
+  let serialNo = "";
+  let financialYear = "";
+  let cashVoucherNo: string | null = null;
+  let advanceNo: string | null = null;
+  let billNo = values.billNo ?? "";
 
   const uploadedPathnames = attachmentInputs.map((attachment) => attachment.blobPathname);
   try {
@@ -100,6 +74,22 @@ export async function POST(req: NextRequest) {
     const { token: authorityToken, expiresAt: authorityTokenExpiresAt } = generateAuthorityToken();
 
     const adviceId = await db.transaction(async (tx) => {
+      financialYear = financialYearFor(now);
+      if (values.isAdvance) {
+        advanceNo = await allocateAdvanceNumber(tx, financialYear);
+        serialNo = advanceNo;
+      } else if (values.paymentMode === "CASH") {
+        cashVoucherNo = await allocateCashVoucherNumber(tx, financialYear);
+        serialNo = cashVoucherNo;
+      } else {
+        ({ serialNo } = await allocateSerialNumber(tx, now));
+      }
+
+      // Allocation and row creation deliberately share this transaction. If
+      // any insert below fails, the counter rolls back with the submission.
+      billNo = values.isAdvance ? (values.billNo ?? advanceNo ?? serialNo) : values.billNo!;
+      const billDate = values.isAdvance ? (values.billDate ?? values.formDate) : values.billDate!;
+
       const [advice] = await tx
         .insert(paymentAdvices)
         .values({

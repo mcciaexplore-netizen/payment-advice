@@ -54,6 +54,8 @@ const advice = {
   revisionCount: 0,
   adminRemarks: "Correct it",
   financialYear: "2026-27",
+  paymentMode: "NEFT",
+  isAdvance: false,
   cashVoucherNo: null,
   advanceNo: null,
 };

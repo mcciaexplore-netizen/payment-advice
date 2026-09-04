@@ -71,15 +71,26 @@ async function allocateNumber(
   return nextNumber;
 }
 
-/** Allocates the next main serial number (MCCIA/<FY>/NNNN) — every submission,
- * regardless of payment mode. This stays the DB/audit-log/Excel identifier. */
+/** Allocates the next Payment Advice number (MCCIA/<FY>/NNNN) for regular
+ * NEFT submissions. Cash Vouchers and Advances use their independent series. */
 export async function allocateSerialNumber(
   tx: Executor,
   date: Date,
 ): Promise<{ serialNo: string; financialYear: string }> {
   const financialYear = financialYearFor(date);
+  return {
+    serialNo: await allocatePaymentAdviceNumber(tx, financialYear),
+    financialYear,
+  };
+}
+
+/** Allocates from the regular-NEFT series for an already-known financial year. */
+export async function allocatePaymentAdviceNumber(
+  tx: Executor,
+  financialYear: string,
+): Promise<string> {
   const nextNumber = await allocateNumber(tx, financialYear, PAYMENT_ADVICE_SERIES);
-  return { serialNo: formatSerial(financialYear, nextNumber), financialYear };
+  return formatSerial(financialYear, nextNumber);
 }
 
 /** Allocates the next Cash Voucher number (CASH/MCCIA/<FY>/NNNN) — CASH-mode

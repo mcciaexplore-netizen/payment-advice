@@ -16,9 +16,9 @@ import type { PaymentMode } from "@/lib/validation/payment-advice";
  * advance_no as the primary number — superseding even cash_voucher_no for
  * a Cash-routed advance, since advance_no is the one shared series
  * regardless of NEFT/CASH sub-route.
- * serial_no remains the internal DB/audit-log/Excel identifier regardless
- * of mode or advance status — this is purely about what a human should see
- * as "the number."
+ * serial_no is the canonical reference and mirrors the applicable business
+ * series for every row. cash_voucher_no and advance_no remain populated for
+ * compatibility and explicit type-specific querying.
  */
 export function documentLabelFor(paymentMode: PaymentMode, isAdvance = false): string {
   if (isAdvance) {
