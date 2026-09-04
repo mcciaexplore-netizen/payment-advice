@@ -46,21 +46,21 @@ export default async function AuthorityDashboard({ searchParams }: { searchParam
     revisionCount: paymentAdvices.revisionCount,
   }).from(paymentAdvices).where(where).orderBy(desc(paymentAdvices.submittedAt));
 
-  const subtitle = view === "history" ? "Your previous approval decisions"
+  const subtitle = view === "history" ? "Your previous recommendation decisions"
     : view === "my-submissions" ? `${rows.length} submission${rows.length === 1 ? "" : "s"} made using ${account.email}`
       : `${rows.length} submission${rows.length === 1 ? "" : "s"} waiting for you`;
 
   return (
     <div className="flex flex-col gap-6">
-      <header><h1 className="font-heading text-3xl text-[#0b1f3a]">Authority Approvals</h1><p className="mt-1 text-sm text-gray-600">{subtitle}</p></header>
+      <header><h1 className="font-heading text-3xl text-[#0b1f3a]">Authority Recommendations</h1><p className="mt-1 text-sm text-gray-600">{subtitle}</p></header>
       <nav className="flex gap-2 border-b border-gray-200">
-        <Tab href="/authority" active={view === "pending"}>Pending My Approval</Tab>
+        <Tab href="/authority" active={view === "pending"}>Pending My Recommendation</Tab>
         <Tab href="/authority?view=history" active={view === "history"}>History</Tab>
         <Tab href="/authority?view=my-submissions" active={view === "my-submissions"}>My Submissions</Tab>
       </nav>
       {rows.length === 0 ? (
         <div className="rounded-lg border border-gray-200 p-10 text-center text-sm text-gray-500">
-          {view === "history" ? "No decisions recorded yet." : view === "my-submissions" ? "No submissions found for your login email." : "Nothing is waiting for your approval."}
+          {view === "history" ? "No decisions recorded yet." : view === "my-submissions" ? "No submissions found for your login email." : "Nothing is waiting for your recommendation."}
         </div>
       ) : (
         <div className="overflow-x-auto rounded-lg border border-gray-200"><table className="w-full text-left text-sm">
@@ -76,7 +76,7 @@ export default async function AuthorityDashboard({ searchParams }: { searchParam
               <td className="p-3 whitespace-nowrap">₹ {Number(row.amount).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
               <td className="p-3 whitespace-nowrap">{view !== "my-submissions" ? <div>{row.submittedBy}</div> : null}<div className="text-xs text-gray-500">{date(row.submittedAt)}</div></td>
               <td className="p-3">{view === "pending" ? <ViewLink adviceId={row.id} from="pending" /> : view === "history" ? (
-                <div className="text-xs"><span className={`font-semibold ${row.approvedAt ? "text-[#2e8b57]" : "text-amber-700"}`}>{row.approvedAt ? "Approved" : "Sent Back"}</span><div className="mt-1 text-gray-500">{date(row.approvedAt ?? row.rejectedAt!)}</div>{row.authorityRemarks ? <div className="mt-1 max-w-xs text-gray-600">{row.authorityRemarks}</div> : null}</div>
+                <div className="text-xs"><span className={`font-semibold ${row.approvedAt ? "text-[#2e8b57]" : "text-amber-700"}`}>{row.approvedAt ? "Recommended" : "Sent Back"}</span><div className="mt-1 text-gray-500">{date(row.approvedAt ?? row.rejectedAt!)}</div>{row.authorityRemarks ? <div className="mt-1 max-w-xs text-gray-600">{row.authorityRemarks}</div> : null}</div>
               ) : (
                 <div className="text-xs"><span className="font-semibold text-[#0b1f3a]">{pipelineStageFor(row)}</span>{row.adminRemarks ? <div className="mt-2 max-w-xs rounded bg-amber-50 px-2 py-1 text-amber-800">Sent-back remarks: {row.adminRemarks}</div> : null}</div>
               )}</td>

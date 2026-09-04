@@ -15,7 +15,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const [advice] = await db.select({ id: paymentAdvices.id, authorityApprovedAt: paymentAdvices.authorityApprovedAt, authorityRejectedAt: paymentAdvices.authorityRejectedAt, authorityTokenExpiresAt: paymentAdvices.authorityTokenExpiresAt }).from(paymentAdvices).where(and(eq(paymentAdvices.id, id), eq(paymentAdvices.recommendingAuthorityId, session.recommendingAuthorityId))).limit(1);
   if (!advice) return NextResponse.json({ error: "Not found" }, { status: 404 });
   const actionError = authorityActionError(advice);
-  if (actionError) return NextResponse.json({ error: actionError }, { status: 409 });
+  if (actionError) return NextResponse.json({ error: actionError.replace("approved", "recommended") }, { status: 409 });
   const approvedAt = await performAuthorityApproval({ advice, actor: session.fullName, ipAddress: clientIp(req) });
   return NextResponse.json({ ok: true, approvedAt: approvedAt.toISOString() });
 }

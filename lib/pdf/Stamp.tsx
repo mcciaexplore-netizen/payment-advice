@@ -6,7 +6,7 @@ import { StyleSheet, Text, View } from "@react-pdf/renderer";
  * rough ink-texture artwork (unreliable in a generated PDF). Renders name +
  * date INSIDE the stamp itself, per the spec — never as separate text
  * elsewhere in the cell. Solid brand colors, same box style across all
- * three uses (Submitted/Approved/Verified), only the accent color differs.
+ * three uses (Submitted/Recommended/Verified), only the accent color differs.
  */
 export type StampColor = "navy" | "green" | "amber";
 
@@ -19,34 +19,34 @@ const COLORS: Record<StampColor, { border: string; text: string }> = {
 const styles = StyleSheet.create({
   wrapper: {
     position: "absolute",
-    bottom: 3,
-    right: 3,
+    bottom: 7,
+    right: 6,
   },
   box: {
     borderWidth: 1,
     borderStyle: "solid",
-    borderRadius: 3,
-    paddingVertical: 2,
-    paddingHorizontal: 4,
-    width: 68,
-    transform: "rotate(-6deg)",
+    borderRadius: 4,
+    paddingVertical: 4,
+    paddingHorizontal: 6,
+    width: 94,
+    transform: "rotate(-5deg)",
   },
   label: {
     fontFamily: "Helvetica-Bold",
-    fontSize: 6,
-    letterSpacing: 0.4,
+    fontSize: 8,
+    letterSpacing: 0.55,
     textAlign: "center",
   },
   name: {
     fontFamily: "Helvetica-Bold",
-    fontSize: 5.5,
+    fontSize: 7,
     textAlign: "center",
-    marginTop: 1,
+    marginTop: 2,
   },
   date: {
-    fontSize: 5,
+    fontSize: 6.5,
     textAlign: "center",
-    marginTop: 1,
+    marginTop: 2,
   },
 });
 

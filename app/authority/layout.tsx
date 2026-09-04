@@ -4,7 +4,7 @@ import Link from "next/link";
 import { AccountMenu } from "@/components/account/AccountMenu";
 import { getAdminSession } from "@/lib/admin-session";
 
-export const metadata: Metadata = { title: { absolute: "MCCIA Authority Approvals" } };
+export const metadata: Metadata = { title: { absolute: "MCCIA Authority Recommendations" } };
 
 export default async function AuthorityLayout({ children }: { children: React.ReactNode }) {
   const session = await getAdminSession();
@@ -14,7 +14,7 @@ export default async function AuthorityLayout({ children }: { children: React.Re
         <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-3">
           <Link href="/authority" className="flex items-center gap-3">
             <Image src="/mccia-logo.png" alt="MCCIA logo" width={1085} height={258} className="h-7 w-auto" />
-            <span className="font-heading text-lg text-white">Authority Approvals</span>
+            <span className="font-heading text-lg text-white">Authority Recommendations</span>
           </Link>
           {session?.adminRole === "AUTHORITY" ? (
             <div className="flex items-center text-sm">

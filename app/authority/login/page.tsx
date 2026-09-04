@@ -38,7 +38,7 @@ export default function AuthorityLoginPage() {
     <main className="mx-auto flex w-full max-w-sm flex-1 flex-col items-center justify-center gap-8 px-6 py-16">
       <div className="flex flex-col items-center gap-3 text-center">
         <Image src="/mccia-logo.png" alt="MCCIA logo" width={1085} height={258} className="h-10 w-auto" />
-        <h1 className="font-heading text-2xl text-[#0b1f3a]">Authority Approvals</h1>
+        <h1 className="font-heading text-2xl text-[#0b1f3a]">Authority Recommendations</h1>
         <p className="text-sm text-gray-600">Sign in to review submissions waiting for your decision.</p>
       </div>
       <form onSubmit={submit} className="flex w-full flex-col gap-4">

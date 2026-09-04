@@ -47,7 +47,7 @@ Design system: Navy `#0B1F3A`, Forest green `#2E8B57`, Amber `#E8A33D`. Headings
 
 ## 3. Current State (update this every session)
 
-**Last updated:** 4 September 2026, by Codex (applied confirmed first-name Authority passwords)
+**Last updated:** 4 September 2026, by Codex (recommendation wording + PDF stamp layout)
 
 ### Shipped — Phase 1 baseline (Claude Code)
 - Public form `/` (no login): submitter, payee (vendor typeahead), bill/reference, payment mode (NEFT/Cash), enclosures, mandatory Tax Invoice + Approval/Budget PDF attachments
@@ -550,6 +550,14 @@ Small, isolated wording fix. `lib/pdf/PaymentAdviceDocument.tsx`'s "Recommended 
 
 **Verified live**: rendered the sample script (`npx tsx scripts/render-test-pdf.tsx`) and visually confirmed "RECOMMENDED" fits cleanly in the stamp with no overflow/wrapping issue. Also downloaded the real Payment Advice PDF for an actual pre-existing, already-approved production row (`MCCIA/2026-27/0042`, via `GET /api/admin/advice/[id]/pdf` with a throwaway admin login, read-only — no data mutated) and visually confirmed "RECOMMENDED" with the correct name ("Neeraj Thakur") and date, while "SUBMITTED"/"VERIFIED" render unchanged. Throwaway `admin_users` test row deleted afterward. `tsc --noEmit`, ESLint, the full Vitest suite (229 passing, unaffected — no test asserted the old "APPROVED" stamp text), and `next build` all clean.
 
+### Shipped — Recommendation wording + larger digital PDF stamps (Codex, 2026-09-04)
+- Fixed the previously flagged Cash Voucher mismatch: its Recommended-by digital stamp now reads **RECOMMENDED**, matching Payment Advice and the printed box label.
+- The authenticated Authority Dashboard now consistently uses **Recommend/Recommended** across its login/header, pending/history/detail UI, action button, result text, and dashboard-route error wording. Internal route/action identifiers remain `approve`/`approvedAt` to preserve the existing workflow and schema.
+- Deliberately did **not** change the separate legacy email-token component at `/authority-approval/[token]`: it still says Approve/Approved. The human explicitly asked this to be flagged for routing rather than silently changed in this task; see §4.
+- Enlarged the shared digital stamp and its typography. Payment Advice suppresses the redundant Date/Signature lines only in Submitted/Recommended/Verified cells. Cash Voucher suppresses its existing Date line only in Submitted/Recommended cells. Payment Advice's Sanctioned-by cell remains blank and retains both Date/Signature; Cash Voucher's Sanctioned-by cell remains blank and retains its original Date line. Cash's separate Payee Signature cell is also unchanged.
+- Real production-backed, read-only renders were visually inspected: Payment Advice `MCCIA/2026-27/0002` (Submitted + Recommended + Verified) and Cash Voucher `CASH/MCCIA/2026-27/0006` (Submitted + Recommended). Stamps fill their cells without clipping, required labels are absent only from stamped cells, and physical-signature cells remain intact. No DB rows were mutated.
+- Added focused source-boundary regression tests for stamp wording/signing-field preservation and authenticated-dashboard wording. TypeScript, ESLint, 328 tests (7 skipped), and production build clean.
+
 ### Shipped — Advance Payment feature: third Payment Mode option, own numbering series, routes through existing NEFT/Cash pipelines (Claude Code, 2026-08-17)
 **The concept, exactly as scoped**: Advance Payment is a third top-level choice on the public form (NEFT / Cash / Advance Payment), not a fourth `payment_mode` DB value. Selecting it reveals a secondary NEFT-or-Cash sub-choice; the submission is stored exactly as a regular NEFT or Cash submission would be (`payment_mode` stays `'NEFT'`/`'CASH'`, same routing to Sunil's/Abha's dashboard), plus a new `is_advance` boolean and its own fields. **Settlement (reconciling actual spend against the advance afterward) is explicitly out of scope — nothing here supports it, no placeholder columns added for it either**, per the brief.
 
@@ -799,7 +807,8 @@ Status legend: 🔴 unverified / high risk · 🟡 unverified / lower risk · �
 - 🟡 **The new "Bill passed for Rs. is locked once a payment has been recorded" and "advice already has a payment recorded, can no longer be sent back" guards (2026-08-17) are judgment calls, not literally requested by the brief** — flagged explicitly in the "Shipped" entry above and here per the human's own "tell me what you find rather than patching around it silently" instruction. Both are scoped so Cash rows (which never have `payment_entries`) are provably unaffected (see the live-test section). If the human wants either behavior relaxed (e.g. allow editing `bill_passed_for` with a warning instead of a hard lock), that's a small, isolated change — both guards are single `if` blocks in their respective routes.
 - 🟡 **`NAME_EMAIL_LIST`/`admin_users`-style per-person attribution for `payment_entries.paid_by` reuses the exact same snapshot-not-FK pattern as `verified_by`/`payment_done_by`/`sanctioned_by`** — a name string, not a real FK to `admin_users`. Same known limitation as those older fields: renaming/deactivating an admin user later never retroactively changes what's printed on a historical entry. Not new to this session, just noting it applies here too.
 - 🟢 **Payment Advice PDF's "Recommended by" stamp fixed 2026-08-17 — corrected from "APPROVED" to "RECOMMENDED", matching the box's own label.** See the "Shipped" entry above for the fix and live verification against a real approved production row.
-- ⬜ **Found, not fixed (2026-08-17, out of that session's explicit scope): `CashVoucherDocument.tsx`'s own "Recommended by" stamp has the identical "APPROVED" wording mismatch.** The Payment Advice PDF fix above did not touch it. Flagged, not silently extended — say the word if you want the same one-line correction there.
+- 🟢 **Cash Voucher Recommended-by stamp mismatch fixed 2026-09-04.** It now reads RECOMMENDED; both PDF types were rendered from real records and visually verified after the shared stamp was enlarged and redundant labels were removed only from digitally stamped boxes.
+- 🟡 **The separate email-token page `/authority-approval/[token]` still uses Approve/Approved wording.** The authenticated `/authority` dashboard now uses Recommend/Recommended consistently, but the human explicitly requested that the original token page be inspected and reported rather than silently changed if separately owned. Route this same terminology change to that page's owner if full cross-surface consistency is desired.
 - 🟢 **Advance Payment feature shipped and live-verified end-to-end 2026-08-17 — both a NEFT-routed and a Cash-routed advance, plus explicit regression checks on regular (non-advance) submissions.** See the "Shipped" entry above for full detail: schema, the shared `ADVANCE` numbering series, `document-identity.ts` extension with a full 11-call-site audit (plus one pre-existing gap found and fixed), the public form's 3-way mode picker + Particulars/Purpose/Previous-Pending block, PDF extensions to both existing templates (no third template), and confirmation that the multi-part payment-capping logic needed zero code changes to work for advances.
 - ⬜ **Undecided (needs human decision):** should Excel export gain columns for `is_advance`/`advance_no`/Particulars? Currently not exported, per the standing "ask before adding Excel columns" rule — same open question already pending for `basic_amount`/`gst_amount`/`total_paid` above.
 - 🟡 **Settlement (reconciling actual spend against an advance afterward, returning/claiming balance) is explicitly not built** — out of scope per the brief. `previous_pending_advance_amount`/`_since` are purely self-declared by the submitter, never system-verified against anything, since no Settlement tracking exists to verify against. If/when Settlement is built, it's a separate future feature layered on top of this one, not a gap in this session's work.
@@ -858,6 +867,16 @@ Append one entry per session, newest at the top. Keep entries short — this is 
 (Note: this header was accidentally dropped in an earlier edit and restored 2026-08-01 by Claude Code — no content was lost, only the heading line.)
 
 ```
+2026-09-04 — Codex — Fixed the Cash Voucher Recommended-by stamp to say
+RECOMMENDED, renamed authenticated Authority Dashboard UI language from
+Approve/Approved to Recommend/Recommended, enlarged the shared digital stamps,
+and removed redundant signing labels only from digitally stamped PDF cells.
+Sanctioned-by physical-signature cells stayed unchanged. Visually verified real
+production-backed Payment Advice 0002 and Cash Voucher 0006 renders without DB
+writes. The separate email-token page still says Approve/Approved and is
+explicitly flagged for its owner. tsc, ESLint, 328 tests (7 skipped), and
+production build clean.
+
 2026-09-04 — Codex — Applied the explicitly confirmed lowercase-first-name +
 @2026 passwords to the 8 Authority expansion accounts, hashing all values with
 the existing bcrypt helper and updating them in one transaction after a local

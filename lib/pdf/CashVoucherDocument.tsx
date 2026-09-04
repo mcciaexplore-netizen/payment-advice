@@ -152,15 +152,17 @@ export function CashVoucherDocument({ data }: { data: CashVoucherPdfData }) {
           <Signature
             label="Submitted by"
             name={data.submittedByName}
+            showSigningFields={false}
             stamp={{ label: "SUBMITTED", name: data.submittedByName, date: formatDate2(data.submittedAt), color: "navy" }}
           />
           <Signature
             label="Recommended by"
             name={data.recommendingAuthorityName}
+            showSigningFields={false}
             stamp={
               data.authorityApprovedAt
                 ? {
-                    label: "APPROVED",
+                    label: "RECOMMENDED",
                     name: data.recommendingAuthorityName,
                     date: formatDate2(data.authorityApprovedAt),
                     color: "green",
@@ -188,16 +190,18 @@ function Signature({
   label,
   name,
   stamp,
+  showSigningFields = true,
 }: {
   label: string;
   name: string;
   stamp?: { label: string; name: string; date: string; color: StampColor };
+  showSigningFields?: boolean;
 }) {
   return (
     <View style={styles.signature}>
       <Text style={styles.signatureLabel}>{label}</Text>
       <Text style={styles.signatureName}>{name}</Text>
-      <Text style={styles.date}>Date: __________________</Text>
+      {showSigningFields ? <Text style={styles.date}>Date: __________________</Text> : null}
       {stamp ? <Stamp label={stamp.label} name={stamp.name} date={stamp.date} color={stamp.color} /> : null}
     </View>
   );

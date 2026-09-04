@@ -355,8 +355,6 @@ export function PaymentAdviceDocument({ data }: { data: PaymentAdvicePdfData }) 
           <View style={styles.footerCell}>
             <Text style={styles.footerLabel}>Submitted by :</Text>
             <Text style={styles.footerValue}>{data.submittedByName}</Text>
-            <Text style={styles.footerLine}>Date :</Text>
-            <Text style={styles.footerLine}>Signature :</Text>
             <Stamp
               label="SUBMITTED"
               name={data.submittedByName}
@@ -367,8 +365,6 @@ export function PaymentAdviceDocument({ data }: { data: PaymentAdvicePdfData }) 
           <View style={styles.footerCell}>
             <Text style={styles.footerLabel}>Recommended by :</Text>
             <Text style={styles.footerValue}>{data.recommendingAuthorityName}</Text>
-            <Text style={styles.footerLine}>Date :</Text>
-            <Text style={styles.footerLine}>Signature :</Text>
             {data.authorityApprovedAt ? (
               <Stamp
                 label="RECOMMENDED"
@@ -381,8 +377,6 @@ export function PaymentAdviceDocument({ data }: { data: PaymentAdvicePdfData }) 
           <View style={styles.footerCell}>
             <Text style={styles.footerLabel}>Verified by :</Text>
             <Text style={styles.footerValue}>{data.verifiedBy ?? ""}</Text>
-            <Text style={styles.footerLine}>Date :</Text>
-            <Text style={styles.footerLine}>Signature :</Text>
             {data.verifiedAt && data.verifiedBy ? (
               <Stamp
                 label="VERIFIED"

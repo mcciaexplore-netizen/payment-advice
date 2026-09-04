@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
   }
   if (user.role !== "AUTHORITY" || !user.recommendingAuthorityId) {
     return NextResponse.json(
-      { error: "This account does not have access to Authority Approvals." },
+      { error: "This account does not have access to Authority Recommendations." },
       { status: 403 },
     );
   }

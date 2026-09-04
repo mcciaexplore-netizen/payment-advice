@@ -32,7 +32,7 @@ export function AuthorityQueueActions({ adviceId }: { adviceId: string }) {
   return (
     <div className="flex min-w-48 flex-col gap-2">
       <div className="flex gap-2">
-        <button onClick={() => act("approve")} disabled={busy} className="rounded bg-[#2e8b57] px-3 py-2 text-xs font-medium text-white disabled:opacity-50">Approve</button>
+        <button onClick={() => act("approve")} disabled={busy} className="rounded bg-[#2e8b57] px-3 py-2 text-xs font-medium text-white disabled:opacity-50">Recommend</button>
         <button onClick={() => setShowRemarks((value) => !value)} disabled={busy} className="rounded border border-gray-300 px-3 py-2 text-xs font-medium text-gray-700 disabled:opacity-50">Send Back</button>
       </div>
       {showRemarks ? (

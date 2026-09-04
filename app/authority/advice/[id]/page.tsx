@@ -68,7 +68,7 @@ export default async function AuthorityAdviceDetailPage({
 
   return (
     <div className="flex flex-col gap-8">
-      <BackLink label="Back to Authority Approvals" fallbackHref={fallbackHref} />
+      <BackLink label="Back to Authority Recommendations" fallbackHref={fallbackHref} />
       <header className="flex flex-wrap items-start justify-between gap-4 border-b border-gray-200 pb-6">
         <div>
           <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
@@ -158,14 +158,14 @@ export default async function AuthorityAdviceDetailPage({
 }
 
 function DecisionStatus({ advice }: { advice: { authorityApprovedAt: Date | null; authorityRejectedAt: Date | null } }) {
-  if (advice.authorityApprovedAt) return <span className="rounded-full bg-[#2e8b57]/10 px-3 py-1 text-sm font-medium text-[#1f6b41]">Approved</span>;
+  if (advice.authorityApprovedAt) return <span className="rounded-full bg-[#2e8b57]/10 px-3 py-1 text-sm font-medium text-[#1f6b41]">Recommended</span>;
   if (advice.authorityRejectedAt) return <span className="rounded-full bg-amber-100 px-3 py-1 text-sm font-medium text-amber-800">Sent Back</span>;
-  return <span className="rounded-full bg-[#e8a33d]/15 px-3 py-1 text-sm font-medium text-[#8a5a12]">Pending My Approval</span>;
+  return <span className="rounded-full bg-[#e8a33d]/15 px-3 py-1 text-sm font-medium text-[#8a5a12]">Pending My Recommendation</span>;
 }
 
 function DecisionRecord({ advice }: { advice: { authorityApprovedAt: Date | null; authorityRejectedAt: Date | null; authorityRemarks: string | null } }) {
   return <div className="text-sm">
-    <p className="font-medium text-[#0b1f3a]">{advice.authorityApprovedAt ? `Approved ${formatDateTime(advice.authorityApprovedAt)}` : `Sent back ${formatDateTime(advice.authorityRejectedAt)}`}</p>
+    <p className="font-medium text-[#0b1f3a]">{advice.authorityApprovedAt ? `Recommended ${formatDateTime(advice.authorityApprovedAt)}` : `Sent back ${formatDateTime(advice.authorityRejectedAt)}`}</p>
     {advice.authorityRemarks ? <p className="mt-3 whitespace-pre-wrap text-gray-600">Remarks: {advice.authorityRemarks}</p> : null}
     <p className="mt-3 text-xs text-gray-500">This record is read-only.</p>
   </div>;
