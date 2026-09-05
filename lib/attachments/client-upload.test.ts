@@ -5,7 +5,7 @@ import {
   validateAttachmentCounts,
 } from "@/lib/attachments/client-upload";
 
-const upload = (docType: "TAX_INVOICE" | "APPROVAL_BUDGET" | "OTHER", fileName: string) => ({
+const upload = (docType: "TAX_INVOICE" | "APPROVAL_BUDGET" | "OTHER" | "PURCHASE_ORDER" | "DELIVERY_CHALLAN", fileName: string) => ({
   docType,
   fileName,
   blobPathname: `pending-uploads/batch/${fileName}`,
@@ -57,5 +57,34 @@ describe("client-upload attachment metadata", () => {
 
   it("keeps Approval / Budget Letter mandatory for Advance Payment", () => {
     expect(validateAttachmentCounts(groupUploadedAttachments([]), true)).toContain("mandatory");
+  });
+
+  it("allows Purchase Order and Delivery Challan on a regular Payment Advice (NEFT) — real bug, previously rejected these unconditionally for any non-advance submission", () => {
+    const grouped = groupUploadedAttachments([
+      upload("TAX_INVOICE", "invoice.pdf"),
+      upload("PURCHASE_ORDER", "po.pdf"),
+      upload("DELIVERY_CHALLAN", "challan.pdf"),
+    ]);
+    expect(validateAttachmentCounts(grouped, false, undefined, "NEFT")).toBeNull();
+  });
+
+  it("still blocks Purchase Order / Delivery Challan for Cash Voucher, which has no Bill & Reference section", () => {
+    const grouped = groupUploadedAttachments([
+      upload("TAX_INVOICE", "invoice.pdf"),
+      upload("PURCHASE_ORDER", "po.pdf"),
+    ]);
+    expect(validateAttachmentCounts(grouped, false, undefined, "CASH")).toContain(
+      "Only Tax Invoice / Supplementary Document and Approval / Budget Letter attachments are allowed.",
+    );
+  });
+
+  it("still blocks Purchase Order / Delivery Challan for an Advance Payment, which has no Bill & Reference section either", () => {
+    const grouped = groupUploadedAttachments([
+      upload("APPROVAL_BUDGET", "approval.pdf"),
+      upload("DELIVERY_CHALLAN", "challan.pdf"),
+    ]);
+    expect(validateAttachmentCounts(grouped, true, undefined, "NEFT")).toContain(
+      "Only Tax Invoice / Supplementary Document and Approval / Budget Letter attachments are allowed.",
+    );
   });
 });

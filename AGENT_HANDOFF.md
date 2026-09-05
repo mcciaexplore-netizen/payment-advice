@@ -47,7 +47,13 @@ Design system: Navy `#0B1F3A`, Forest green `#2E8B57`, Amber `#E8A33D`. Headings
 
 ## 3. Current State (update this every session)
 
-**Last updated:** 4 September 2026, by Codex (Payment Desk dedicated public forms on `dev`)
+**Last updated:** 5 September 2026, by Claude Code (Satish Joshi's Authority account added; fixed a real bug blocking Purchase Order/Delivery Challan attachments on regular Payment Advice resubmission)
+
+### Shipped — Satish Joshi's Authority account + a real resubmission-blocking bug found and fixed (Claude Code, 2026-09-05)
+- **Account:** Checked `recommending_authorities` first, per instruction — found a single, clean, active row already on file ("Satish Joshi", `satishj@mcciapune.com`, id `fb1ef8b4-3ba6-434a-98d5-e4f7694e114e`), no near-duplicates or ambiguous noise, so reused it rather than creating a second one. No prior `admin_users` row existed for him. Created one (`AUTHORITY` role, linked to that authority id) using the same predictable-password pattern as the 2026-09-04 expansion batch — `satish@2026` reduces unambiguously from his name (single-word first name, no punctuation quirk like Rajnikant's). No forced password change, matching that batch's final decision. Live-tested: logged in, confirmed `/authority`'s Pending queue is scoped correctly (shows only his own linked submissions) and History renders with zero errors.
+- **Real bug found while investigating his "resubmit button doesn't work" report — not test data, a real stuck production submission (`MCCIA/2026-27/0018`, ATRONIX INDIA, `SENT_BACK` since 2026-09-05 10:21, admin remarks "Add PO and Approval Letter").** `lib/attachments/client-upload.ts`'s `validateAttachmentCounts()` blocked Purchase Order / Delivery Challan attachments with `!isAdvance` — meaning it rejected them for **regular Payment Advice (NEFT) too**, not just Cash Voucher and Advance (which genuinely have no Bill & Reference section to attach them from). Satish did exactly what Finance's remarks asked — attached a Purchase Order — and the server rejected the entire resubmission because of it, with a confusing error ("Only Tax Invoice / Supplementary Document and Approval / Budget Letter attachments are allowed.") that directly contradicted what he'd just been told to do. This function is shared by both `/api/submit/route.ts` and `/api/edit/[token]/route.ts`, so fresh submissions with a PO/Delivery Challan attached were equally broken, not just resubmissions — it just hadn't been hit yet since those fields are optional and rarely used. Fixed the condition to `isAdvance || paymentMode === "CASH"` — Purchase Order/Delivery Challan now correctly allowed for regular Payment Advice, still correctly blocked for Cash Voucher and Advance. Zero test in the existing suite exercised this exact line before; added 3 regression tests (PO+DC allowed for NEFT, still blocked for Cash, still blocked for Advance).
+- **Also found, not fixed — flagged for a decision, not touched:** the same function's mandatory-attachment check only requires Approval/Budget Letter for Advance (`isAdvance && APPROVAL_BUDGET.length === 0`), and only requires Tax Invoice for non-Advance — meaning a regular Payment Advice or Cash Voucher submission is **not currently required to include an Approval/Budget Letter at all**, which contradicts the original spec ("Approval / Budget Letter stays mandatory regardless" of mode). This may be an intentional rule change from the recent "restore optional payment advice documents" work rather than a bug — didn't touch it, since loosening vs. tightening a mandatory-document rule is a business decision, not something to silently change while fixing an unrelated attachment-type bug. Satish's stuck row is missing an Approval/Budget Letter too (only `TAX_INVOICE` exists on it today), so this is directly relevant to his resubmission even though it isn't what was blocking the button.
+- **Verified via targeted unit tests reproducing the exact real-world shape** (NEFT + Tax Invoice + Purchase Order + Delivery Challan attached, non-advance) rather than a full live Blob upload round-trip — didn't want to risk mutating Satish's real record with placeholder file content. `tsc --noEmit`, ESLint, and the full Vitest suite (362 passing, 7 pre-existing skipped, 3 new) all clean. Not yet committed/deployed — see the open item below; the fix needs to reach production before Satish's real resubmission can succeed.
 
 ### Shipped — Multi-role admin_users (Claude Code, 2026-09-04; merged to main as `294e407`)
 Requested because Chintamani Shrotri needed both his existing Authority Dashboard access AND full Finance Admin access on **one** login, not a second account — and the single `role` column on `admin_users` made that structurally impossible. Built as the general multi-role model, not a one-off for Chintamani. **Merged to `main` as `294e407` and used as the synced base for the Payment Desk `dev` branch.** See the important infrastructure note first:
@@ -816,6 +822,9 @@ Requested because every `admin_users` password (Sunil's, Abha's, the ALL account
 
 Status legend: 🔴 unverified / high risk · 🟡 unverified / lower risk · 🟢 verified
 
+- 🔴 **The Purchase Order/Delivery Challan attachment fix (2026-09-05) is committed locally but not yet pushed/deployed — Satish Joshi's real stuck resubmission (`MCCIA/2026-27/0018`) cannot succeed until it reaches production.** Confirm with the human before pushing to `main`, per this session's standing caution around concurrent work in this repo. Once deployed, Satish (or whoever tells him) needs to know he can now go back to his edit link and retry — his edit token is still valid (expires 2026-09-19).
+- ⬜ **Undecided (needs human decision):** should Approval/Budget Letter become mandatory again for regular Payment Advice and Cash Voucher submissions (matching the original spec), or is "only Tax Invoice required, Approval/Budget optional outside Advance" the current intended rule? See the 2026-09-05 "Shipped" entry above for exactly where this lives in `validateAttachmentCounts()` — not changed, flagged only.
+
 - 🔴 **Multi-role admin_users is on the `multi-role-admin-users` dev branch, NOT merged to main, NOT yet on any Vercel deployment.** Everything described in the "Shipped (dev branch...)" entry above is real and verified locally (tsc/lint/tests/build, plus live dev-server testing with throwaway accounts), but `main`'s currently-deployed code is still the single-role model — completely unaffected, since the migration was deliberately additive-only. **Do not consider Chintamani's dual-role access live in production until a human explicitly approves merging this branch.** The DB changes (new table, backfill, his second role row) are already applied to the one shared production database (see the infrastructure note in that entry for why that's safe regardless of merge timing).
 - 🟡 **Could not live-test Chintamani's own real account's login/switcher directly** — this session's permission system refused a temporary password swap on his real account (the same pattern previously used for Ganesh Mate's account). Not worked around. His `admin_user_roles` rows are confirmed correct directly in the DB, and the identical role-combination mechanism (AUTHORITY + ALL) was fully live-tested end-to-end with a throwaway account instead. If the human wants Chintamani's actual login double-checked before or after merging, either they test it directly, or explicitly authorize an agent to do the temporary-password-swap-and-restore (same as Ganesh Mate's precedent).
 - ⬜ **Undecided (needs human decision):** once this branch is merged and stable in production for a while, should `admin_users.role`/`recommending_authority_id` be dropped, or kept deprecated indefinitely? Kept deprecated-not-dropped for now specifically because `main` still depends on them until merge — dropping is a clean, separate follow-up migration once nothing reads them anymore, not done in this session.
@@ -948,6 +957,25 @@ Append one entry per session, newest at the top. Keep entries short — this is 
 (Note: this header was accidentally dropped in an earlier edit and restored 2026-08-01 by Claude Code — no content was lost, only the heading line.)
 
 ```
+2026-09-05 — Claude Code — Checked recommending_authorities first per
+instruction, found a clean existing "Satish Joshi" row, reused it (no
+duplicate created). Created his admin_users AUTHORITY login linked to it,
+satish@2026 predictable password, live-tested dashboard scoping (Pending/
+History render correctly, no cross-visibility). While investigating his
+reported "resubmit button doesn't work," found and fixed a real bug in
+lib/attachments/client-upload.ts: validateAttachmentCounts() blocked
+Purchase Order/Delivery Challan for any non-Advance submission instead of
+just Cash/Advance, so a regular Payment Advice resubmission with a PO
+attached — exactly what Finance had asked Satish to add — was rejected
+server-side. Fixed the condition, added 3 regression tests. Also found but
+did NOT fix (flagged as an open item, needs a human decision): Approval/
+Budget Letter is not currently enforced as mandatory outside Advance,
+contradicting the original spec. tsc, ESLint, 362 tests (7 skipped, 3
+new), and build clean. Verified via targeted unit tests reproducing the
+exact real attachment shape, not a full Blob upload, to avoid touching
+Satish's real record with placeholder files. Committed locally, NOT
+pushed — his real resubmission stays blocked until this reaches production.
+
 2026-09-04 — Codex — Completed Claude Code's interrupted pipeline-stage UI
 work: fixed the Admin Dashboard typing and Advance-stage fixture, updated the
 Authority wording regression, and added coverage for all stage/tab styles and

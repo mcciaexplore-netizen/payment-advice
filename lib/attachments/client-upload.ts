@@ -56,7 +56,16 @@ export function validateAttachmentCounts(
     return "Only one Delivery Challan file is allowed.";
   if (byDocType.OTHER.length > MAX_OTHER_ATTACHMENTS)
     return `At most ${MAX_OTHER_ATTACHMENTS} "Other" files are allowed.`;
-  if (!isAdvance && (byDocType.PURCHASE_ORDER.length || byDocType.DELIVERY_CHALLAN.length))
+  // Purchase Order / Delivery Challan belong to the "Bill & Reference"
+  // section, which only exists on the regular Payment Advice (NEFT) form —
+  // Advance and Cash Voucher both hide that section entirely and have no
+  // UI path to select these file types. The condition below must therefore
+  // block them for isAdvance OR Cash, not "not Advance" alone — the
+  // previous `!isAdvance` version also blocked them for regular Payment
+  // Advice, where they're a legitimate optional attachment (see SPEC.md).
+  // This is what silently rejected a real resubmission where Finance had
+  // explicitly asked the submitter to add a Purchase Order.
+  if ((isAdvance || paymentMode === "CASH") && (byDocType.PURCHASE_ORDER.length || byDocType.DELIVERY_CHALLAN.length))
     return "Only Tax Invoice / Supplementary Document and Approval / Budget Letter attachments are allowed.";
   if (!isAdvance && paymentMode === "CASH" && byDocType.OTHER.length)
     return "Other Documents attachments are available only for Payment Advice.";
