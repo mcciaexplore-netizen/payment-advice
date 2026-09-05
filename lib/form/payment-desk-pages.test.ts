@@ -8,6 +8,7 @@ describe("Payment Desk dedicated public pages", () => {
   it("routes the landing choices and the two confirmed follow-up links correctly", () => {
     expect(read("app/page.tsx")).toContain('href="/payment-advice"');
     expect(read("app/page.tsx")).toContain('href="/cash-voucher"');
+    expect(read("app/page.tsx")).toContain('href="/advance" title="Advance Payment Form"');
     expect(read("app/advance/page.tsx")).toContain('href="/payment-advice"');
     expect(read("app/submitted/[serial]/page.tsx")).toContain('href="/payment-advice"');
   });

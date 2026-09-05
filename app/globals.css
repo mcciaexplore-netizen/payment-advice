@@ -1,3 +1,4 @@
+@import url("https://fonts.googleapis.com/css2?family=Valley+Sans:ital,wght@0,100..900;1,100..900&display=swap");
 @import "tailwindcss";
 
 :root {
@@ -16,8 +17,8 @@
   --color-navy: var(--color-navy);
   --color-forest: var(--color-forest);
   --color-amber: var(--color-amber);
-  --font-heading: var(--font-dm-serif-display);
-  --font-body: var(--font-outfit);
+  --font-heading: "Valley Sans";
+  --font-body: "Valley Sans";
 }
 
 body {
@@ -30,7 +31,7 @@ h1,
 h2,
 h3,
 .font-heading {
-  font-family: var(--font-heading), Georgia, serif;
+  font-family: var(--font-heading), Arial, Helvetica, sans-serif;
 }
 
 .admin-filter-input {
