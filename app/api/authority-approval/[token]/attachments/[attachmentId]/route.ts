@@ -6,6 +6,12 @@ import { attachments, paymentAdvices } from "@/lib/db/schema";
 
 export const runtime = "nodejs";
 
+function contentTypeFor(fileName: string) {
+  if (/\.jpe?g$/i.test(fileName)) return "image/jpeg";
+  if (/\.png$/i.test(fileName)) return "image/png";
+  return "application/pdf";
+}
+
 // Mirrors /api/admin/attachments/[id] (authenticated by admin cookie there)
 // but authenticated by the authority_token instead, since the Recommending
 // Authority never logs in. Deliberately restricted to the two doc types the
@@ -45,7 +51,7 @@ export async function GET(
   return new NextResponse(result.stream, {
     status: 200,
     headers: {
-      "Content-Type": "application/pdf",
+      "Content-Type": contentTypeFor(attachment.fileName),
       "Content-Disposition": `inline; filename="${attachment.fileName}"`,
     },
   });

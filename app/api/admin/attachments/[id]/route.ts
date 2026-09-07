@@ -6,6 +6,12 @@ import { attachments } from "@/lib/db/schema";
 
 export const runtime = "nodejs";
 
+function contentTypeFor(fileName: string) {
+  if (/\.jpe?g$/i.test(fileName)) return "image/jpeg";
+  if (/\.png$/i.test(fileName)) return "image/png";
+  return "application/pdf";
+}
+
 // Admin never sees the raw Vercel Blob URL: this route fetches the blob
 // server-side (via the SDK's authenticated `get`, since the store is
 // private) and streams it through, so downloads always go through an
@@ -34,7 +40,7 @@ export async function GET(
   return new NextResponse(result.stream, {
     status: 200,
     headers: {
-      "Content-Type": "application/pdf",
+      "Content-Type": contentTypeFor(attachment.fileName),
       "Content-Disposition": `inline; filename="${attachment.fileName}"`,
     },
   });

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { formatIstDate } from "@/lib/date-time";
+import { AttachmentPreview } from "@/components/ui/AttachmentPreview";
 
 type ReviewFields = {
   payeeName: string;
@@ -181,14 +182,11 @@ export function AuthorityApprovalView({
           <ul className="flex flex-col gap-1">
             {documents.map((doc) => (
               <li key={doc.id}>
-                <a
+                <span className="text-sm">{doc.label}: {doc.fileName} · </span>
+                <AttachmentPreview
+                  fileName={doc.fileName}
                   href={`/api/authority-approval/${token}/attachments/${doc.id}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-sm font-medium text-[#0b1f3a] hover:underline"
-                >
-                  {doc.label}: {doc.fileName}
-                </a>
+                />
               </li>
             ))}
           </ul>

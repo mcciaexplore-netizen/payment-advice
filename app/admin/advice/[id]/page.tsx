@@ -20,6 +20,7 @@ import { getAdminSession } from "@/lib/admin-session";
 import { billPassedForLabelFor, displayNoFor, documentLabelFor } from "@/lib/advice/document-identity";
 import { pipelineStageFor } from "@/lib/advice/pipeline-stage";
 import { formatDateOnly, formatIstDateTime } from "@/lib/date-time";
+import { AttachmentPreview } from "@/components/ui/AttachmentPreview";
 
 export const dynamic = "force-dynamic";
 
@@ -332,14 +333,9 @@ export default async function AdviceDetailPage({
                         <td className="px-4 py-2">{DOC_TYPE_LABELS[a.docType] ?? a.docType}</td>
                         <td className="px-4 py-2">{formatBytes(a.sizeBytes)}</td>
                         <td className="px-4 py-2">
-                          <a
-                            href={`/api/admin/attachments/${a.id}`}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="font-medium text-[#0b1f3a] hover:underline"
-                          >
-                            View / Download
-                          </a>
+                          <AttachmentPreview fileName={a.fileName} href={`/api/admin/attachments/${a.id}`}>
+                            Preview / Download
+                          </AttachmentPreview>
                         </td>
                       </tr>
                     ))}
