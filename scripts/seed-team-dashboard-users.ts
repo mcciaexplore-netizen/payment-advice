@@ -1,57 +1,52 @@
 /**
  * Idempotent one-off seed for the confirmed Branch/Department dashboard
- * rollout (September 2026). Passwords are randomly generated and written
- * once to the gitignored scripts/team-dashboard-users-report.md file.
+ * rollout (September 2026). Initial passwords follow the deliberately
+ * human-approved `{familiar first name}@1934` distribution convention.
  */
 import { config } from "dotenv";
 config({ path: ".env.local", quiet: true });
 
-import crypto from "node:crypto";
-import fs from "node:fs";
-import path from "node:path";
 import { and, eq, inArray } from "drizzle-orm";
 import { db } from "../lib/db";
 import { adminUserRoles, adminUsers, staffMembers } from "../lib/db/schema";
 import { hashPassword } from "../lib/admin-users";
 
 type TeamGrant = { role: "BRANCH" | "DEPARTMENT"; scopeValue: string };
-type TeamAccount = { fullName: string; email: string; grants: TeamGrant[]; staffName?: string };
+type TeamAccount = { fullName: string; email: string; loginStem: string; grants: TeamGrant[]; staffName?: string };
 
 const ACCOUNTS: TeamAccount[] = [
-  { fullName: "SARIKA DAMLE", email: "sarikad@mcciapune.com", grants: [{ role: "BRANCH", scopeValue: "Tilak Road Office" }] },
-  { fullName: "P V SASIDHARAN", email: "sasidharan@mcciapune.com", grants: [{ role: "BRANCH", scopeValue: "Tilak Road Office" }] },
-  { fullName: "Tejaskumar Narute", email: "aefc@mcciapune.com", grants: [{ role: "BRANCH", scopeValue: "Hadapsar Office" }, { role: "DEPARTMENT", scopeValue: "AGRICULTURE" }] },
-  { fullName: "MANDAR MARATHE", email: "mandarm@mcciapune.com", grants: [{ role: "BRANCH", scopeValue: "Bhosari Office" }] },
-  { fullName: "Pratik Pardeshi", email: "paatikp@mcciapune.com", grants: [{ role: "BRANCH", scopeValue: "Bhosari Office" }] },
-  { fullName: "Ravindra Pansare", email: "mccianagar@mcciapune.com", grants: [{ role: "BRANCH", scopeValue: "Ahilyanagar Office" }] },
-  { fullName: "Aishwary Songirkar", email: "aishwary.fellow@mcciapune.com", grants: [{ role: "DEPARTMENT", scopeValue: "MSME HELPLINE" }] },
-  { fullName: "Mayur Borkar", email: "mayurb@mcciapune.com", grants: [{ role: "DEPARTMENT", scopeValue: "RAMP" }] },
-  { fullName: "RAMP Team", email: "mcciaramp@mcciapune.com", grants: [{ role: "DEPARTMENT", scopeValue: "RAMP" }] },
-  { fullName: "SANDHYA ACHARYA", email: "sandhyaa@mcciapune.com", grants: [{ role: "DEPARTMENT", scopeValue: "CBP" }] },
-  { fullName: "VARSHA MAHAJAN", email: "varsham@mcciapune.com", grants: [{ role: "DEPARTMENT", scopeValue: "CBP" }] },
-  { fullName: "CHANDRASHEKHAR SHAH", email: "shekhars@mcciapune.com", grants: [{ role: "DEPARTMENT", scopeValue: "CBP" }] },
-  { fullName: "Shriram Joshi", email: "shriramj@mcciapune.com", grants: [{ role: "DEPARTMENT", scopeValue: "CBP" }] },
-  { fullName: "SONAL PHADNIS", email: "sonalp@mcciapune.com", grants: [{ role: "DEPARTMENT", scopeValue: "MEMBERSHIP" }] },
-  { fullName: "KIRTI KENDHE", email: "kirtik@mcciapune.com", grants: [{ role: "DEPARTMENT", scopeValue: "MEMBERSHIP" }] },
-  { fullName: "Saahil Amritkar", email: "saahila@mcciapune.com", grants: [{ role: "DEPARTMENT", scopeValue: "MEMBERSHIP" }] },
-  { fullName: "Rachita Waghamare", email: "rachitaw@mcciapune.com", grants: [{ role: "DEPARTMENT", scopeValue: "MEMBERSHIP" }] },
-  { fullName: "PARIKSHIT DAS", email: "parikshitd@mcciapune.com", grants: [{ role: "DEPARTMENT", scopeValue: "MEMBERSHIP" }] },
+  { fullName: "SARIKA DAMLE", email: "sarikad@mcciapune.com", loginStem: "sarika", grants: [{ role: "BRANCH", scopeValue: "Tilak Road Office" }] },
+  { fullName: "P V SASIDHARAN", email: "sasidharan@mcciapune.com", loginStem: "sasidharan", grants: [{ role: "BRANCH", scopeValue: "Tilak Road Office" }] },
+  { fullName: "Tejaskumar Narute", email: "aefc@mcciapune.com", loginStem: "tejas", grants: [{ role: "BRANCH", scopeValue: "Hadapsar Office" }, { role: "DEPARTMENT", scopeValue: "AGRICULTURE" }] },
+  { fullName: "MANDAR MARATHE", email: "mandarm@mcciapune.com", loginStem: "mandar", grants: [{ role: "BRANCH", scopeValue: "Bhosari Office" }] },
+  { fullName: "Pratik Pardeshi", email: "paatikp@mcciapune.com", loginStem: "pratik", grants: [{ role: "BRANCH", scopeValue: "Bhosari Office" }] },
+  { fullName: "Ravindra Pansare", email: "mccianagar@mcciapune.com", loginStem: "ravindra", grants: [{ role: "BRANCH", scopeValue: "Ahilyanagar Office" }] },
+  { fullName: "Aishwary Songirkar", email: "aishwary.fellow@mcciapune.com", loginStem: "aishwarya", grants: [{ role: "DEPARTMENT", scopeValue: "MSME HELPLINE" }] },
+  { fullName: "Mayur Borkar", email: "mayurb@mcciapune.com", loginStem: "mayur", grants: [{ role: "DEPARTMENT", scopeValue: "RAMP" }] },
+  { fullName: "RAMP Team", email: "mcciaramp@mcciapune.com", loginStem: "ramp", grants: [{ role: "DEPARTMENT", scopeValue: "RAMP" }] },
+  { fullName: "SANDHYA ACHARYA", email: "sandhyaa@mcciapune.com", loginStem: "sandhya", grants: [{ role: "DEPARTMENT", scopeValue: "CBP" }] },
+  { fullName: "VARSHA MAHAJAN", email: "varsham@mcciapune.com", loginStem: "varsha", grants: [{ role: "DEPARTMENT", scopeValue: "CBP" }] },
+  { fullName: "CHANDRASHEKHAR SHAH", email: "shekhars@mcciapune.com", loginStem: "shekhar", grants: [{ role: "DEPARTMENT", scopeValue: "CBP" }] },
+  { fullName: "Shriram Joshi", email: "shriramj@mcciapune.com", loginStem: "shriram", grants: [{ role: "DEPARTMENT", scopeValue: "CBP" }] },
+  { fullName: "SONAL PHADNIS", email: "sonalp@mcciapune.com", loginStem: "sonal", grants: [{ role: "DEPARTMENT", scopeValue: "MEMBERSHIP" }] },
+  { fullName: "KIRTI KENDHE", email: "kirtik@mcciapune.com", loginStem: "kirti", grants: [{ role: "DEPARTMENT", scopeValue: "MEMBERSHIP" }] },
+  { fullName: "Saahil Amritkar", email: "saahila@mcciapune.com", loginStem: "saahil", grants: [{ role: "DEPARTMENT", scopeValue: "MEMBERSHIP" }] },
+  { fullName: "Rachita Waghamare", email: "rachitaw@mcciapune.com", loginStem: "rachita", grants: [{ role: "DEPARTMENT", scopeValue: "MEMBERSHIP" }] },
+  { fullName: "PARIKSHIT DAS", email: "parikshitd@mcciapune.com", loginStem: "parikshit", grants: [{ role: "DEPARTMENT", scopeValue: "MEMBERSHIP" }] },
 ];
-
-function generatePassword(): string { return crypto.randomBytes(20).toString("base64url"); }
 
 async function main() {
   const emails = ACCOUNTS.map((account) => account.email);
   if (new Set(emails).size !== emails.length) throw new Error("Duplicate account email in seed list.");
 
   const existingUsers = await db.select().from(adminUsers).where(inArray(adminUsers.email, emails));
-  const createdCredentials: { fullName: string; email: string; password: string }[] = [];
+  let createdCount = 0;
 
   await db.transaction(async (tx) => {
     for (const account of ACCOUNTS) {
       let user = existingUsers.find((candidate) => candidate.email === account.email);
       if (!user) {
-        const password = generatePassword();
+        const password = `${account.loginStem}@1934`;
         const [created] = await tx.insert(adminUsers).values({
           fullName: account.fullName,
           email: account.email,
@@ -61,7 +56,7 @@ async function main() {
           recommendingAuthorityId: null,
         }).returning();
         user = created;
-        createdCredentials.push({ fullName: account.fullName, email: account.email, password });
+        createdCount += 1;
       } else if (user.fullName !== account.fullName || !user.isActive) {
         throw new Error(`Conflicting admin_users row for ${account.email}; refusing to overwrite.`);
       }
@@ -89,21 +84,11 @@ async function main() {
     }
   });
 
-  if (createdCredentials.length === 0) {
+  if (createdCount === 0) {
     console.log("No accounts created; all confirmed Team Dashboard accounts and grants already exist.");
     return;
   }
-  const lines = [
-    "# Team Dashboard credentials — generated once",
-    "",
-    "Copy these securely to each account holder, then delete this file.",
-    "",
-    ...createdCredentials.map((item) => `- **${item.fullName}** — ${item.email} — password: \`${item.password}\``),
-    "",
-  ];
-  const reportPath = path.join(process.cwd(), "scripts", "team-dashboard-users-report.md");
-  fs.writeFileSync(reportPath, lines.join("\n"));
-  console.log(`Created ${createdCredentials.length} accounts. Credentials written to ${reportPath}.`);
+  console.log(`Created ${createdCount} accounts with the approved initial-password convention.`);
 }
 
 main().catch((error) => { console.error(error); process.exitCode = 1; }).finally(() => process.exit(process.exitCode ?? 0));

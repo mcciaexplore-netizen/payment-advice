@@ -81,8 +81,9 @@ Design system: Navy `#0B1F3A`, Forest green `#2E8B57`, Amber `#E8A33D`. Headings
 
   After this report the human responded that the matches were accepted, supplied/confirmed the exceptional emails and shared RAMP arrangement, selected **Team Dashboard** as the shared-login name, excluded Rajnikant, and then separately excluded Pramod. Only afterward were 18 `admin_users` accounts / 19 scoped grants seeded. No unresolved or guessed match entered the seed list.
 - Updated staff email source-of-truth values for Ravindra Pansare (`mccianagar@mcciapune.com`), Mayur Borkar (`mayurb@mcciapune.com`), and Rachita Waghamare (`rachitaw@mcciapune.com`) so future public-form autofill matches their login email and My Submissions works. Omkar Golhar and Santosh Sawant deliberately share the single RAMP Team login (`mcciaramp@mcciapune.com`).
-- Live local/server + production-data checks: Sandhya logged in and saw exactly CBP references MCCIA/2026-27/0003 and /0004, while a RAMP reference remained hidden; Tejas logged in and both Hadapsar Branch and AGRICULTURE Department switcher contexts rendered. Original Aniruddha/Chintamani/Prashant/Shantanu role rows were read back unchanged. No test submission was created. Credentials are in the gitignored `scripts/team-dashboard-users-report.md` for secure distribution/deletion.
-- Audit closure verification (2026-09-07): production read-back confirmed all 18 active accounts / 19 grants exactly as documented, Tejas's two grants share one `admin_user_id`, Sandhya's current CBP Team view contained only the four production CBP references while all three current RAMP references remained excluded, and her My Submissions view contained only the two rows matching her login email. The full Vitest run passed **55/55 test files, 383 tests passed, 7 intentionally skipped**; a fresh `npm run build` completed successfully (compile, TypeScript, page-data collection, and all 23 static pages). The local credential report still exists because there is no auditable confirmation that all credentials have been distributed; do not delete the only retained copy until the human confirms secure distribution, then delete it immediately.
+- Live local/server + production-data checks: Sandhya logged in and saw exactly CBP references MCCIA/2026-27/0003 and /0004, while a RAMP reference remained hidden; Tejas logged in and both Hadapsar Branch and AGRICULTURE Department switcher contexts rendered. Original Aniruddha/Chintamani/Prashant/Shantanu role rows were read back unchanged. No test submission was created.
+- Audit closure verification (2026-09-07): production read-back confirmed all 18 active accounts / 19 grants exactly as documented, Tejas's two grants share one `admin_user_id`, Sandhya's current CBP Team view contained only the four production CBP references while all three current RAMP references remained excluded, and her My Submissions view contained only the two rows matching her login email. The full Vitest run passed **55/55 test files, 383 tests passed, 7 intentionally skipped**; a fresh `npm run build` completed successfully (compile, TypeScript, page-data collection, and all 23 static pages).
+- Initial-password reset (2026-09-07, explicitly confirmed by the human): all 18 production Team Dashboard accounts were reset to the familiar-first-name pattern `{name}@1934`, bcrypt-hashed with the same `hashPassword()` path as every other admin account. Confirmed exceptional stems: P V SASIDHARAN → `sasidharan`, Tejaskumar Narute → `tejas`, Aishwary Songirkar → `aishwarya`, RAMP Team → `ramp`, CHANDRASHEKHAR SHAH → `shekhar`, and SONAL PHADNIS → `sonal`. Post-reset read-back verified all 18 hashes against their intended password. The seed script now uses this same deliberate convention for a genuinely new environment and no longer writes a plaintext credential report. The obsolete gitignored random-password report was permanently deleted after the reset; no plaintext Team Dashboard password file remains locally.
 
 ### Shipped — Satish Joshi's Authority account + a real resubmission-blocking bug found and fixed (Claude Code, 2026-09-05)
 - **Account:** Checked `recommending_authorities` first, per instruction — found a single, clean, active row already on file ("Satish Joshi", `satishj@mcciapune.com`, id `fb1ef8b4-3ba6-434a-98d5-e4f7694e114e`), no near-duplicates or ambiguous noise, so reused it rather than creating a second one. No prior `admin_users` row existed for him. Created one (`AUTHORITY` role, linked to that authority id) using the same predictable-password pattern as the 2026-09-04 expansion batch — `satish@2026` reduces unambiguously from his name (single-word first name, no punctuation quirk like Rajnikant's). No forced password change, matching that batch's final decision. Live-tested: logged in, confirmed `/authority`'s Pending queue is scoped correctly (shows only his own linked submissions) and History renders with zero errors.
@@ -2470,10 +2471,18 @@ the shared RAMP account, spelling resolutions, Tejas's dual scope, and the
 human-excluded Rajnikant/Pramod entries. Production read-only checks reconfirmed
 all 18 accounts / 19 grants and current CBP-versus-RAMP isolation. Full Vitest:
 55 files passed, 383 tests passed, 7 intentionally skipped. Fresh production
-build passed. The gitignored credential report remains pending explicit
-confirmation of secure distribution; delete it immediately after that
-confirmation. A separate future deliberate test session must exercise one real
+build passed. A separate future deliberate test session must exercise one real
 Recommend/Send Back mutation and populated Hadapsar/Agriculture dual-scope rows,
 then clean up those test records; neither mutation was bundled into this audit.
+
+2026-09-07 — Codex — Reset exactly the 18 confirmed production Team Dashboard
+accounts to the human-approved familiar-first-name + `@1934` initial-password
+convention. The transaction refused to run unless the live scoped-account set
+matched the exact 18-email allowlist; afterward all 18 bcrypt hashes verified
+against their intended value. Finance and Authority-only accounts were not
+touched. Updated the idempotent seed script to use the same confirmed stems for
+new environments and removed its plaintext-report behavior. Permanently deleted
+the now-obsolete gitignored random-password report; no local Team Dashboard
+credential file remains.
 
 *End of handoff file. Both agents: read §0 again before starting work.*
