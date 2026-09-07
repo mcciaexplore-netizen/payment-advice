@@ -26,11 +26,15 @@ export async function POST(req: NextRequest) {
   if (!user || !passwordOk) {
     return NextResponse.json({ error: "Incorrect email or password." }, { status: 401 });
   }
+
   const roleGrants = await getRolesForAdminUser(user.id);
-  const authorityGrant = roleGrants.find((r) => r.role === "AUTHORITY");
-  if (!authorityGrant || !authorityGrant.recommendingAuthorityId) {
+  const authorityGrant = roleGrants.find((role) => role.role === "AUTHORITY");
+  const hasTeamScope = roleGrants.some(
+    (role) => (role.role === "BRANCH" || role.role === "DEPARTMENT") && role.scopeValue,
+  );
+  if (!hasTeamScope) {
     return NextResponse.json(
-      { error: "This account does not have access to Authority Approvals." },
+      { error: "This account does not have access to the Team Dashboard." },
       { status: 403 },
     );
   }
@@ -39,8 +43,8 @@ export async function POST(req: NextRequest) {
   const token = await createAdminSessionToken({
     adminUserId: user.id,
     fullName: user.fullName,
-    roles: roleGrants.map((r) => r.role),
-    recommendingAuthorityId: authorityGrant.recommendingAuthorityId,
+    roles: roleGrants.map((role) => role.role),
+    recommendingAuthorityId: authorityGrant?.recommendingAuthorityId ?? null,
   });
   const response = NextResponse.json({ ok: true });
   response.cookies.set(ADMIN_SESSION_COOKIE, token, {

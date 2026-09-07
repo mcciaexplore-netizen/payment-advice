@@ -50,7 +50,7 @@ Design system: Navy `#0B1F3A`, Forest green `#2E8B57`, Amber `#E8A33D`. Headings
 **Last updated:** 7 September 2026, by Codex (Team Dashboard audit closed with full matching record and full-suite/build verification)
 
 ### Shipped — Team Dashboard Branch/Department tracking access (Codex, 2026-09-07)
-- Renamed the shared `/authority/login` shell to the human-confirmed neutral **Team Dashboard** branding. Existing Authority Recommendation functionality remains under the same route and is unchanged for AUTHORITY grants.
+- The original rollout temporarily renamed the shared `/authority/login` shell to **Team Dashboard**. The human subsequently clarified that Authority must retain its own entry point: `/authority/login` is restored as **Authority Approvals** and accepts only linked AUTHORITY grants, while new `/team/login` + `/api/team/login` handle only BRANCH/DEPARTMENT accounts. The public Login menu now has three distinct choices: Finance Admin Login, Authority Login, and Team Dashboard Login. Both authenticated account types still land on the established `/authority` dashboard implementation, whose header/login return path is context-aware; no roles or scoped data changed.
 - Migration `0019_thankful_blockbuster.sql` adds nullable `admin_user_roles.scope_value` plus a DB check: BRANCH/DEPARTMENT grants require a scope; all other roles must keep it null. `ADMIN_ROLES` now includes `BRANCH` and `DEPARTMENT`. Finance access is an explicit PAYMENT_ADVICE/CASH_VOUCHER/ALL allowlist, so tracking roles cannot enter `/admin`.
 - Branch/Department dashboard contexts have exactly two read-only views: **Team Submissions**, matched exactly against `payment_advices.branch` or `submitted_by_department`, and **My Submissions**, reusing the same logged-in-email predicate as the Authority dashboard. Full pipeline status and sent-back remarks are shown; no recommendation or send-back actions appear. Tejaskumar Narute has both contexts on one login via the role switcher.
 - Production migrations 0018 (Branch) and 0019 (scoped roles) were applied. The complete pre-seed name-matching audit, including the human's resolutions, was:
@@ -2484,5 +2484,19 @@ touched. Updated the idempotent seed script to use the same confirmed stems for
 new environments and removed its plaintext-report behavior. Permanently deleted
 the now-obsolete gitignored random-password report; no local Team Dashboard
 credential file remains.
+
+2026-09-07 — Codex — Split the temporary shared Team Dashboard login back into
+two explicit portals after the human clarified the intended information
+architecture. Restored `/authority/login` as Authority Approvals and restricted
+its API to linked AUTHORITY grants; added `/team/login` and `/api/team/login`
+for BRANCH/DEPARTMENT grants. The public Payment Desk menu now presents Finance
+Admin, Authority, and Team Dashboard as three separate login choices. Reused one
+login-form component, kept the established session/dashboard implementation,
+and made the authenticated header, change-password wording, and logout return
+path reflect the account context. No account, role, scope, or submission data
+was changed. Verification: TypeScript and ESLint clean; full Vitest suite
+passed 56/56 files and 388 tests (7 intentionally skipped); fresh production
+build passed and emitted both `/team/login` and `/api/team/login` alongside the
+restored Authority routes.
 
 *End of handoff file. Both agents: read §0 again before starting work.*

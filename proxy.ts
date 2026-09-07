@@ -3,6 +3,7 @@ import { ADMIN_SESSION_COOKIE, decodeAdminSessionToken, hasFinanceRole, hasTeamD
 
 const PUBLIC_ADMIN_PATHS = new Set(["/admin/login", "/api/admin/login"]);
 const PUBLIC_AUTHORITY_PATHS = new Set(["/authority/login", "/api/authority/login"]);
+const PUBLIC_TEAM_PATHS = new Set(["/team/login", "/api/team/login"]);
 
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
@@ -21,7 +22,14 @@ export async function proxy(req: NextRequest) {
   }
 
   if (PUBLIC_AUTHORITY_PATHS.has(pathname)) {
-    if (pathname === "/authority/login" && hasTeamDashboardRole(session)) {
+    if (pathname === "/authority/login" && session?.roles.includes("AUTHORITY")) {
+      return NextResponse.redirect(new URL("/authority", req.url), 302);
+    }
+    return NextResponse.next();
+  }
+
+  if (PUBLIC_TEAM_PATHS.has(pathname)) {
+    if (pathname === "/team/login" && session?.roles.some((role) => role === "BRANCH" || role === "DEPARTMENT")) {
       return NextResponse.redirect(new URL("/authority", req.url), 302);
     }
     return NextResponse.next();
@@ -61,6 +69,8 @@ export const config = {
     "/api/admin/:path*",
     "/authority/:path*",
     "/api/authority/:path*",
+    "/team/:path*",
+    "/api/team/:path*",
     "/api/account/:path*",
   ],
 };

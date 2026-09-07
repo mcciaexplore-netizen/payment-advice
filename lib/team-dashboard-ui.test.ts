@@ -21,3 +21,24 @@ describe("Team Dashboard scoped views", () => {
     expect(source).not.toContain("AuthorityQueueActions");
   });
 });
+
+describe("separate public login entry points", () => {
+  const menu = fs.readFileSync(path.join(process.cwd(), "components/public/PublicLoginMenu.tsx"), "utf8");
+  const authorityLogin = fs.readFileSync(path.join(process.cwd(), "app/authority/login/page.tsx"), "utf8");
+  const teamLogin = fs.readFileSync(path.join(process.cwd(), "app/team/login/page.tsx"), "utf8");
+
+  it("offers Finance, Authority, and Team Dashboard logins", () => {
+    expect(menu).toContain('title="Finance Admin Login"');
+    expect(menu).toContain('href="/authority/login"');
+    expect(menu).toContain('title="Authority Login"');
+    expect(menu).toContain('href="/team/login"');
+    expect(menu).toContain('title="Team Dashboard Login"');
+  });
+
+  it("keeps Authority and Team credentials on distinct endpoints", () => {
+    expect(authorityLogin).toContain('title="Authority Approvals"');
+    expect(authorityLogin).toContain('endpoint="/api/authority/login"');
+    expect(teamLogin).toContain('title="Team Dashboard"');
+    expect(teamLogin).toContain('endpoint="/api/team/login"');
+  });
+});

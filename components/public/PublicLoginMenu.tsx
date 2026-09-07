@@ -48,8 +48,15 @@ export function PublicLoginMenu() {
           <div className="border-t border-gray-100" />
           <LoginOption
             href="/authority/login"
+            title="Authority Login"
+            description="Review and recommend assigned submissions"
+            onSelect={() => setOpen(false)}
+          />
+          <div className="border-t border-gray-100" />
+          <LoginOption
+            href="/team/login"
             title="Team Dashboard Login"
-            description="Track team submissions and recommendations"
+            description="Track your own and your team's submissions"
             onSelect={() => setOpen(false)}
           />
         </div>

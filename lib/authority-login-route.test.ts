@@ -45,21 +45,20 @@ describe("POST /api/authority/login", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("set-cookie")).toContain("mccia_admin_session=");
   });
-  it("allows a scoped Branch account into the shared Team Dashboard", async () => {
+  it("rejects a scoped Branch-only account from the Authority login", async () => {
     mocks.findActiveAdminUserByEmail.mockResolvedValue({ id: "branch-1", fullName: "Branch User", passwordHash: "hash" });
     mocks.verifyPassword.mockResolvedValue(true);
     mocks.getRolesForAdminUser.mockResolvedValue([{ role: "BRANCH", recommendingAuthorityId: null, scopeValue: "Bhosari Office" }]);
     const response = await POST(req());
-    expect(response.status).toBe(200);
-    expect(response.headers.get("set-cookie")).toContain("mccia_admin_session=");
+    expect(response.status).toBe(403);
   });
-  it("allows one account carrying both Branch and Department grants", async () => {
+  it("rejects an account carrying only Branch and Department grants", async () => {
     mocks.findActiveAdminUserByEmail.mockResolvedValue({ id: "tejas-1", fullName: "Tejaskumar Narute", passwordHash: "hash" });
     mocks.verifyPassword.mockResolvedValue(true);
     mocks.getRolesForAdminUser.mockResolvedValue([
       { role: "BRANCH", recommendingAuthorityId: null, scopeValue: "Hadapsar Office" },
       { role: "DEPARTMENT", recommendingAuthorityId: null, scopeValue: "AGRICULTURE" },
     ]);
-    expect((await POST(req())).status).toBe(200);
+    expect((await POST(req())).status).toBe(403);
   });
 });
