@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { and, desc, eq, isNotNull, isNull, or } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { adminUsers, paymentAdvices } from "@/lib/db/schema";
+import { adminUserRoles, adminUsers, paymentAdvices } from "@/lib/db/schema";
 import { getAdminSession } from "@/lib/admin-session";
 import { displayNoFor } from "@/lib/advice/document-identity";
 import { pipelineStageFor } from "@/lib/advice/pipeline-stage";
@@ -11,96 +11,108 @@ import { PaymentMode } from "@/lib/validation/payment-advice";
 import { formatIstDate } from "@/lib/date-time";
 
 export const dynamic = "force-dynamic";
-type AuthorityView = "pending" | "history" | "my-submissions";
 
-function date(value: Date | string) {
-  return formatIstDate(value);
+type AuthorityView = "pending" | "history" | "my-submissions";
+type TeamView = "team-submissions" | "my-submissions";
+type DashboardRole = "AUTHORITY" | "BRANCH" | "DEPARTMENT";
+type DashboardGrant = { role: DashboardRole; recommendingAuthorityId: string | null; scopeValue: string | null };
+
+function date(value: Date | string) { return formatIstDate(value); }
+function isDashboardRole(value: string | undefined): value is DashboardRole {
+  return value === "AUTHORITY" || value === "BRANCH" || value === "DEPARTMENT";
+}
+function roleLabel(grant: DashboardGrant): string {
+  return grant.role === "AUTHORITY" ? "Recommendations" : `${grant.role === "BRANCH" ? "Branch" : "Department"}: ${grant.scopeValue}`;
 }
 
-export default async function AuthorityDashboard({ searchParams }: { searchParams: Promise<{ view?: string }> }) {
+export default async function TeamDashboard({ searchParams }: { searchParams: Promise<{ view?: string; role?: string }> }) {
   const session = await getAdminSession();
-  if (!session?.recommendingAuthorityId) return null;
-  const requestedView = (await searchParams).view;
-  const view: AuthorityView = requestedView === "history" ? "history" : requestedView === "my-submissions" ? "my-submissions" : "pending";
-
-  const [account] = await db.select({ email: adminUsers.email }).from(adminUsers)
-    .where(eq(adminUsers.id, session.adminUserId)).limit(1);
+  if (!session) return null;
+  const [accounts, roleRows] = await Promise.all([
+    db.select({ email: adminUsers.email }).from(adminUsers).where(eq(adminUsers.id, session.adminUserId)).limit(1),
+    db.select({ role: adminUserRoles.role, recommendingAuthorityId: adminUserRoles.recommendingAuthorityId, scopeValue: adminUserRoles.scopeValue })
+      .from(adminUserRoles).where(eq(adminUserRoles.adminUserId, session.adminUserId)),
+  ]);
+  const account = accounts[0];
   if (!account) return null;
+  const grants = roleRows.filter((row): row is DashboardGrant =>
+    (row.role === "AUTHORITY" && Boolean(row.recommendingAuthorityId)) ||
+    ((row.role === "BRANCH" || row.role === "DEPARTMENT") && Boolean(row.scopeValue)),
+  );
+  if (grants.length === 0) return null;
 
-  const approvalScope = eq(paymentAdvices.recommendingAuthorityId, session.recommendingAuthorityId);
-  const where = view === "my-submissions"
-    ? eq(paymentAdvices.submittedByEmail, account.email)
-    : and(approvalScope, view === "history"
+  const params = await searchParams;
+  const requestedRole = isDashboardRole(params.role) ? params.role : undefined;
+  const activeGrant = grants.find((grant) => grant.role === requestedRole) ?? grants[0];
+  const isAuthority = activeGrant.role === "AUTHORITY";
+  const authorityView: AuthorityView = params.view === "history" ? "history" : params.view === "my-submissions" ? "my-submissions" : "pending";
+  const teamView: TeamView = params.view === "my-submissions" ? "my-submissions" : "team-submissions";
+  const view = isAuthority ? authorityView : teamView;
+
+  const ownSubmissions = eq(paymentAdvices.submittedByEmail, account.email);
+  const authorityScope = eq(paymentAdvices.recommendingAuthorityId, activeGrant.recommendingAuthorityId!);
+  const teamScope = activeGrant.role === "BRANCH"
+    ? eq(paymentAdvices.branch, activeGrant.scopeValue!)
+    : eq(paymentAdvices.submittedByDepartment, activeGrant.scopeValue!);
+  const where = view === "my-submissions" ? ownSubmissions : isAuthority
+    ? and(authorityScope, view === "history"
       ? or(isNotNull(paymentAdvices.authorityApprovedAt), isNotNull(paymentAdvices.authorityRejectedAt))
-      : and(eq(paymentAdvices.status, "SUBMITTED"), isNull(paymentAdvices.authorityApprovedAt), isNull(paymentAdvices.authorityRejectedAt)));
+      : and(eq(paymentAdvices.status, "SUBMITTED"), isNull(paymentAdvices.authorityApprovedAt), isNull(paymentAdvices.authorityRejectedAt)))
+    : teamScope;
 
   const rows = await db.select({
-    id: paymentAdvices.id, serialNo: paymentAdvices.serialNo,
-    cashVoucherNo: paymentAdvices.cashVoucherNo, advanceNo: paymentAdvices.advanceNo,
-    isAdvance: paymentAdvices.isAdvance, paymentMode: paymentAdvices.paymentMode,
-    payeeName: paymentAdvices.payeeName, amount: paymentAdvices.amount,
-    nature: paymentAdvices.natureOfExpenditure, submittedBy: paymentAdvices.submittedByName,
-    submittedAt: paymentAdvices.submittedAt, status: paymentAdvices.status,
+    id: paymentAdvices.id, serialNo: paymentAdvices.serialNo, cashVoucherNo: paymentAdvices.cashVoucherNo,
+    advanceNo: paymentAdvices.advanceNo, isAdvance: paymentAdvices.isAdvance, paymentMode: paymentAdvices.paymentMode,
+    payeeName: paymentAdvices.payeeName, amount: paymentAdvices.amount, nature: paymentAdvices.natureOfExpenditure,
+    submittedBy: paymentAdvices.submittedByName, submittedAt: paymentAdvices.submittedAt, status: paymentAdvices.status,
     approvedAt: paymentAdvices.authorityApprovedAt, rejectedAt: paymentAdvices.authorityRejectedAt,
     authorityRemarks: paymentAdvices.authorityRemarks, adminRemarks: paymentAdvices.adminRemarks,
     financeReceivedAt: paymentAdvices.financeReceivedAt, verifiedAt: paymentAdvices.verifiedAt,
-    paymentDoneAt: paymentAdvices.paymentDoneAt, totalPaid: paymentAdvices.totalPaid,
-    revisionCount: paymentAdvices.revisionCount,
+    paymentDoneAt: paymentAdvices.paymentDoneAt, totalPaid: paymentAdvices.totalPaid, revisionCount: paymentAdvices.revisionCount,
   }).from(paymentAdvices).where(where).orderBy(desc(paymentAdvices.submittedAt));
 
-  const subtitle = view === "history" ? "Your previous recommendation decisions"
+  const subtitle = isAuthority
+    ? view === "history" ? "Your previous recommendation decisions"
+      : view === "my-submissions" ? `${rows.length} submission${rows.length === 1 ? "" : "s"} made using ${account.email}`
+      : `${rows.length} submission${rows.length === 1 ? "" : "s"} waiting for you`
     : view === "my-submissions" ? `${rows.length} submission${rows.length === 1 ? "" : "s"} made using ${account.email}`
-      : `${rows.length} submission${rows.length === 1 ? "" : "s"} waiting for you`;
+      : `${rows.length} submission${rows.length === 1 ? "" : "s"} in ${activeGrant.scopeValue}`;
 
-  return (
-    <div className="flex flex-col gap-6">
-      <header><h1 className="font-heading text-3xl text-[#0b1f3a]">Authority Recommendations</h1><p className="mt-1 text-sm text-gray-600">{subtitle}</p></header>
-      <nav className="flex flex-wrap items-center gap-2 border-b border-gray-200 pb-0">
-        <Tab href="/authority" active={view === "pending"}>Pending My Recommendation</Tab>
-        <Tab href="/authority?view=history" active={view === "history"}>History</Tab>
-        <Tab href="/authority?view=my-submissions" active={view === "my-submissions"}>My Submissions</Tab>
-        <div className="ml-auto mb-1.5"><StageLegend /></div>
-      </nav>
-      {rows.length === 0 ? (
-        <div className="rounded-lg border border-gray-200 p-10 text-center text-sm text-gray-500">
-          {view === "history" ? "No decisions recorded yet." : view === "my-submissions" ? "No submissions found for your login email." : "Nothing is waiting for your recommendation."}
-        </div>
-      ) : (
-        <div className="overflow-x-auto rounded-lg border border-gray-200"><table className="w-full text-left text-sm">
-          <thead className="bg-gray-50 text-xs uppercase text-gray-500"><tr>
-            <th className="p-3">Reference</th><th className="p-3">Payee / Particulars</th><th className="p-3">Amount</th><th className="p-3">Submitted</th>
-            <th className="p-3">{view === "history" ? "Decision" : view === "my-submissions" ? "Current Stage" : "Action"}</th>
-            {view === "history" ? <th className="p-3">Action</th> : null}
-          </tr></thead>
-          <tbody className="divide-y divide-gray-100">{rows.map((row) => (
-            <tr key={row.id} className="align-top">
-              <td className="p-3 font-medium text-[#0b1f3a]">{displayNoFor(row.paymentMode as PaymentMode, row.serialNo, row.cashVoucherNo, row.isAdvance, row.advanceNo)}</td>
-              <td className="p-3"><div className="font-medium">{row.payeeName}</div><div className="mt-1 max-w-xs text-xs text-gray-600">{row.nature}</div>{view === "pending" && row.revisionCount >= 1 ? <div className="mt-2 max-w-sm rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs text-amber-900"><strong>Resubmission — revision {row.revisionCount}</strong>{row.adminRemarks ? <div className="mt-1">Previous remarks: {row.adminRemarks}</div> : null}</div> : null}</td>
-              <td className="p-3 whitespace-nowrap">₹ {Number(row.amount).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
-              <td className="p-3 whitespace-nowrap">{view !== "my-submissions" ? <div>{row.submittedBy}</div> : null}<div className="text-xs text-gray-500">{date(row.submittedAt)}</div></td>
-              <td className="p-3">{view === "pending" ? (
-                <div className="flex flex-col items-start gap-2">
-                  <StageBadge stage="Waiting on Authority" />
-                  <ViewLink adviceId={row.id} from="pending" />
-                </div>
-              ) : view === "history" ? (
-                <div className="text-xs"><StageBadge stage={row.approvedAt ? "Awaiting Finance Review" : "Sent Back"} /><div className="mt-1 text-gray-500">{date(row.approvedAt ?? row.rejectedAt!)}</div>{row.authorityRemarks ? <div className="mt-1 max-w-xs text-gray-600">{row.authorityRemarks}</div> : null}</div>
-              ) : (
-                <div className="text-xs"><StageBadge stage={pipelineStageFor(row)} />{row.adminRemarks ? <div className="mt-2 max-w-xs rounded bg-amber-50 px-2 py-1 text-amber-800">Sent-back remarks: {row.adminRemarks}</div> : null}</div>
-              )}</td>
-              {view === "history" ? <td className="p-3"><ViewLink adviceId={row.id} from="history" /></td> : null}
-            </tr>
-          ))}</tbody>
-        </table></div>
-      )}
-    </div>
-  );
+  return <div className="flex flex-col gap-6">
+    <header><h1 className="font-heading text-3xl text-[#0b1f3a]">{isAuthority ? "Authority Recommendations" : "Team Submissions"}</h1><p className="mt-1 text-sm text-gray-600">{subtitle}</p></header>
+    {grants.length > 1 ? <nav aria-label="Dashboard role" className="flex flex-wrap gap-2 rounded-lg bg-gray-100 p-1.5">
+      {grants.map((grant) => <Link key={grant.role} href={`/authority?role=${grant.role}`} className={`rounded-md px-3 py-2 text-sm font-medium ${grant.role === activeGrant.role ? "bg-white text-[#0b1f3a] shadow-sm" : "text-gray-600 hover:text-[#0b1f3a]"}`}>{roleLabel(grant)}</Link>)}
+    </nav> : null}
+    <nav className="flex flex-wrap items-center gap-2 border-b border-gray-200 pb-0">
+      {isAuthority ? <>
+        <Tab href="/authority?role=AUTHORITY" active={view === "pending"}>Pending My Recommendation</Tab>
+        <Tab href="/authority?role=AUTHORITY&view=history" active={view === "history"}>History</Tab>
+        <Tab href="/authority?role=AUTHORITY&view=my-submissions" active={view === "my-submissions"}>My Submissions</Tab>
+      </> : <>
+        <Tab href={`/authority?role=${activeGrant.role}`} active={view === "team-submissions"}>Team Submissions</Tab>
+        <Tab href={`/authority?role=${activeGrant.role}&view=my-submissions`} active={view === "my-submissions"}>My Submissions</Tab>
+      </>}
+      <div className="ml-auto mb-1.5"><StageLegend /></div>
+    </nav>
+    {rows.length === 0 ? <div className="rounded-lg border border-gray-200 p-10 text-center text-sm text-gray-500">
+      {isAuthority && view === "history" ? "No decisions recorded yet." : view === "my-submissions" ? "No submissions found for your login email." : isAuthority ? "Nothing is waiting for your recommendation." : "No submissions found for this team scope."}
+    </div> : <div className="overflow-x-auto rounded-lg border border-gray-200"><table className="w-full text-left text-sm">
+      <thead className="bg-gray-50 text-xs uppercase text-gray-500"><tr><th className="p-3">Reference</th><th className="p-3">Payee / Particulars</th><th className="p-3">Amount</th><th className="p-3">Submitted</th><th className="p-3">{isAuthority && view === "history" ? "Decision" : isAuthority && view === "pending" ? "Action" : "Current Stage"}</th>{isAuthority && view === "history" ? <th className="p-3">Action</th> : null}</tr></thead>
+      <tbody className="divide-y divide-gray-100">{rows.map((row) => <tr key={row.id} className="align-top">
+        <td className="p-3 font-medium text-[#0b1f3a]">{displayNoFor(row.paymentMode as PaymentMode, row.serialNo, row.cashVoucherNo, row.isAdvance, row.advanceNo)}</td>
+        <td className="p-3"><div className="font-medium">{row.payeeName}</div><div className="mt-1 max-w-xs text-xs text-gray-600">{row.nature}</div>{isAuthority && view === "pending" && row.revisionCount >= 1 ? <div className="mt-2 max-w-sm rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs text-amber-900"><strong>Resubmission — revision {row.revisionCount}</strong>{row.adminRemarks ? <div className="mt-1">Previous remarks: {row.adminRemarks}</div> : null}</div> : null}</td>
+        <td className="p-3 whitespace-nowrap">₹ {Number(row.amount).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
+        <td className="p-3 whitespace-nowrap">{view !== "my-submissions" ? <div>{row.submittedBy}</div> : null}<div className="text-xs text-gray-500">{date(row.submittedAt)}</div></td>
+        <td className="p-3">{isAuthority && view === "pending" ? <div className="flex flex-col items-start gap-2"><StageBadge stage="Waiting on Authority" /><ViewLink adviceId={row.id} from="pending" /></div> : isAuthority && view === "history" ? <div className="text-xs"><StageBadge stage={row.approvedAt ? "Awaiting Finance Review" : "Sent Back"} /><div className="mt-1 text-gray-500">{date(row.approvedAt ?? row.rejectedAt!)}</div>{row.authorityRemarks ? <div className="mt-1 max-w-xs text-gray-600">{row.authorityRemarks}</div> : null}</div> : <div className="text-xs"><StageBadge stage={pipelineStageFor(row)} />{row.adminRemarks ? <div className="mt-2 max-w-xs rounded bg-amber-50 px-2 py-1 text-amber-800">Sent-back remarks: {row.adminRemarks}</div> : null}</div>}</td>
+        {isAuthority && view === "history" ? <td className="p-3"><ViewLink adviceId={row.id} from="history" /></td> : null}
+      </tr>)}</tbody>
+    </table></div>}
+  </div>;
 }
 
 function ViewLink({ adviceId, from }: { adviceId: string; from: "pending" | "history" }) {
   return <Link href={`/authority/advice/${adviceId}?from=${from}`} className="inline-flex rounded-md bg-[#0b1f3a] px-3 py-2 text-xs font-medium text-white hover:bg-[#0b1f3a]/90">View</Link>;
 }
-
 function Tab({ href, active, children }: { href: string; active: boolean; children: React.ReactNode }) {
   return <Link href={href} className={`px-4 py-2 text-sm font-medium ${active ? "border-b-2 border-[#0b1f3a] text-[#0b1f3a]" : "text-gray-500"}`}>{children}</Link>;
 }

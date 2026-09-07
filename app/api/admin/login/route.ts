@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   ADMIN_SESSION_COOKIE,
   ADMIN_SESSION_MAX_AGE_SECONDS,
+  FINANCE_ROLES,
   createAdminSessionToken,
 } from "@/lib/auth";
 import {
@@ -84,14 +85,14 @@ export async function POST(req: NextRequest) {
 
   const roleGrants = await getRolesForAdminUser(user.id);
   const roles = roleGrants.map((r) => r.role);
-  // Eligible for the Finance Admin login iff the account holds at least one
-  // non-AUTHORITY role — an AUTHORITY-only account must use the separate
-  // Authority Approvals sign-in instead. A dual-role account (e.g. AUTHORITY
+  // Eligible for the Finance Admin login iff the account holds an explicit
+  // Finance role. Authority/Branch/Department-only accounts must use the
+  // Team Dashboard sign-in instead. A dual-role account (e.g. AUTHORITY
   // + ALL) is allowed here and lands in Full Admin with both roles on its
   // session, same as anyone else with more than one role.
-  if (!roles.some((r) => r !== "AUTHORITY")) {
+  if (!roles.some((r) => FINANCE_ROLES.includes(r))) {
     return NextResponse.json(
-      { error: "Please use the Authority Approvals sign-in page." },
+      { error: "Please use the Team Dashboard sign-in page." },
       { status: 403 },
     );
   }

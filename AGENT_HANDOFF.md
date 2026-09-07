@@ -47,7 +47,15 @@ Design system: Navy `#0B1F3A`, Forest green `#2E8B57`, Amber `#E8A33D`. Headings
 
 ## 3. Current State (update this every session)
 
-**Last updated:** 7 September 2026, by Codex (shared Branch + Department dropdowns implemented; migration 0018 generated, production migration/live submissions pending a separate development environment)
+**Last updated:** 7 September 2026, by Codex (Team Dashboard Branch/Department tracking roles implemented, migrated, seeded, and scope-tested)
+
+### Shipped — Team Dashboard Branch/Department tracking access (Codex, 2026-09-07)
+- Renamed the shared `/authority/login` shell to the human-confirmed neutral **Team Dashboard** branding. Existing Authority Recommendation functionality remains under the same route and is unchanged for AUTHORITY grants.
+- Migration `0019_thankful_blockbuster.sql` adds nullable `admin_user_roles.scope_value` plus a DB check: BRANCH/DEPARTMENT grants require a scope; all other roles must keep it null. `ADMIN_ROLES` now includes `BRANCH` and `DEPARTMENT`. Finance access is an explicit PAYMENT_ADVICE/CASH_VOUCHER/ALL allowlist, so tracking roles cannot enter `/admin`.
+- Branch/Department dashboard contexts have exactly two read-only views: **Team Submissions**, matched exactly against `payment_advices.branch` or `submitted_by_department`, and **My Submissions**, reusing the same logged-in-email predicate as the Authority dashboard. Full pipeline status and sent-back remarks are shown; no recommendation or send-back actions appear. Tejaskumar Narute has both contexts on one login via the role switcher.
+- Production migrations 0018 (Branch) and 0019 (scoped roles) were applied. Seeded 18 accounts / 19 grants: SARIKA DAMLE — Branch/Tilak Road Office; P V SASIDHARAN — Branch/Tilak Road Office; Tejaskumar Narute — Branch/Hadapsar Office + Department/AGRICULTURE; MANDAR MARATHE and Pratik Pardeshi — Branch/Bhosari Office; Ravindra Pansare — Branch/Ahilyanagar Office; Aishwary Songirkar — Department/MSME HELPLINE; Mayur Borkar and shared RAMP Team — Department/RAMP; SANDHYA ACHARYA, VARSHA MAHAJAN, CHANDRASHEKHAR SHAH, and Shriram Joshi — Department/CBP; SONAL PHADNIS, KIRTI KENDHE, Saahil Amritkar, Rachita Waghamare, and PARIKSHIT DAS — Department/MEMBERSHIP. Pramod and Rajnikant were explicitly skipped by the human.
+- Updated staff email source-of-truth values for Ravindra Pansare (`mccianagar@mcciapune.com`), Mayur Borkar (`mayurb@mcciapune.com`), and Rachita Waghamare (`rachitaw@mcciapune.com`) so future public-form autofill matches their login email and My Submissions works. Omkar Golhar and Santosh Sawant deliberately share the single RAMP Team login (`mcciaramp@mcciapune.com`).
+- Live local/server + production-data checks: Sandhya logged in and saw exactly CBP references MCCIA/2026-27/0003 and /0004, while a RAMP reference remained hidden; Tejas logged in and both Hadapsar Branch and AGRICULTURE Department switcher contexts rendered. Original Aniruddha/Chintamani/Prashant/Shantanu role rows were read back unchanged. No test submission was created. Credentials are in the gitignored `scripts/team-dashboard-users-report.md` for secure distribution/deletion.
 
 ### Shipped — Satish Joshi's Authority account + a real resubmission-blocking bug found and fixed (Claude Code, 2026-09-05)
 - **Account:** Checked `recommending_authorities` first, per instruction — found a single, clean, active row already on file ("Satish Joshi", `satishj@mcciapune.com`, id `fb1ef8b4-3ba6-434a-98d5-e4f7694e114e`), no near-duplicates or ambiguous noise, so reused it rather than creating a second one. No prior `admin_users` row existed for him. Created one (`AUTHORITY` role, linked to that authority id) using the same predictable-password pattern as the 2026-09-04 expansion batch — `satish@2026` reduces unambiguously from his name (single-word first name, no punctuation quirk like Rajnikant's). No forced password change, matching that batch's final decision. Live-tested: logged in, confirmed `/authority`'s Pending queue is scoped correctly (shows only his own linked submissions) and History renders with zero errors.
@@ -822,7 +830,7 @@ Requested because every `admin_users` password (Sunil's, Abha's, the ALL account
 
 Status legend: 🔴 unverified / high risk · 🟡 unverified / lower risk · 🟢 verified
 
-- 🟡 **Submitter Branch/Department change is implemented but not yet applied/live-submitted:** migration `0018_swift_grey_gargoyle.sql` is generated but deliberately not run against the configured database because `.env.local` still points at production and `TEST_DATABASE_URL` is empty. The human requested a separate development database but has not yet supplied its Neon URL (or a development Blob token). Do not push/deploy this code before either applying 0018 to production or configuring the requested dev environment. Valid submissions on all three forms remain intentionally unclaimed so no production reference numbers/test rows are created.
+- 🟢 **Submitter Branch migration applied 2026-09-07:** additive migration `0018_swift_grey_gargoyle.sql` is now applied to the configured production database. No historical rows were backfilled or rewritten; historical Branch remains null by design. No test submission/reference number was created.
 
 - 🔴 **The Purchase Order/Delivery Challan attachment fix (2026-09-05) is committed locally but not yet pushed/deployed — Satish Joshi's real stuck resubmission (`MCCIA/2026-27/0018`) cannot succeed until it reaches production.** Confirm with the human before pushing to `main`, per this session's standing caution around concurrent work in this repo. Once deployed, Satish (or whoever tells him) needs to know he can now go back to his edit link and retry — his edit token is still valid (expires 2026-09-19).
 - ⬜ **Undecided (needs human decision):** should Approval/Budget Letter become mandatory again for regular Payment Advice and Cash Voucher submissions (matching the original spec), or is "only Tax Invoice required, Approval/Budget optional outside Advance" the current intended rule? See the 2026-09-05 "Shipped" entry above for exactly where this lives in `validateAttachmentCounts()` — not changed, flagged only.
@@ -2392,5 +2400,27 @@ all options in the required order. 372 tests passed (7 gated DB tests skipped),
 TypeScript, ESLint, and production build clean. Migration 0018 was not applied
 and no valid live submission was created: local env still targets production,
 while the requested separate dev DB/Blob environment has not been provided.
+
+2026-09-07 — Codex — Extended the multi-role account system with scoped
+BRANCH/DEPARTMENT grants and the human-confirmed Team Dashboard branding.
+Applied migrations 0018 and 0019, seeded the 18 confirmed accounts (19 role
+rows; Tejas holds both scopes), deliberately skipped Pramod and Rajnikant,
+and aligned three staff emails supplied by the human. Live-tested Sandhya's
+single CBP login against real scoped rows and Tejas's two-context switcher;
+read back the original four Authority grants unchanged. No submission or
+serial was created. Full checks recorded in §3; credentials remain only in
+the gitignored local report pending secure distribution.
+
+2026-09-07 — Codex — Diagnosed a colleague's report that the Cash Voucher
+submit button appeared unclickable. Production logs contained no matching
+attachment-upload or `/api/submit` request, and code inspection confirmed the
+button is disabled only during an active submission. The real UX gap was
+client validation feedback: a missing required per-expense bill rendered its
+only error in Section 4 but then scrolled the user to the top, where no error
+was shown; other invalid fields similarly had no top-level summary. Updated
+the shared form to show an immediate top error for both cases while retaining
+field-level errors. Targeted validation tests (51), TypeScript, and ESLint
+clean. Included in the same 2026-09-07 change set as the Team Dashboard
+rollout for deployment to production.
 
 *End of handoff file. Both agents: read §0 again before starting work.*

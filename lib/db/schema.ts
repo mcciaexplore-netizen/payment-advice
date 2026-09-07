@@ -1,4 +1,5 @@
 import {
+  check,
   pgTable,
   uuid,
   text,
@@ -11,6 +12,7 @@ import {
   unique,
   primaryKey,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 /** Real per-person Finance and Recommending Authority logins. Finance roles
  * use the admin area; AUTHORITY users are strictly scoped to the linked
@@ -60,9 +62,18 @@ export const adminUserRoles = pgTable(
     recommendingAuthorityId: uuid("recommending_authority_id").references(
       () => recommendingAuthorities.id,
     ),
+    // Exact payment_advices.branch / submitted_by_department value for
+    // BRANCH and DEPARTMENT grants. Null for every other role.
+    scopeValue: text("scope_value"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   },
-  (table) => [unique().on(table.adminUserId, table.role)],
+  (table) => [
+    unique().on(table.adminUserId, table.role),
+    check(
+      "admin_user_roles_scope_value_check",
+      sql`(${table.role} in ('BRANCH', 'DEPARTMENT') and ${table.scopeValue} is not null) or (${table.role} not in ('BRANCH', 'DEPARTMENT') and ${table.scopeValue} is null)`,
+    ),
+  ],
 );
 
 export const vendors = pgTable("vendors", {

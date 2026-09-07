@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { ADMIN_SESSION_COOKIE, decodeAdminSessionToken, hasFinanceRole, hasRole } from "@/lib/auth";
+import { ADMIN_SESSION_COOKIE, decodeAdminSessionToken, hasFinanceRole, hasTeamDashboardRole } from "@/lib/auth";
 
 const PUBLIC_ADMIN_PATHS = new Set(["/admin/login", "/api/admin/login"]);
 const PUBLIC_AUTHORITY_PATHS = new Set(["/authority/login", "/api/authority/login"]);
@@ -21,14 +21,14 @@ export async function proxy(req: NextRequest) {
   }
 
   if (PUBLIC_AUTHORITY_PATHS.has(pathname)) {
-    if (pathname === "/authority/login" && hasRole(session, "AUTHORITY")) {
+    if (pathname === "/authority/login" && hasTeamDashboardRole(session)) {
       return NextResponse.redirect(new URL("/authority", req.url), 302);
     }
     return NextResponse.next();
   }
 
   if (isAuthorityPath) {
-    if (!hasRole(session, "AUTHORITY") || !session?.recommendingAuthorityId) {
+    if (!hasTeamDashboardRole(session)) {
       if (pathname.startsWith("/api/authority/")) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
       }

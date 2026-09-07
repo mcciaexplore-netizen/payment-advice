@@ -28,9 +28,12 @@ export async function POST(req: NextRequest) {
   }
   const roleGrants = await getRolesForAdminUser(user.id);
   const authorityGrant = roleGrants.find((r) => r.role === "AUTHORITY");
-  if (!authorityGrant || !authorityGrant.recommendingAuthorityId) {
+  const hasTeamScope = roleGrants.some(
+    (r) => (r.role === "BRANCH" || r.role === "DEPARTMENT") && r.scopeValue,
+  );
+  if ((!authorityGrant || !authorityGrant.recommendingAuthorityId) && !hasTeamScope) {
     return NextResponse.json(
-      { error: "This account does not have access to Authority Recommendations." },
+      { error: "This account does not have access to the Team Dashboard." },
       { status: 403 },
     );
   }
@@ -40,7 +43,7 @@ export async function POST(req: NextRequest) {
     adminUserId: user.id,
     fullName: user.fullName,
     roles: roleGrants.map((r) => r.role),
-    recommendingAuthorityId: authorityGrant.recommendingAuthorityId,
+    recommendingAuthorityId: authorityGrant?.recommendingAuthorityId ?? null,
   });
   const response = NextResponse.json({ ok: true });
   response.cookies.set(ADMIN_SESSION_COOKIE, token, {

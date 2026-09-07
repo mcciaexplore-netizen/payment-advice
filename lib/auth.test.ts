@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.stubEnv("AUTH_SECRET", "test-secret-at-least-this-long-for-hs256");
 
-import { createAdminSessionToken, decodeAdminSessionToken, hasFinanceRole, hasRole } from "./auth";
+import { createAdminSessionToken, decodeAdminSessionToken, hasFinanceRole, hasRole, hasTeamDashboardRole } from "./auth";
 
 describe("decodeAdminSessionToken — multi-role payloads", () => {
   it("round-trips a single-role session exactly as before (no behavior change for the common case)", async () => {
@@ -119,5 +119,12 @@ describe("hasRole / hasFinanceRole", () => {
     expect(hasFinanceRole({ roles: ["PAYMENT_ADVICE"] })).toBe(true);
     expect(hasFinanceRole({ roles: ["CASH_VOUCHER"] })).toBe(true);
     expect(hasFinanceRole({ roles: ["ALL"] })).toBe(true);
+  });
+
+  it("does not mistake Branch/Department tracking roles for Finance access", () => {
+    expect(hasFinanceRole({ roles: ["BRANCH"] })).toBe(false);
+    expect(hasFinanceRole({ roles: ["DEPARTMENT"] })).toBe(false);
+    expect(hasTeamDashboardRole({ roles: ["BRANCH"] })).toBe(true);
+    expect(hasTeamDashboardRole({ roles: ["DEPARTMENT"] })).toBe(true);
   });
 });

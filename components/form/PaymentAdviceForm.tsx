@@ -294,13 +294,16 @@ export function PaymentAdviceForm({
         )
       : undefined;
     if (!hasTaxInvoice || !hasApprovalBudget || missingCashBill) {
-      setAttachmentError(
-        missingCashBill
-          ? "Attach one Bill/Supplementary Document for every Cash Voucher expense."
+      const message = missingCashBill
+        ? "Attach one Bill/Supplementary Document for every Cash Voucher expense."
           : values.isAdvance
           ? "Approval / Budget Letter is a mandatory attachment."
-          : "Tax Invoice / Supplementary Document is a mandatory attachment.",
-      );
+          : "Tax Invoice / Supplementary Document is a mandatory attachment.";
+      setAttachmentError(message);
+      // This message is also shown at the top because the submit button is
+      // below Section 4. Previously we scrolled to the top while rendering
+      // the only error back in Section 4, making a valid click look inert.
+      setSubmitError(message);
       window.scrollTo({ top: 0, behavior: "smooth" });
       return;
     }
@@ -419,8 +422,13 @@ export function PaymentAdviceForm({
     }
   }
 
+  function onInvalid() {
+    setSubmitError("Please complete the highlighted required fields, then submit again.");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-10" noValidate>
+    <form onSubmit={handleSubmit(onSubmit, onInvalid)} className="flex flex-col gap-10" noValidate>
       {submitError ? (
         <div className="rounded-md border border-[#b3261e]/30 bg-[#b3261e]/5 px-4 py-3 text-sm font-medium text-[#b3261e]">
           {submitError}

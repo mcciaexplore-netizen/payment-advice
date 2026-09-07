@@ -41,10 +41,10 @@ export async function recordAdminLogin(adminUserId: string): Promise<void> {
  * the session's `roles` list. */
 export async function getRolesForAdminUser(
   adminUserId: string,
-): Promise<{ role: AdminRole; recommendingAuthorityId: string | null }[]> {
+): Promise<{ role: AdminRole; recommendingAuthorityId: string | null; scopeValue: string | null }[]> {
   const rows = await db
-    .select({ role: adminUserRoles.role, recommendingAuthorityId: adminUserRoles.recommendingAuthorityId })
+    .select({ role: adminUserRoles.role, recommendingAuthorityId: adminUserRoles.recommendingAuthorityId, scopeValue: adminUserRoles.scopeValue })
     .from(adminUserRoles)
     .where(eq(adminUserRoles.adminUserId, adminUserId));
-  return rows.map((r) => ({ role: r.role as AdminRole, recommendingAuthorityId: r.recommendingAuthorityId }));
+  return rows.map((r) => ({ role: r.role as AdminRole, recommendingAuthorityId: r.recommendingAuthorityId, scopeValue: r.scopeValue }));
 }

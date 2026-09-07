@@ -101,6 +101,15 @@ describe("POST /api/admin/login", () => {
     expect(res.headers.get("set-cookie")).toBeNull();
   });
 
+  it("refuses Branch/Department-only accounts at the Finance Admin login", async () => {
+    mocks.findActiveAdminUserByEmail.mockResolvedValueOnce(activeUser);
+    mocks.verifyPassword.mockResolvedValueOnce(true);
+    mocks.getRolesForAdminUser.mockResolvedValueOnce([{ role: "BRANCH", recommendingAuthorityId: null, scopeValue: "Bhosari Office" }]);
+    const res = await POST(req({ email: "branch@mcciapune.com", password: "correct-password" }));
+    expect(res.status).toBe(403);
+    expect(res.headers.get("set-cookie")).toBeNull();
+  });
+
   it("allows a dual-role account (AUTHORITY + ALL) to sign in at the Finance Admin login, session carries both roles", async () => {
     mocks.findActiveAdminUserByEmail.mockResolvedValueOnce({ ...activeUser, fullName: "Chintamani Shrotri", role: "AUTHORITY", recommendingAuthorityId: "authority-1" });
     mocks.verifyPassword.mockResolvedValueOnce(true);

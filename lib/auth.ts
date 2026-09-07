@@ -13,8 +13,11 @@ import { SignJWT, jwtVerify } from "jose";
 export const ADMIN_SESSION_COOKIE = "mccia_admin_session";
 export const ADMIN_SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 7; // 7 days
 
-export const ADMIN_ROLES = ["PAYMENT_ADVICE", "CASH_VOUCHER", "ALL", "AUTHORITY"] as const;
+export const ADMIN_ROLES = ["PAYMENT_ADVICE", "CASH_VOUCHER", "ALL", "AUTHORITY", "BRANCH", "DEPARTMENT"] as const;
 export type AdminRole = (typeof ADMIN_ROLES)[number];
+
+export const FINANCE_ROLES: readonly AdminRole[] = ["PAYMENT_ADVICE", "CASH_VOUCHER", "ALL"];
+export const TEAM_DASHBOARD_ROLES: readonly AdminRole[] = ["AUTHORITY", "BRANCH", "DEPARTMENT"];
 
 /**
  * Multi-role session (see admin_user_roles / AGENT_HANDOFF.md) — a session
@@ -40,13 +43,19 @@ export function hasRole(
   return session?.roles.includes(role) ?? false;
 }
 
-/** True if the session holds any role other than AUTHORITY — i.e. it's
- * eligible for the Finance Admin area (PAYMENT_ADVICE / CASH_VOUCHER / ALL).
- * AUTHORITY-only sessions are not. */
+/** True only for Finance roles (PAYMENT_ADVICE / CASH_VOUCHER / ALL).
+ * Authority, Branch, and Department tracking roles never imply Finance
+ * Admin access. */
 export function hasFinanceRole(
   session: Pick<AdminSessionPayload, "roles"> | null | undefined,
 ): boolean {
-  return session?.roles.some((r) => r !== "AUTHORITY") ?? false;
+  return session?.roles.some((r) => FINANCE_ROLES.includes(r)) ?? false;
+}
+
+export function hasTeamDashboardRole(
+  session: Pick<AdminSessionPayload, "roles"> | null | undefined,
+): boolean {
+  return session?.roles.some((r) => TEAM_DASHBOARD_ROLES.includes(r)) ?? false;
 }
 
 function getSecretKey() {

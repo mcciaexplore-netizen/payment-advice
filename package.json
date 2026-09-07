@@ -14,7 +14,8 @@
     "pdf:test:cash-voucher": "tsx scripts/render-cash-voucher-pdf.tsx",
     "import:master-data": "tsx scripts/import-master-data.ts",
     "backfill:staff-emails": "tsx scripts/backfill-staff-authority-emails.ts",
-    "seed:admin-users": "tsx scripts/seed-admin-users.ts"
+    "seed:admin-users": "tsx scripts/seed-admin-users.ts",
+    "seed:team-dashboard-users": "tsx scripts/seed-team-dashboard-users.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.5.7",

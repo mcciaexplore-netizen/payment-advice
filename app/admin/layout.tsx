@@ -10,6 +10,8 @@ const ROLE_LABELS: Record<string, string> = {
   CASH_VOUCHER: "Cash Voucher",
   ALL: "All Access",
   AUTHORITY: "Authority",
+  BRANCH: "Branch",
+  DEPARTMENT: "Department",
 };
 
 /** Single-role accounts (the common case) see exactly the label they always

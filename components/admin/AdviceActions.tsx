@@ -12,6 +12,8 @@ const ROLE_LABELS: Record<AdminRole, string> = {
   CASH_VOUCHER: "a Cash Voucher",
   ALL: "an All-Access",
   AUTHORITY: "an Authority",
+  BRANCH: "a Branch dashboard",
+  DEPARTMENT: "a Department dashboard",
 };
 
 export type PaymentEntryDisplay = {

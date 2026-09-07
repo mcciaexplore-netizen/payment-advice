@@ -57,6 +57,7 @@ Master*FILE*AI.xlsx
 # output of scripts/seed-admin-users.ts — plaintext generated passwords,
 # shown once, never meant to be committed
 scripts/admin-users-report.md
+scripts/team-dashboard-users-report.md
 
 # local safety exports made before production data maintenance
 .local-backups/

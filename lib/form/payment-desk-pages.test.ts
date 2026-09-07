@@ -47,4 +47,11 @@ describe("Payment Desk dedicated public pages", () => {
     expect(cashItems).not.toContain('amount: 0');
     expect(read("components/form/LineItemsField.tsx")).toContain('append({ description: "", amount: undefined as unknown as number })');
   });
+
+  it("surfaces invalid fields and missing Cash bills at the top after submit is clicked", () => {
+    const form = read("components/form/PaymentAdviceForm.tsx");
+    expect(form).toContain("handleSubmit(onSubmit, onInvalid)");
+    expect(form).toContain("Please complete the highlighted required fields, then submit again.");
+    expect(form).toContain("setSubmitError(message)");
+  });
 });
