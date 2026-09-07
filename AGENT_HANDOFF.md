@@ -47,7 +47,7 @@ Design system: Navy `#0B1F3A`, Forest green `#2E8B57`, Amber `#E8A33D`. Headings
 
 ## 3. Current State (update this every session)
 
-**Last updated:** 5 September 2026, by Claude Code (Satish Joshi's Authority account added; fixed a real bug blocking Purchase Order/Delivery Challan attachments on regular Payment Advice resubmission)
+**Last updated:** 7 September 2026, by Codex (shared Branch + Department dropdowns implemented; migration 0018 generated, production migration/live submissions pending a separate development environment)
 
 ### Shipped — Satish Joshi's Authority account + a real resubmission-blocking bug found and fixed (Claude Code, 2026-09-05)
 - **Account:** Checked `recommending_authorities` first, per instruction — found a single, clean, active row already on file ("Satish Joshi", `satishj@mcciapune.com`, id `fb1ef8b4-3ba6-434a-98d5-e4f7694e114e`), no near-duplicates or ambiguous noise, so reused it rather than creating a second one. No prior `admin_users` row existed for him. Created one (`AUTHORITY` role, linked to that authority id) using the same predictable-password pattern as the 2026-09-04 expansion batch — `satish@2026` reduces unambiguously from his name (single-word first name, no punctuation quirk like Rajnikant's). No forced password change, matching that batch's final decision. Live-tested: logged in, confirmed `/authority`'s Pending queue is scoped correctly (shows only his own linked submissions) and History renders with zero errors.
@@ -821,6 +821,8 @@ Requested because every `admin_users` password (Sunil's, Abha's, the ALL account
 ## 4. Open Items (verify before building on top of these)
 
 Status legend: 🔴 unverified / high risk · 🟡 unverified / lower risk · 🟢 verified
+
+- 🟡 **Submitter Branch/Department change is implemented but not yet applied/live-submitted:** migration `0018_swift_grey_gargoyle.sql` is generated but deliberately not run against the configured database because `.env.local` still points at production and `TEST_DATABASE_URL` is empty. The human requested a separate development database but has not yet supplied its Neon URL (or a development Blob token). Do not push/deploy this code before either applying 0018 to production or configuring the requested dev environment. Valid submissions on all three forms remain intentionally unclaimed so no production reference numbers/test rows are created.
 
 - 🔴 **The Purchase Order/Delivery Challan attachment fix (2026-09-05) is committed locally but not yet pushed/deployed — Satish Joshi's real stuck resubmission (`MCCIA/2026-27/0018`) cannot succeed until it reaches production.** Confirm with the human before pushing to `main`, per this session's standing caution around concurrent work in this repo. Once deployed, Satish (or whoever tells him) needs to know he can now go back to his edit link and retry — his edit token is still valid (expires 2026-09-19).
 - ⬜ **Undecided (needs human decision):** should Approval/Budget Letter become mandatory again for regular Payment Advice and Cash Voucher submissions (matching the original spec), or is "only Tax Invoice required, Approval/Budget optional outside Advance" the current intended rule? See the 2026-09-05 "Shipped" entry above for exactly where this lives in `validateAttachmentCounts()` — not changed, flagged only.
@@ -2364,5 +2366,31 @@ absence of the old Tax Invoice slot. Browser control was unavailable, so no
 interactive browser submission was claimed and no production reference number
 or test row was consumed. TypeScript, ESLint, 366 tests (7 skipped), and the
 production build were clean.
+
+2026-09-07 — Codex — Added shared Submitter-details Branch and Department
+controls across Payment Advice, Cash Voucher, and Advance Payment. Confirmed
+the three routes genuinely reuse one `PaymentAdviceForm`; no duplicate section
+implementation was needed. `Your Branch` is a required fixed dropdown with the
+five approved offices. `Your Department` is now the eight-option dropdown;
+selecting `OTHERS` reveals the manually entered stored department value. Shared
+client/server Zod validation requires both fields and prevents a fixed option
+from being paired with a different stored value. Audited staff matching:
+department was never auto-filled (staff search has no department property and
+the match handler only manages email/authority), so no mapping behavior was
+lost or changed.
+
+Generated additive migration `0018_swift_grey_gargoyle.sql` adding nullable
+`payment_advices.branch`; new submissions require it through validation while
+historical rows remain null without backfill. Submit/edit persistence,
+resubmission prefill, session-backed confirmation, Finance Admin detail, and
+Authority detail all carry/display Branch. Both PDF families display Branch;
+real Payment Advice and 10-row Cash Voucher renders were visually inspected
+with no clipping or overlap (and cover both Advance PDF variants because
+Advance reuses those two templates by payment mode). Rendered HTML from all
+three public routes contained exactly one shared Branch/Department field and
+all options in the required order. 372 tests passed (7 gated DB tests skipped),
+TypeScript, ESLint, and production build clean. Migration 0018 was not applied
+and no valid live submission was created: local env still targets production,
+while the requested separate dev DB/Blob environment has not been provided.
 
 *End of handoff file. Both agents: read §0 again before starting work.*

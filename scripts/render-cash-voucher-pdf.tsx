@@ -22,6 +22,7 @@ async function main() {
       data={{
         displayNo: "CASH/MCCIA/2026-27/0001",
         formDate: "2026-07-28",
+        branch: "SB Road Office",
         payeeName: "Acme Test Pvt Ltd",
         items: descriptions.map((description, index) => ({
           billDate: index % 3 === 0 ? null : `2026-08-${String(index + 10).padStart(2, "0")}`,

@@ -4,6 +4,8 @@ import {
   paymentAdviceFormSchema,
   VERIFIER_NAMES,
   verifierNameSchema,
+  BRANCH_OPTIONS,
+  DEPARTMENT_OPTIONS,
 } from "./payment-advice";
 
 describe("VERIFIER_NAMES spelling", () => {
@@ -21,10 +23,48 @@ describe("VERIFIER_NAMES spelling", () => {
   });
 });
 
+describe("shared Submitter details validation", () => {
+  it("keeps the fixed Branch and Department options in the required order", () => {
+    expect(BRANCH_OPTIONS).toEqual(["SB Road Office", "Tilak Road Office", "Hadapsar Office", "Bhosari Office", "Ahilyanagar Office"]);
+    expect(DEPARTMENT_OPTIONS).toEqual(["ADMIN", "AGRICULTURE", "AI STUDIO", "CBP", "MEMBERSHIP", "MSME HELPLINE", "RAMP", "OTHERS"]);
+  });
+  it("requires one of the five fixed branches", () => {
+    const missing = paymentAdviceFormSchema.safeParse({ ...baseNeftSubmission, branch: undefined });
+    expect(missing.success).toBe(false);
+    if (!missing.success) expect(missing.error.issues.some((issue) => issue.path[0] === "branch")).toBe(true);
+
+    const invalid = paymentAdviceFormSchema.safeParse({ ...baseNeftSubmission, branch: "Mumbai Office" });
+    expect(invalid.success).toBe(false);
+  });
+
+  it("stores a fixed department only when it matches the selected option", () => {
+    expect(paymentAdviceFormSchema.safeParse(baseNeftSubmission).success).toBe(true);
+    const mismatch = paymentAdviceFormSchema.safeParse({ ...baseNeftSubmission, submittedByDepartment: "RAMP" });
+    expect(mismatch.success).toBe(false);
+  });
+
+  it("requires free text when OTHERS is selected", () => {
+    const missing = paymentAdviceFormSchema.safeParse({
+      ...baseNeftSubmission,
+      submittedByDepartmentOption: "OTHERS",
+      submittedByDepartment: "",
+    });
+    expect(missing.success).toBe(false);
+    const custom = paymentAdviceFormSchema.safeParse({
+      ...baseNeftSubmission,
+      submittedByDepartmentOption: "OTHERS",
+      submittedByDepartment: "International Trade",
+    });
+    expect(custom.success).toBe(true);
+  });
+});
+
 const baseCashSubmission = {
   submittedByName: "Priya Sharma",
   submittedByEmail: "priya@example.com",
-  submittedByDepartment: "Accounts",
+  submittedByDepartmentOption: "ADMIN" as const,
+  submittedByDepartment: "ADMIN",
+  branch: "SB Road Office" as const,
   recommendingAuthorityId: "11111111-1111-4111-8111-111111111111",
   payeeName: "Acme Supplies",
   payeeAddress: "Pune",
@@ -42,7 +82,9 @@ const baseCashSubmission = {
 const baseNeftSubmission = {
   submittedByName: "Priya Sharma",
   submittedByEmail: "priya@example.com",
-  submittedByDepartment: "Accounts",
+  submittedByDepartmentOption: "ADMIN" as const,
+  submittedByDepartment: "ADMIN",
+  branch: "SB Road Office" as const,
   recommendingAuthorityId: "11111111-1111-4111-8111-111111111111",
   payeeName: "Acme Supplies",
   payeeAddress: "Pune",
@@ -239,7 +281,9 @@ describe("standard NEFT Enclosures & Remarks validation", () => {
 const baseAdvanceNeftSubmission = {
   submittedByName: "Priya Sharma",
   submittedByEmail: "priya@example.com",
-  submittedByDepartment: "Accounts",
+  submittedByDepartmentOption: "ADMIN" as const,
+  submittedByDepartment: "ADMIN",
+  branch: "SB Road Office" as const,
   recommendingAuthorityId: "11111111-1111-4111-8111-111111111111",
   payeeName: "Acme Supplies",
   payeeAddress: "Pune",

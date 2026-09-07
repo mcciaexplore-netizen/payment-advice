@@ -66,6 +66,8 @@ function buildFormData() {
     submittedByName: "Priya Sharma",
     submittedByEmail: "priya@example.com",
     submittedByDepartment: "Applied AI Studio",
+    submittedByDepartmentOption: "OTHERS",
+    branch: "SB Road Office",
     recommendingAuthorityId: AUTHORITY_ID,
     payeeName: "Acme Supplies",
     payeeAddress: "Pune",

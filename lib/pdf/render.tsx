@@ -28,6 +28,7 @@ export async function renderPaymentAdvicePdf(
           advice.advanceNo,
         ),
         formDate: advice.formDate,
+        branch: advice.branch,
         payeeName: advice.payeeName,
         payeeAddress: advice.payeeAddress,
         payeeEmail: advice.payeeEmail,
@@ -94,6 +95,7 @@ export async function renderCashVoucherPdf(
       data={{
         displayNo,
         formDate: advice.formDate,
+        branch: advice.branch,
         payeeName: advice.payeeName,
         items: advice.isAdvance
           ? particulars.map((p) => ({ description: p.description, amount: p.amount }))

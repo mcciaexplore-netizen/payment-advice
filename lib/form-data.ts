@@ -35,6 +35,8 @@ export function parsePaymentAdviceFormData(formData: FormData) {
     submittedByName: str(formData, "submittedByName"),
     submittedByEmail: str(formData, "submittedByEmail"),
     submittedByDepartment: str(formData, "submittedByDepartment"),
+    submittedByDepartmentOption: str(formData, "submittedByDepartmentOption"),
+    branch: str(formData, "branch"),
     recommendingAuthorityId: str(formData, "recommendingAuthorityId"),
     vendorId: str(formData, "vendorId"),
     payeeName: str(formData, "payeeName"),

@@ -259,6 +259,7 @@ export default async function AdviceDetailPage({
           <Section title="People">
             <Row label="Submitted By" value={`${advice.submittedByName} (${advice.submittedByEmail})`} />
             <Row label="Department" value={advice.submittedByDepartment} />
+            <Row label="Branch" value={advice.branch ?? "—"} />
             <Row
               label="Recommending Authority"
               value={`${authority?.authorityName ?? "—"}${authorityStatusSuffix(advice)}`}

@@ -61,6 +61,7 @@ export default function SubmittedPage() {
           <SummaryRow label="Payment Mode" value={summary.paymentMode} />
           <SummaryRow label="Submitted By" value={summary.submittedByName} />
           <SummaryRow label="Department" value={summary.submittedByDepartment} />
+          <SummaryRow label="Branch" value={summary.branch} />
           <div className="sm:col-span-2">
             <SummaryRow
               label={summary.isAdvance ? "Purpose of Advance" : "Nature of Expenditure"}

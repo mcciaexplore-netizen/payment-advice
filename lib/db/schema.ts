@@ -239,6 +239,9 @@ export const paymentAdvices = pgTable("payment_advices", {
   submittedByName: text("submitted_by_name").notNull(),
   submittedByEmail: text("submitted_by_email").notNull(),
   submittedByDepartment: text("submitted_by_department").notNull(),
+  // Required by shared validation for all new submissions; nullable in the
+  // database so pre-0018 historical rows remain valid without backfilling.
+  branch: text("branch"),
   recommendingAuthorityId: uuid("recommending_authority_id")
     .references(() => recommendingAuthorities.id)
     .notNull(),

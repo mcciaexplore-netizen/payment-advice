@@ -8,7 +8,7 @@ import {
   advanceParticulars,
 } from "@/lib/db/schema";
 import { PaymentAdviceForm } from "@/components/form/PaymentAdviceForm";
-import { DocType, PaymentMode } from "@/lib/validation/payment-advice";
+import { BRANCH_OPTIONS, DocType, PaymentMode } from "@/lib/validation/payment-advice";
 import { displayNoFor, documentLabelFor } from "@/lib/advice/document-identity";
 
 export const dynamic = "force-dynamic";
@@ -111,6 +111,7 @@ export default async function EditPage({
           submittedByName: advice.submittedByName,
           submittedByEmail: advice.submittedByEmail,
           submittedByDepartment: advice.submittedByDepartment,
+          branch: BRANCH_OPTIONS.find((branch) => branch === advice.branch),
           recommendingAuthorityId: advice.recommendingAuthorityId,
           vendorId: advice.vendorId ?? undefined,
           payeeName: advice.payeeName,

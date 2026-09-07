@@ -26,6 +26,16 @@ describe("Payment Desk dedicated public pages", () => {
     expect(form).toContain("!isAdvance && !isCashVoucher");
   });
 
+  it("renders Branch and Department controls once in the shared form used by all three routes", () => {
+    const form = read("components/form/PaymentAdviceForm.tsx");
+    expect(form.match(/label="Your Branch"/g)).toHaveLength(1);
+    expect(form.match(/label="Your Department"/g)).toHaveLength(1);
+    expect(form).toContain('submittedByDepartmentOption === "OTHERS"');
+    for (const branch of ["SB Road Office", "Tilak Road Office", "Hadapsar Office", "Bhosari Office", "Ahilyanagar Office"]) {
+      expect(read("lib/validation/payment-advice.ts")).toContain(`"${branch}"`);
+    }
+  });
+
   it("seeds one blank Cash row and appends one blank row per click", () => {
     const form = read("components/form/PaymentAdviceForm.tsx");
     const cashItems = read("components/form/CashVoucherItemsField.tsx");

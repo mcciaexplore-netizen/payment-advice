@@ -6,7 +6,7 @@ import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { upload } from "@vercel/blob/client";
 import { Field } from "@/components/ui/Field";
-import { Input, Textarea } from "@/components/ui/Input";
+import { Input, Select, Textarea } from "@/components/ui/Input";
 import { VendorTypeahead, VendorSearchResult } from "@/components/form/VendorTypeahead";
 import { StaffNameTypeahead, StaffSearchResult } from "@/components/form/StaffNameTypeahead";
 import { RecommendingAuthorityField } from "@/components/form/RecommendingAuthorityField";
@@ -29,6 +29,8 @@ import {
   MAX_OTHER_ATTACHMENTS,
   DocType,
   calculateCashVoucherTotal,
+  BRANCH_OPTIONS,
+  DEPARTMENT_OPTIONS,
 } from "@/lib/validation/payment-advice";
 
 type RecommendingAuthority = {
@@ -77,6 +79,10 @@ export function PaymentAdviceForm({
   const [otherFiles, setOtherFiles] = useState<File[]>([]);
   const [cashVoucherBillFiles, setCashVoucherBillFiles] = useState<Record<string, File[]>>({});
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
+  const prefilledDepartment = prefill?.submittedByDepartment;
+  const prefilledDepartmentOption = prefilledDepartment
+    ? DEPARTMENT_OPTIONS.find((option) => option !== "OTHERS" && option === prefilledDepartment) ?? "OTHERS"
+    : undefined;
 
   const {
     register,
@@ -89,6 +95,7 @@ export function PaymentAdviceForm({
     resolver: zodResolver(paymentAdviceFormSchema),
     defaultValues: {
       formDate: today,
+      submittedByDepartmentOption: prefilledDepartmentOption,
       paymentMode: isCashVoucher ? "CASH" : "NEFT",
       cashVoucherItems: isCashVoucher ? [{ clientKey: crypto.randomUUID(), billNo: "", billDate: undefined, description: "", amount: undefined as unknown as number }] : [],
       isAdvance,
@@ -124,6 +131,7 @@ export function PaymentAdviceForm({
   const payeeName = useWatch({ control, name: "payeeName" }) ?? "";
   const submittedByName = useWatch({ control, name: "submittedByName" }) ?? "";
   const submittedByEmail = useWatch({ control, name: "submittedByEmail" }) ?? "";
+  const submittedByDepartmentOption = useWatch({ control, name: "submittedByDepartmentOption" });
   const recommendingAuthorityId = useWatch({ control, name: "recommendingAuthorityId" }) ?? "";
   const watchedCashVoucherItems = useWatch({ control, name: "cashVoucherItems" });
   const cashVoucherItems = useMemo(
@@ -386,6 +394,7 @@ export function PaymentAdviceForm({
         paymentMode: values.paymentMode,
         submittedByName: values.submittedByName,
         submittedByDepartment: values.submittedByDepartment,
+        branch: values.branch,
         natureOfExpenditure: values.isAdvance
           ? values.purposeOfAdvance ?? ""
           : values.paymentMode === "CASH"
@@ -438,8 +447,37 @@ export function PaymentAdviceForm({
           <Field label="Your Email" required error={errors.submittedByEmail?.message}>
             <Input type="email" hasError={!!errors.submittedByEmail} {...register("submittedByEmail")} />
           </Field>
-          <Field label="Your Department" required error={errors.submittedByDepartment?.message}>
-            <Input hasError={!!errors.submittedByDepartment} {...register("submittedByDepartment")} />
+          <Field label="Your Department" required error={errors.submittedByDepartmentOption?.message ?? errors.submittedByDepartment?.message}>
+            <div className="flex flex-col gap-3">
+              <Select
+                hasError={!!errors.submittedByDepartmentOption}
+                {...register("submittedByDepartmentOption", {
+                  onChange: (event) => {
+                    const next = event.target.value as PaymentAdviceFormInput["submittedByDepartmentOption"];
+                    setValue("submittedByDepartment", next === "OTHERS" ? "" : next, { shouldValidate: true });
+                  },
+                })}
+              >
+                <option value="">Select your department</option>
+                {DEPARTMENT_OPTIONS.map((department) => <option key={department} value={department}>{department}</option>)}
+              </Select>
+              {submittedByDepartmentOption === "OTHERS" ? (
+                <Input
+                  aria-label="Other department"
+                  placeholder="Enter your department"
+                  hasError={!!errors.submittedByDepartment}
+                  {...register("submittedByDepartment")}
+                />
+              ) : (
+                <input type="hidden" {...register("submittedByDepartment")} />
+              )}
+            </div>
+          </Field>
+          <Field label="Your Branch" required error={errors.branch?.message}>
+            <Select hasError={!!errors.branch} {...register("branch")}>
+              <option value="">Select your branch</option>
+              {BRANCH_OPTIONS.map((branch) => <option key={branch} value={branch}>{branch}</option>)}
+            </Select>
           </Field>
           <div className="sm:col-span-2">
             <Field

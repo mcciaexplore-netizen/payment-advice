@@ -10,6 +10,7 @@ export type PaymentAdvicePdfData = {
   // when isAdvance (per lib/advice/document-identity.ts's displayNoFor()).
   displayNo: string;
   formDate: string; // YYYY-MM-DD
+  branch: string | null;
   payeeName: string;
   payeeAddress: string;
   payeeEmail: string | null;
@@ -198,6 +199,7 @@ export function PaymentAdviceDocument({ data }: { data: PaymentAdvicePdfData }) 
 
         <View style={styles.dateRow}>
           <Text style={styles.dateText}>Submitted on : {formatDMY(data.submittedAt)}</Text>
+          <Text style={styles.dateText}>Branch : {data.branch ?? "-"}</Text>
           <Text style={styles.dateText}>
             Approved on : {data.approvedAt ? formatDMY(data.approvedAt) : ""}
           </Text>

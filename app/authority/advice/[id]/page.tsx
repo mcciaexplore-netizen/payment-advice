@@ -91,6 +91,7 @@ export default async function AuthorityAdviceDetailPage({
           <Section title="Submission">
             <Row label="Submitted By" value={`${advice.submittedByName} (${advice.submittedByEmail})`} />
             <Row label="Department" value={advice.submittedByDepartment} />
+            <Row label="Branch" value={advice.branch ?? "—"} />
             <Row label="Submitted Date" value={formatDateTime(advice.submittedAt)} />
             <Row label="Form Date" value={formatDate(advice.formDate)} />
             <Row label="Recommending Authority" value={authority?.authorityName ?? "—"} />

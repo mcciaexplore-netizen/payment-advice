@@ -18,6 +18,7 @@ export type SubmissionSummary = {
   paymentMode: "NEFT" | "CASH";
   submittedByName: string;
   submittedByDepartment: string;
+  branch: string;
   natureOfExpenditure: string;
   authorityToken: string;
   authorityName: string;

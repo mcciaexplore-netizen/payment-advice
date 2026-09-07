@@ -12,6 +12,7 @@ async function main() {
       data={{
         displayNo: "MCCIA/2026-27/0001",
         formDate: "2026-07-28",
+        branch: "SB Road Office",
         payeeName: "Acme Test Pvt Ltd",
         payeeAddress: "123 Test Street, Shivajinagar, Pune 411005, Maharashtra",
         payeeEmail: "acme@example.com",
@@ -51,7 +52,9 @@ async function main() {
       }}
     />,
   );
-  const outPath = path.join(process.cwd(), "scripts", "test-output.pdf");
+  const outputDirectory = path.join(process.cwd(), "tmp", "pdfs");
+  fs.mkdirSync(outputDirectory, { recursive: true });
+  const outPath = path.join(outputDirectory, "payment-advice-branch-test.pdf");
   fs.writeFileSync(outPath, buffer);
   console.log("Wrote", outPath, buffer.length, "bytes");
 }

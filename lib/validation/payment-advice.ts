@@ -151,6 +151,25 @@ export const cashVoucherItemSchema = amountLineItemSchema.extend({
 });
 export type CashVoucherItem = z.infer<typeof cashVoucherItemSchema>;
 
+export const BRANCH_OPTIONS = [
+  "SB Road Office",
+  "Tilak Road Office",
+  "Hadapsar Office",
+  "Bhosari Office",
+  "Ahilyanagar Office",
+] as const;
+
+export const DEPARTMENT_OPTIONS = [
+  "ADMIN",
+  "AGRICULTURE",
+  "AI STUDIO",
+  "CBP",
+  "MEMBERSHIP",
+  "MSME HELPLINE",
+  "RAMP",
+  "OTHERS",
+] as const;
+
 /** Sums currency using paise to avoid floating-point drift. */
 export function calculateCashVoucherTotal(items: Array<{ amount: number }>): number {
   return items.reduce((total, item) => total + Math.round(item.amount * 100), 0) / 100;
@@ -166,7 +185,11 @@ export const paymentAdviceFormSchema = z
     // Section 1 — submitter
     submittedByName: requiredTrimmed("Your name is required"),
     submittedByEmail: z.string().trim().email("Enter a valid email"),
-    submittedByDepartment: requiredTrimmed("Your department is required"),
+    submittedByDepartmentOption: z.enum(DEPARTMENT_OPTIONS, {
+      error: "Select your department",
+    }),
+    submittedByDepartment: requiredTrimmed("Enter your department"),
+    branch: z.enum(BRANCH_OPTIONS, { error: "Select your branch" }),
     recommendingAuthorityId: z
       .string()
       .uuid("Select a recommending authority"),
@@ -255,6 +278,17 @@ export const paymentAdviceFormSchema = z
     formDate: pastOrTodayDateString("Form date cannot be in the future"),
   })
   .superRefine((data, ctx) => {
+    if (
+      data.submittedByDepartmentOption !== "OTHERS" &&
+      data.submittedByDepartment !== data.submittedByDepartmentOption
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["submittedByDepartmentOption"],
+        message: "Select your department",
+      });
+    }
+
     // Bank details are required for a regular NEFT submission, but NOT for
     // an NEFT-routed advance — Finance already has the submitter's bank
     // details on file as staff, and the fields stay visible/editable on the

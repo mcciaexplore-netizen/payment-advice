@@ -9,6 +9,7 @@ export type CashVoucherPdfData = {
   // advance_no when isAdvance (per lib/advice/document-identity.ts).
   displayNo: string;
   formDate: string;
+  branch: string | null;
   payeeName: string;
   // For an advance, this is fed from advance_particulars rather than
   // cash_voucher_items — same description+amount shape either way, see
@@ -109,6 +110,7 @@ export function CashVoucherDocument({ data }: { data: CashVoucherPdfData }) {
         <View style={styles.titleRule} />
 
         <View style={styles.metadata}>
+          <View style={styles.metadataItem}><Text style={styles.metadataLabel}>Branch</Text><Text style={styles.metadataValue}>{data.branch ?? "-"}</Text></View>
           <View style={styles.metadataItem}><Text style={styles.metadataLabel}>No.</Text><Text style={styles.metadataValue}>{data.displayNo}</Text></View>
           <View style={styles.metadataItem}><Text style={styles.metadataLabel}>Date</Text><Text style={styles.metadataValue}>{formatDate(data.formDate)}</Text></View>
         </View>
