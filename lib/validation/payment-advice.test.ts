@@ -6,6 +6,7 @@ import {
   verifierNameSchema,
   BRANCH_OPTIONS,
   DEPARTMENT_OPTIONS,
+  cashVoucherItemSchema,
 } from "./payment-advice";
 
 describe("VERIFIER_NAMES spelling", () => {
@@ -56,6 +57,37 @@ describe("shared Submitter details validation", () => {
       submittedByDepartment: "International Trade",
     });
     expect(custom.success).toBe(true);
+  });
+});
+
+describe("Cash Voucher new-row identifiers", () => {
+  it("normalizes the browser's empty hidden ID while preserving historical UUIDs", () => {
+    const item = {
+      clientKey: "11111111-1111-4111-8111-111111111111",
+      billNo: "B-1",
+      billDate: "2026-09-07",
+      description: "Local travel",
+      amount: 100,
+    };
+    expect(cashVoucherItemSchema.parse({ ...item, id: "" }).id).toBeUndefined();
+    expect(cashVoucherItemSchema.safeParse({ ...item, id: "22222222-2222-4222-8222-222222222222" }).success).toBe(true);
+  });
+
+  it("accepts an OTHERS department together with a fresh Cash expense row", () => {
+    const result = paymentAdviceFormSchema.safeParse({
+      ...baseCashSubmission,
+      submittedByDepartmentOption: "OTHERS",
+      submittedByDepartment: "ERU",
+      cashVoucherItems: [{
+        id: "",
+        clientKey: "11111111-1111-4111-8111-111111111111",
+        billNo: "B-1",
+        billDate: "2026-09-07",
+        description: "Local travel",
+        amount: 150.5,
+      }],
+    });
+    expect(result.success).toBe(true);
   });
 });
 

@@ -2423,4 +2423,17 @@ field-level errors. Targeted validation tests (51), TypeScript, and ESLint
 clean. Included in the same 2026-09-07 change set as the Team Dashboard
 rollout for deployment to production.
 
+2026-09-07 — Codex — Follow-up diagnosis after a user believed Department
+`OTHERS` free text was not accepted. Existing local browser diagnostics proved
+the custom value was correctly captured (`submittedByDepartment = "ERU"`);
+the actual rejection was `cashVoucherItems`: every fresh row's registered
+hidden historical ID arrived as `""`, while Zod allowed only an omitted value
+or UUID. This blocked otherwise valid new Cash Vouchers before upload/API
+execution and made the Department field look responsible. Normalized the
+fresh-row empty ID to undefined while retaining UUID validation for historical
+edit rows; removed temporary console diagnostics. Regression covers a complete
+Cash validation shape using OTHERS + ERU + empty row ID. TypeScript, ESLint,
+and 53 targeted tests clean. Fix is included in the production-bound commit; no submission or serial
+was created during verification.
+
 *End of handoff file. Both agents: read §0 again before starting work.*

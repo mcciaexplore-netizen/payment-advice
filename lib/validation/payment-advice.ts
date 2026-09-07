@@ -144,7 +144,10 @@ const amountLineItemSchema = z.object({
 });
 
 export const cashVoucherItemSchema = amountLineItemSchema.extend({
-  id: z.string().uuid().optional(),
+  // New rows have a registered hidden ID input whose browser value is "";
+  // historical/edit rows carry a real UUID. Normalize the new-row sentinel
+  // instead of rejecting an otherwise valid Cash Voucher before onSubmit.
+  id: z.union([z.literal("").transform(() => undefined), z.string().uuid()]).optional(),
   clientKey: z.string().uuid(),
   billNo: optionalTrimmed(),
   billDate: optionalDateString(),
