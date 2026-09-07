@@ -2499,4 +2499,43 @@ passed 56/56 files and 388 tests (7 intentionally skipped); fresh production
 build passed and emitted both `/team/login` and `/api/team/login` alongside the
 restored Authority routes.
 
+2026-09-07 — Codex — Distributed the new Team Dashboard feature and credentials
+to every confirmed account holder using personalized MCCIA-branded HTML email.
+Sent 18 real Gmail SMTP messages covering 19 people (Omkar Golhar and Santosh
+Sawant received one jointly addressed message at their human-confirmed shared
+RAMP inbox). Each message identified the recipient's Branch/Department scope,
+explained Team Submissions and My Submissions, linked directly to
+`https://payment-advice.vercel.app/team/login`, supplied the approved individual
+`{familiar-name}@1934` initial credential, clarified that the dashboard is
+read-only, and explained Account menu → Change Password. Gmail returned a
+message ID for all 18 sends; 18 succeeded, 0 failed. The configured test-recipient
+override was deliberately bypassed for this explicitly authorized batch only.
+The one-off sender was removed immediately afterward to prevent accidental
+duplicate distribution; no plaintext credential report or resend script remains.
+
+2026-09-07 — Codex — Completed authenticated in-page attachment preview coverage.
+A newer concurrent commit (`cf98f02`) had already introduced the shared modal
+preview and wired it into Finance's main attachment table plus the original
+token-link Authority approval page. Closed the remaining gaps by reusing that
+same modal for the authenticated Authority dashboard's attachment cards and
+Cash Voucher per-row bills, and for Finance's Cash Voucher per-row bills. PDFs,
+JPEGs, and PNGs now open inside the current page with explicit Download and
+Close controls; users no longer have to navigate away to inspect them. Corrected
+the authenticated Authority attachment stream to return image MIME types for
+JPEG/PNG instead of incorrectly labeling every file as PDF. Authorization and
+private-Blob proxying remain unchanged. TypeScript and ESLint clean; full
+Vitest suite passed 57/57 files and 391 tests (7 intentionally skipped); fresh
+production build passed.
+
+Follow-up UX clarification: the human wanted the document itself visible before
+any click, not merely a text card that opens the modal. Finance and authenticated
+Authority attachment sections now render the real PDF inline in an embedded
+viewer or the real JPEG/PNG inline as an image. Each inline card retains Expand
+and Download controls. Compact Cash Voucher line-item tables continue to use the
+modal Preview action because embedding a full document inside each table cell
+would make the expense table unusable; the same underlying secured document is
+still one click away there. Final verification after the inline-view change:
+TypeScript and ESLint clean; 57/57 Vitest files passed with 392 tests passing
+and 7 intentionally skipped; fresh production build passed.
+
 *End of handoff file. Both agents: read §0 again before starting work.*

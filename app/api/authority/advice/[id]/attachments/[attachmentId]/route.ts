@@ -8,6 +8,12 @@ import { hasRole } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
+function contentTypeFor(fileName: string) {
+  if (/\.jpe?g$/i.test(fileName)) return "image/jpeg";
+  if (/\.png$/i.test(fileName)) return "image/png";
+  return "application/pdf";
+}
+
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string; attachmentId: string }> }) {
   const session = await getAdminSession();
   if (!session || !hasRole(session, "AUTHORITY") || !session.recommendingAuthorityId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -18,5 +24,5 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   if (!attachment) return NextResponse.json({ error: "Not found" }, { status: 404 });
   const result = await get(attachment.blobPathname, { access: "private" });
   if (!result || result.statusCode !== 200) return NextResponse.json({ error: "Could not fetch attachment" }, { status: 502 });
-  return new NextResponse(result.stream, { headers: { "Content-Type": "application/pdf", "Content-Disposition": `inline; filename="${attachment.fileName}"` } });
+  return new NextResponse(result.stream, { headers: { "Content-Type": contentTypeFor(attachment.fileName), "Content-Disposition": `inline; filename="${attachment.fileName}"` } });
 }

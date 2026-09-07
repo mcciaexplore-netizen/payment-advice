@@ -20,7 +20,7 @@ import { getAdminSession } from "@/lib/admin-session";
 import { billPassedForLabelFor, displayNoFor, documentLabelFor } from "@/lib/advice/document-identity";
 import { pipelineStageFor } from "@/lib/advice/pipeline-stage";
 import { formatDateOnly, formatIstDateTime } from "@/lib/date-time";
-import { AttachmentPreview } from "@/components/ui/AttachmentPreview";
+import { AttachmentPreview, InlineAttachmentPreview } from "@/components/ui/AttachmentPreview";
 
 export const dynamic = "force-dynamic";
 
@@ -237,7 +237,7 @@ export default async function AdviceDetailPage({
                   <tbody>
                     {voucherItems.map((item) => {
                       const bill = item.attachmentId ? adviceAttachments.find((attachment) => attachment.id === item.attachmentId) : undefined;
-                      return <tr key={item.id} className="border-b border-gray-100 last:border-0"><td className="py-2">{formatDate(item.billDate)}</td><td className="py-2">{item.billNo || "—"}</td><td className="py-2">{item.description}</td><td className="py-2 text-right">{formatAmount(item.amount)}</td><td className="py-2 pl-3">{bill ? <a className="font-medium text-[#0b1f3a] hover:underline" href={`/api/admin/attachments/${bill.id}`} target="_blank" rel="noreferrer">View</a> : "—"}</td></tr>;
+                      return <tr key={item.id} className="border-b border-gray-100 last:border-0"><td className="py-2">{formatDate(item.billDate)}</td><td className="py-2">{item.billNo || "—"}</td><td className="py-2">{item.description}</td><td className="py-2 text-right">{formatAmount(item.amount)}</td><td className="py-2 pl-3">{bill ? <AttachmentPreview fileName={bill.fileName} href={`/api/admin/attachments/${bill.id}`}>Preview</AttachmentPreview> : "—"}</td></tr>;
                     })}
                   </tbody>
                 </table>
@@ -316,31 +316,16 @@ export default async function AdviceDetailPage({
             {adviceAttachments.length === 0 ? (
               <p className="text-sm text-gray-500">No attachments.</p>
             ) : (
-              <div className="overflow-x-auto rounded-md border border-gray-200">
-                <table className="w-full text-left text-sm">
-                  <thead className="border-b border-gray-200 bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
-                    <tr>
-                      <th className="px-4 py-2">File</th>
-                      <th className="px-4 py-2">Type</th>
-                      <th className="px-4 py-2">Size</th>
-                      <th className="px-4 py-2">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {adviceAttachments.map((a) => (
-                      <tr key={a.id} className="border-b border-gray-100 last:border-0">
-                        <td className="px-4 py-2">{a.fileName}</td>
-                        <td className="px-4 py-2">{DOC_TYPE_LABELS[a.docType] ?? a.docType}</td>
-                        <td className="px-4 py-2">{formatBytes(a.sizeBytes)}</td>
-                        <td className="px-4 py-2">
-                          <AttachmentPreview fileName={a.fileName} href={`/api/admin/attachments/${a.id}`}>
-                            Preview / Download
-                          </AttachmentPreview>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <div className="grid gap-4 xl:grid-cols-2">
+                {adviceAttachments.map((a) => (
+                  <InlineAttachmentPreview
+                    key={a.id}
+                    fileName={a.fileName}
+                    href={`/api/admin/attachments/${a.id}`}
+                    label={DOC_TYPE_LABELS[a.docType] ?? a.docType}
+                    meta={formatBytes(a.sizeBytes)}
+                  />
+                ))}
               </div>
             )}
           </Section>

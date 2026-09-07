@@ -16,6 +16,7 @@ import {
 import { PaymentMode } from "@/lib/validation/payment-advice";
 import { ResubmissionNotice } from "@/components/authority/ResubmissionNotice";
 import { formatDateOnly, formatIstDate, formatIstDateTime } from "@/lib/date-time";
+import { AttachmentPreview, InlineAttachmentPreview } from "@/components/ui/AttachmentPreview";
 
 export const dynamic = "force-dynamic";
 
@@ -145,10 +146,12 @@ export default async function AuthorityAdviceDetailPage({
         <aside className="flex flex-col gap-8">
           <Section title="Attachments">
             {documents.length === 0 ? <p className="text-sm text-gray-500">No documents attached.</p> : documents.map((document) => (
-              <a key={document.id} href={`/api/authority/advice/${advice.id}/attachments/${document.id}`} target="_blank" rel="noreferrer" className="block rounded-md border border-gray-200 p-3 text-sm text-[#0b1f3a] hover:bg-gray-50">
-                <span className="block font-medium">{DOC_TYPE_LABELS[document.docType] ?? document.docType}</span>
-                <span className="mt-1 block break-all text-xs text-gray-500">{document.fileName}</span>
-              </a>
+              <InlineAttachmentPreview
+                key={document.id}
+                fileName={document.fileName}
+                href={`/api/authority/advice/${advice.id}/attachments/${document.id}`}
+                label={DOC_TYPE_LABELS[document.docType] ?? document.docType}
+              />
             ))}
           </Section>
 
@@ -180,7 +183,7 @@ function ItemsSection({ title, items }: { title: string; items: Array<{ id: stri
 }
 
 function CashVoucherItemsSection({ adviceId, items, documents }: { adviceId: string; items: Array<{ id: string; billDate: string | null; billNo: string | null; attachmentId: string | null; description: string; amount: string }>; documents: Array<{ id: string; fileName: string }> }) {
-  return <Section title="Cash Voucher Items"><div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="border-b border-gray-200 text-xs uppercase text-gray-500"><tr><th className="pb-2">Bill Date</th><th className="pb-2">Bill No.</th><th className="pb-2">Nature of Expenditure</th><th className="pb-2 text-right">Amount</th><th className="pb-2 pl-3">Bill</th></tr></thead><tbody>{items.map((item) => { const document = item.attachmentId ? documents.find((candidate) => candidate.id === item.attachmentId) : undefined; return <tr key={item.id} className="border-b border-gray-100 last:border-0"><td className="py-2">{formatDate(item.billDate)}</td><td className="py-2">{item.billNo || "—"}</td><td className="py-2">{item.description}</td><td className="py-2 text-right">{formatAmount(item.amount)}</td><td className="py-2 pl-3">{document ? <a href={`/api/authority/advice/${adviceId}/attachments/${document.id}`} target="_blank" rel="noreferrer" className="font-medium text-[#0b1f3a] hover:underline">View</a> : "—"}</td></tr>; })}</tbody></table></div></Section>;
+  return <Section title="Cash Voucher Items"><div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="border-b border-gray-200 text-xs uppercase text-gray-500"><tr><th className="pb-2">Bill Date</th><th className="pb-2">Bill No.</th><th className="pb-2">Nature of Expenditure</th><th className="pb-2 text-right">Amount</th><th className="pb-2 pl-3">Bill</th></tr></thead><tbody>{items.map((item) => { const document = item.attachmentId ? documents.find((candidate) => candidate.id === item.attachmentId) : undefined; return <tr key={item.id} className="border-b border-gray-100 last:border-0"><td className="py-2">{formatDate(item.billDate)}</td><td className="py-2">{item.billNo || "—"}</td><td className="py-2">{item.description}</td><td className="py-2 text-right">{formatAmount(item.amount)}</td><td className="py-2 pl-3">{document ? <AttachmentPreview fileName={document.fileName} href={`/api/authority/advice/${adviceId}/attachments/${document.id}`}>Preview</AttachmentPreview> : "—"}</td></tr>; })}</tbody></table></div></Section>;
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
