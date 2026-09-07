@@ -47,15 +47,42 @@ Design system: Navy `#0B1F3A`, Forest green `#2E8B57`, Amber `#E8A33D`. Headings
 
 ## 3. Current State (update this every session)
 
-**Last updated:** 7 September 2026, by Codex (Team Dashboard Branch/Department tracking roles implemented, migrated, seeded, and scope-tested)
+**Last updated:** 7 September 2026, by Codex (Team Dashboard audit closed with full matching record and full-suite/build verification)
 
 ### Shipped — Team Dashboard Branch/Department tracking access (Codex, 2026-09-07)
 - Renamed the shared `/authority/login` shell to the human-confirmed neutral **Team Dashboard** branding. Existing Authority Recommendation functionality remains under the same route and is unchanged for AUTHORITY grants.
 - Migration `0019_thankful_blockbuster.sql` adds nullable `admin_user_roles.scope_value` plus a DB check: BRANCH/DEPARTMENT grants require a scope; all other roles must keep it null. `ADMIN_ROLES` now includes `BRANCH` and `DEPARTMENT`. Finance access is an explicit PAYMENT_ADVICE/CASH_VOUCHER/ALL allowlist, so tracking roles cannot enter `/admin`.
 - Branch/Department dashboard contexts have exactly two read-only views: **Team Submissions**, matched exactly against `payment_advices.branch` or `submitted_by_department`, and **My Submissions**, reusing the same logged-in-email predicate as the Authority dashboard. Full pipeline status and sent-back remarks are shown; no recommendation or send-back actions appear. Tejaskumar Narute has both contexts on one login via the role switcher.
-- Production migrations 0018 (Branch) and 0019 (scoped roles) were applied. Seeded 18 accounts / 19 grants: SARIKA DAMLE — Branch/Tilak Road Office; P V SASIDHARAN — Branch/Tilak Road Office; Tejaskumar Narute — Branch/Hadapsar Office + Department/AGRICULTURE; MANDAR MARATHE and Pratik Pardeshi — Branch/Bhosari Office; Ravindra Pansare — Branch/Ahilyanagar Office; Aishwary Songirkar — Department/MSME HELPLINE; Mayur Borkar and shared RAMP Team — Department/RAMP; SANDHYA ACHARYA, VARSHA MAHAJAN, CHANDRASHEKHAR SHAH, and Shriram Joshi — Department/CBP; SONAL PHADNIS, KIRTI KENDHE, Saahil Amritkar, Rachita Waghamare, and PARIKSHIT DAS — Department/MEMBERSHIP. Pramod and Rajnikant were explicitly skipped by the human.
+- Production migrations 0018 (Branch) and 0019 (scoped roles) were applied. The complete pre-seed name-matching audit, including the human's resolutions, was:
+
+  | Source name | Matched staff record | Email / resolution | Final dashboard grant |
+  |---|---|---|---|
+  | Sarika Damle | SARIKA DAMLE | `sarikad@mcciapune.com` | BRANCH — Tilak Road Office |
+  | PV Sashidharan | P V SASIDHARAN | `sasidharan@mcciapune.com` | BRANCH — Tilak Road Office |
+  | Tejas | Tejaskumar Narute | `aefc@mcciapune.com`; human confirmed the Branch and Agriculture entries are the same person | BRANCH — Hadapsar Office + DEPARTMENT — AGRICULTURE, on one account |
+  | Mandar Marathe | MANDAR MARATHE | `mandarm@mcciapune.com` | BRANCH — Bhosari Office |
+  | Prateek Pardeshi | Pratik Pardeshi | `paatikp@mcciapune.com` | BRANCH — Bhosari Office |
+  | Ravindra Pansare | Ravindra Pansare | `mccianagar@mcciapune.com`, explicitly supplied and confirmed by the human | BRANCH — Ahilyanagar Office |
+  | Aishwarya | Aishwary Songirkar | `aishwary.fellow@mcciapune.com` | DEPARTMENT — MSME HELPLINE |
+  | Mayur | Mayur Borkar | `mayurb@mcciapune.com`, explicitly supplied by the human | DEPARTMENT — RAMP |
+  | Omkar | Omkar Golhar | `mcciaramp@mcciapune.com`; flagged as a likely shared inbox and explicitly confirmed by the human | One shared `RAMP Team` DEPARTMENT — RAMP account |
+  | Santosh | Santosh Sawant | Same human-confirmed shared `mcciaramp@mcciapune.com` login as Omkar | One shared `RAMP Team` DEPARTMENT — RAMP account |
+  | Sandhya | SANDHYA ACHARYA | `sandhyaa@mcciapune.com` | DEPARTMENT — CBP |
+  | Varsha | VARSHA MAHAJAN | `varsham@mcciapune.com` | DEPARTMENT — CBP |
+  | Shekhar | CHANDRASHEKHAR SHAH | `shekhars@mcciapune.com` | DEPARTMENT — CBP |
+  | Shriram Joshi | Shriram Joshi | `shriramj@mcciapune.com` | DEPARTMENT — CBP |
+  | Sanal | SONAL PHADNIS | `sonalp@mcciapune.com` | DEPARTMENT — MEMBERSHIP |
+  | Kirti | KIRTI KENDHE | `kirtik@mcciapune.com` | DEPARTMENT — MEMBERSHIP |
+  | Sahil | Saahil Amritkar | `saahila@mcciapune.com` | DEPARTMENT — MEMBERSHIP |
+  | Rachita | Rachita Waghamare | `rachitaw@mcciapune.com`, explicitly supplied and confirmed by the human | DEPARTMENT — MEMBERSHIP |
+  | Panikshit Das | PARIKSHIT DAS | `parikshitd@mcciapune.com` | DEPARTMENT — MEMBERSHIP |
+  | Rajnilkant | RAJNIKANT  GAIKWAD | Name resolved, but the human explicitly said not to create a dashboard | Excluded |
+  | Pramod | No final seeded match/account | Human explicitly said to skip for now | Excluded |
+
+  After this report the human responded that the matches were accepted, supplied/confirmed the exceptional emails and shared RAMP arrangement, selected **Team Dashboard** as the shared-login name, excluded Rajnikant, and then separately excluded Pramod. Only afterward were 18 `admin_users` accounts / 19 scoped grants seeded. No unresolved or guessed match entered the seed list.
 - Updated staff email source-of-truth values for Ravindra Pansare (`mccianagar@mcciapune.com`), Mayur Borkar (`mayurb@mcciapune.com`), and Rachita Waghamare (`rachitaw@mcciapune.com`) so future public-form autofill matches their login email and My Submissions works. Omkar Golhar and Santosh Sawant deliberately share the single RAMP Team login (`mcciaramp@mcciapune.com`).
 - Live local/server + production-data checks: Sandhya logged in and saw exactly CBP references MCCIA/2026-27/0003 and /0004, while a RAMP reference remained hidden; Tejas logged in and both Hadapsar Branch and AGRICULTURE Department switcher contexts rendered. Original Aniruddha/Chintamani/Prashant/Shantanu role rows were read back unchanged. No test submission was created. Credentials are in the gitignored `scripts/team-dashboard-users-report.md` for secure distribution/deletion.
+- Audit closure verification (2026-09-07): production read-back confirmed all 18 active accounts / 19 grants exactly as documented, Tejas's two grants share one `admin_user_id`, Sandhya's current CBP Team view contained only the four production CBP references while all three current RAMP references remained excluded, and her My Submissions view contained only the two rows matching her login email. The full Vitest run passed **55/55 test files, 383 tests passed, 7 intentionally skipped**; a fresh `npm run build` completed successfully (compile, TypeScript, page-data collection, and all 23 static pages). The local credential report still exists because there is no auditable confirmation that all credentials have been distributed; do not delete the only retained copy until the human confirms secure distribution, then delete it immediately.
 
 ### Shipped — Satish Joshi's Authority account + a real resubmission-blocking bug found and fixed (Claude Code, 2026-09-05)
 - **Account:** Checked `recommending_authorities` first, per instruction — found a single, clean, active row already on file ("Satish Joshi", `satishj@mcciapune.com`, id `fb1ef8b4-3ba6-434a-98d5-e4f7694e114e`), no near-duplicates or ambiguous noise, so reused it rather than creating a second one. No prior `admin_users` row existed for him. Created one (`AUTHORITY` role, linked to that authority id) using the same predictable-password pattern as the 2026-09-04 expansion batch — `satish@2026` reduces unambiguously from his name (single-word first name, no punctuation quirk like Rajnikant's). No forced password change, matching that batch's final decision. Live-tested: logged in, confirmed `/authority`'s Pending queue is scoped correctly (shows only his own linked submissions) and History renders with zero errors.
@@ -2435,5 +2462,18 @@ edit rows; removed temporary console diagnostics. Regression covers a complete
 Cash validation shape using OTHERS + ERU + empty row ID. TypeScript, ESLint,
 and 53 targeted tests clean. Fix is included in the production-bound commit; no submission or serial
 was created during verification.
+
+2026-09-07 — Codex — Closed the documentation/testing portion of the Team
+Dashboard audit. Replaced the vague pre-seed summary with the complete
+source-name → staff-record → email/resolution → final-grant table, including
+the shared RAMP account, spelling resolutions, Tejas's dual scope, and the
+human-excluded Rajnikant/Pramod entries. Production read-only checks reconfirmed
+all 18 accounts / 19 grants and current CBP-versus-RAMP isolation. Full Vitest:
+55 files passed, 383 tests passed, 7 intentionally skipped. Fresh production
+build passed. The gitignored credential report remains pending explicit
+confirmation of secure distribution; delete it immediately after that
+confirmation. A separate future deliberate test session must exercise one real
+Recommend/Send Back mutation and populated Hadapsar/Agriculture dual-scope rows,
+then clean up those test records; neither mutation was bundled into this audit.
 
 *End of handoff file. Both agents: read §0 again before starting work.*
