@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { randomUUID } from "node:crypto";
 import { del } from "@vercel/blob";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
@@ -29,6 +30,7 @@ import {
   validateAttachmentCounts,
 } from "@/lib/attachments/client-upload";
 import { verifyUploadedAttachments } from "@/lib/attachments/verify-uploaded";
+import { validateCashVoucherBillUploads } from "@/lib/attachments/cash-voucher-bills";
 
 export const runtime = "nodejs";
 
@@ -57,6 +59,10 @@ export async function POST(req: NextRequest) {
   const byDocType = groupUploadedAttachments(attachmentInputs);
   const countError = validateAttachmentCounts(byDocType, values.isAdvance, undefined, values.paymentMode);
   if (countError) return NextResponse.json({ error: countError }, { status: 400 });
+  const cashBillError = values.paymentMode === "CASH" && !values.isAdvance
+    ? validateCashVoucherBillUploads(values.cashVoucherItems, attachmentInputs)
+    : null;
+  if (cashBillError) return NextResponse.json({ error: cashBillError }, { status: 400 });
   const verificationError = await verifyUploadedAttachments(attachmentInputs, !values.isAdvance);
   if (verificationError) return NextResponse.json({ error: verificationError }, { status: 400 });
 
@@ -69,7 +75,15 @@ export async function POST(req: NextRequest) {
 
   const uploadedPathnames = attachmentInputs.map((attachment) => attachment.blobPathname);
   try {
-    const attachmentRecords = attachmentInputs;
+    const attachmentRecords = attachmentInputs.map((attachment) => ({
+      ...attachment,
+      id: randomUUID(),
+    }));
+    const cashBillAttachmentIds = new Map(
+      attachmentRecords
+        .filter((attachment) => attachment.docType === "CASH_VOUCHER_BILL")
+        .map((attachment) => [attachment.cashVoucherItemKey!, attachment.id]),
+    );
 
     const { token: authorityToken, expiresAt: authorityTokenExpiresAt } = generateAuthorityToken();
 
@@ -161,6 +175,7 @@ export async function POST(req: NextRequest) {
 
       await tx.insert(attachments).values(
         attachmentRecords.map((a) => ({
+          id: a.id,
           paymentAdviceId: advice.id,
           docType: a.docType,
           fileName: a.fileName,
@@ -174,6 +189,9 @@ export async function POST(req: NextRequest) {
         await tx.insert(cashVoucherItems).values(
           values.cashVoucherItems.map((item, sortOrder) => ({
             paymentAdviceId: advice.id,
+            billNo: item.billNo ?? null,
+            billDate: item.billDate ?? null,
+            attachmentId: cashBillAttachmentIds.get(item.clientKey)!,
             description: item.description,
             amount: item.amount.toFixed(2),
             sortOrder,

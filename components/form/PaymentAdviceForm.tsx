@@ -12,6 +12,7 @@ import { StaffNameTypeahead, StaffSearchResult } from "@/components/form/StaffNa
 import { RecommendingAuthorityField } from "@/components/form/RecommendingAuthorityField";
 import { FileUploadSlot } from "@/components/form/FileUploadSlot";
 import { LineItemsField } from "@/components/form/LineItemsField";
+import { CashVoucherItemsField } from "@/components/form/CashVoucherItemsField";
 import { storeSubmissionSummary } from "@/lib/submission-summary";
 import { resolveAutoFillEmail } from "@/lib/form/staff-email-autofill";
 import { resolveSourceFieldAutoFill } from "@/lib/form/source-field-autofill";
@@ -43,6 +44,7 @@ export function PaymentAdviceForm({
   prefill,
   editToken,
   existingAttachments,
+  existingCashVoucherItemAttachments,
 }: {
   /** Fixed per page, never toggled at runtime — "standard" is the plain
    * Dedicated public document route, or the existing Advance route. All render this
@@ -58,6 +60,8 @@ export function PaymentAdviceForm({
    * only relevant in edit/resubmit mode. Uploading a new file for a doc type
    * replaces these; leaving the slot empty keeps them. */
   existingAttachments?: Partial<Record<DocType, string[]>>;
+  /** Existing per-expense bill filename keyed by cash_voucher_items.id. */
+  existingCashVoucherItemAttachments?: Record<string, string>;
 }) {
   const isAdvance = mode === "advance";
   const isCashVoucher = mode === "cash-voucher";
@@ -71,6 +75,7 @@ export function PaymentAdviceForm({
   const [purchaseOrder, setPurchaseOrder] = useState<File[]>([]);
   const [deliveryChallanFile, setDeliveryChallanFile] = useState<File[]>([]);
   const [otherFiles, setOtherFiles] = useState<File[]>([]);
+  const [cashVoucherBillFiles, setCashVoucherBillFiles] = useState<Record<string, File[]>>({});
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
 
   const {
@@ -85,7 +90,7 @@ export function PaymentAdviceForm({
     defaultValues: {
       formDate: today,
       paymentMode: isCashVoucher ? "CASH" : "NEFT",
-      cashVoucherItems: isCashVoucher ? [{ description: "", amount: undefined as unknown as number }] : [],
+      cashVoucherItems: isCashVoucher ? [{ clientKey: crypto.randomUUID(), billNo: "", billDate: undefined, description: "", amount: undefined as unknown as number }] : [],
       isAdvance,
       previousPendingAdvanceAmount: 0,
       // Seeded directly here (not via a useEffect that appends when empty)
@@ -147,7 +152,7 @@ export function PaymentAdviceForm({
   const attachmentTotalBytes = attachmentGroups.reduce(
     (total, group) => total + group.files.reduce((sum, file) => sum + file.size, 0),
     0,
-  );
+  ) + Object.values(cashVoucherBillFiles).flat().reduce((sum, file) => sum + file.size, 0);
 
   useEffect(() => {
     if (isAdvance || paymentMode !== "CASH") return;
@@ -265,17 +270,26 @@ export function PaymentAdviceForm({
   async function onSubmit(values: PaymentAdviceFormValues) {
     setSubmitError(null);
 
-    // Tax Invoice / Supplementary Document is required for both regular
-    // document types. Approval / Budget Letter is only mandatory for advances.
+    // A Tax Invoice is mandatory for Payment Advice; Cash Voucher requires
+    // one per-expense bill below. Approval / Budget Letter is mandatory only
+    // for Advance Payment.
     const hasTaxInvoice =
-      values.isAdvance ||
+      values.isAdvance || values.paymentMode === "CASH" ||
       taxInvoice.length === 1 ||
       (existingAttachments?.TAX_INVOICE?.length ?? 0) > 0;
     const hasApprovalBudget = !values.isAdvance ||
       approvalBudget.length === 1 || (existingAttachments?.APPROVAL_BUDGET?.length ?? 0) > 0;
-    if (!hasTaxInvoice || !hasApprovalBudget) {
+    const missingCashBill = values.paymentMode === "CASH" && !values.isAdvance
+      ? values.cashVoucherItems.find((item) =>
+          (cashVoucherBillFiles[item.clientKey]?.length ?? 0) !== 1 &&
+          !existingCashVoucherItemAttachments?.[item.id ?? item.clientKey],
+        )
+      : undefined;
+    if (!hasTaxInvoice || !hasApprovalBudget || missingCashBill) {
       setAttachmentError(
-        values.isAdvance
+        missingCashBill
+          ? "Attach one Bill/Supplementary Document for every Cash Voucher expense."
+          : values.isAdvance
           ? "Approval / Budget Letter is a mandatory attachment."
           : "Tax Invoice / Supplementary Document is a mandatory attachment.",
       );
@@ -312,6 +326,29 @@ export function PaymentAdviceForm({
           );
           uploadedAttachments.push({
             docType,
+            fileName: file.name,
+            blobPathname: blob.pathname,
+            blobUrl: blob.url,
+            sizeBytes: file.size,
+          });
+        }
+      }
+      if (values.paymentMode === "CASH" && !values.isAdvance) {
+        for (const item of values.cashVoucherItems) {
+          const file = cashVoucherBillFiles[item.clientKey]?.[0];
+          if (!file) continue;
+          const blob = await upload(
+            `pending-uploads/${uploadBatchId}/CASH_VOUCHER_BILL-${safeUploadFileName(file.name)}`,
+            file,
+            {
+              access: "private",
+              handleUploadUrl: "/api/attachments/upload",
+              multipart: file.size > 4 * 1024 * 1024,
+            },
+          );
+          uploadedAttachments.push({
+            docType: "CASH_VOUCHER_BILL",
+            cashVoucherItemKey: item.clientKey,
             fileName: file.name,
             blobPathname: blob.pathname,
             blobUrl: blob.url,
@@ -474,15 +511,15 @@ export function PaymentAdviceForm({
 
       <Section title={isAdvance ? "3. Advance details" : isCashVoucher ? "2. Bill & reference" : "3. Bill & reference"}>
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-          {!isAdvance ? (
+          {!isAdvance && !isCashVoucher ? (
             <>
-              <Field label="Bill No." required={!isCashVoucher} error={errors.billNo?.message}>
+              <Field label="Bill No." required error={errors.billNo?.message}>
                 <Input hasError={!!errors.billNo} {...register("billNo")} />
               </Field>
-              <Field label="Bill Date" required={!isCashVoucher} error={errors.billDate?.message}>
+              <Field label="Bill Date" required error={errors.billDate?.message}>
                 <Input type="date" max={today} hasError={!!errors.billDate} {...register("billDate")} />
               </Field>
-              {!isCashVoucher ? <><Field label="P.O. No." error={errors.poNumber?.message}>
+              <><Field label="P.O. No." error={errors.poNumber?.message}>
                 <Input hasError={!!errors.poNumber} {...register("poNumber")} />
               </Field>
               <Field label="P.O. Date" error={errors.poDate?.message}>
@@ -498,7 +535,7 @@ export function PaymentAdviceForm({
                   {...register("deliveryChallanDate")}
                 />
               </Field>
-              </> : null}
+              </>
             </>
           ) : null}
           {mode === "advance" ? (
@@ -604,14 +641,19 @@ export function PaymentAdviceForm({
             </>
           ) : null}
           {!isAdvance && paymentMode === "CASH" ? (
-            <LineItemsField
-              name="cashVoucherItems"
-              heading="Nature of Expenditure"
-              helpText="Add every Cash Voucher expenditure and its amount."
-              descriptionPlaceholder="Expenditure description"
+            <CashVoucherItemsField
               register={register}
               control={control}
               errors={errors}
+              maxBillDate={today}
+              filesByItem={cashVoucherBillFiles}
+              existingFileNames={existingCashVoucherItemAttachments}
+              onFilesChange={(clientKey, files) => setCashVoucherBillFiles((current) => ({ ...current, [clientKey]: files }))}
+              onItemRemoved={(clientKey) => setCashVoucherBillFiles((current) => {
+                const next = { ...current };
+                delete next[clientKey];
+                return next;
+              })}
             />
           ) : null}
           <Field label="Form Date" required error={errors.formDate?.message} help="Defaults to today; change if backdating.">
@@ -706,9 +748,9 @@ export function PaymentAdviceForm({
           </div>
         ) : null}
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-          {!isAdvance ? (
+          {!isAdvance && !isCashVoucher ? (
             <FileUploadSlot
-              label={isCashVoucher ? "Tax Invoice / Supplementary Document" : "Tax Invoice"}
+              label="Tax Invoice"
               required
               allowImages
               maxFiles={1}
@@ -749,6 +791,15 @@ export function PaymentAdviceForm({
             existingFileNames={existingAttachments?.OTHER}
           /> : null}
           {!isAdvance && !isCashVoucher ? <FileUploadSlot
+            label="Other Documents"
+            multiple
+            maxFiles={MAX_OTHER_ATTACHMENTS}
+            allowImages
+            files={otherFiles}
+            onChange={setOtherFiles}
+            existingFileNames={existingAttachments?.OTHER}
+          /> : null}
+          {isCashVoucher ? <FileUploadSlot
             label="Other Documents"
             multiple
             maxFiles={MAX_OTHER_ATTACHMENTS}

@@ -27,7 +27,14 @@ describe("Payment Desk dedicated public pages", () => {
   });
 
   it("seeds one blank Cash row and appends one blank row per click", () => {
-    expect(read("components/form/PaymentAdviceForm.tsx")).toContain('cashVoucherItems: isCashVoucher ? [{ description: "", amount: undefined as unknown as number }] : []');
+    const form = read("components/form/PaymentAdviceForm.tsx");
+    const cashItems = read("components/form/CashVoucherItemsField.tsx");
+    expect(form).toContain("clientKey: crypto.randomUUID()");
+    expect(cashItems).toContain("if (fields.length >= MAX_EXPENSES) return");
+    expect(cashItems).toContain("append({");
+    expect(cashItems.match(/append\(\{/g)).toHaveLength(1);
+    expect(cashItems).toContain("Maximum 10 expenses per submission");
+    expect(cashItems).not.toContain('amount: 0');
     expect(read("components/form/LineItemsField.tsx")).toContain('append({ description: "", amount: undefined as unknown as number })');
   });
 });

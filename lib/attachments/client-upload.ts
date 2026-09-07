@@ -15,6 +15,14 @@ export const uploadedAttachmentSchema = z.object({
   blobPathname: z.string().startsWith(PENDING_UPLOAD_PREFIX).max(1024),
   blobUrl: z.string().url().max(2048),
   sizeBytes: z.number().int().positive().max(MAX_FILE_SIZE_BYTES),
+  cashVoucherItemKey: z.string().uuid().optional(),
+}).superRefine((value, ctx) => {
+  if (value.docType === "CASH_VOUCHER_BILL" && !value.cashVoucherItemKey) {
+    ctx.addIssue({ code: "custom", path: ["cashVoucherItemKey"], message: "Cash Voucher item key is required." });
+  }
+  if (value.docType !== "CASH_VOUCHER_BILL" && value.cashVoucherItemKey) {
+    ctx.addIssue({ code: "custom", path: ["cashVoucherItemKey"], message: "Cash Voucher item key is not allowed for this document type." });
+  }
 });
 
 export type UploadedAttachment = z.infer<typeof uploadedAttachmentSchema>;
@@ -37,6 +45,7 @@ export function groupUploadedAttachments(uploads: UploadedAttachment[]) {
     PURCHASE_ORDER: [],
     DELIVERY_CHALLAN: [],
     OTHER: [],
+    CASH_VOUCHER_BILL: [],
   };
   for (const upload of uploads) byDocType[upload.docType].push(upload);
   return byDocType;
@@ -56,6 +65,8 @@ export function validateAttachmentCounts(
     return "Only one Delivery Challan file is allowed.";
   if (byDocType.OTHER.length > MAX_OTHER_ATTACHMENTS)
     return `At most ${MAX_OTHER_ATTACHMENTS} "Other" files are allowed.`;
+  if (byDocType.CASH_VOUCHER_BILL.length > 10)
+    return "At most 10 Cash Voucher bill files are allowed.";
   // Purchase Order / Delivery Challan belong to the "Bill & Reference"
   // section, which only exists on the regular Payment Advice (NEFT) form —
   // Advance and Cash Voucher both hide that section entirely and have no
@@ -67,10 +78,10 @@ export function validateAttachmentCounts(
   // explicitly asked the submitter to add a Purchase Order.
   if ((isAdvance || paymentMode === "CASH") && (byDocType.PURCHASE_ORDER.length || byDocType.DELIVERY_CHALLAN.length))
     return "Only Tax Invoice / Supplementary Document and Approval / Budget Letter attachments are allowed.";
-  if (!isAdvance && paymentMode === "CASH" && byDocType.OTHER.length)
-    return "Other Documents attachments are available only for Payment Advice.";
+  if ((isAdvance || paymentMode !== "CASH") && byDocType.CASH_VOUCHER_BILL.length)
+    return "Cash Voucher bill attachments are available only for Cash Voucher expenses.";
 
-  if (!isAdvance && byDocType.TAX_INVOICE.length === 0 && !existingCounts?.TAX_INVOICE)
+  if (!isAdvance && paymentMode !== "CASH" && byDocType.TAX_INVOICE.length === 0 && !existingCounts?.TAX_INVOICE)
     return "Tax Invoice / Supplementary Document is a mandatory attachment (exactly one file).";
   if (isAdvance && byDocType.APPROVAL_BUDGET.length === 0 && !existingCounts?.APPROVAL_BUDGET)
     return "Approval / Budget Letter is a mandatory attachment (exactly one PDF).";

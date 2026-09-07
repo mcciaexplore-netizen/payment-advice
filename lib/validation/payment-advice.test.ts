@@ -34,8 +34,8 @@ const baseCashSubmission = {
   paymentMode: "CASH" as const,
   amount: 150.5,
   cashVoucherItems: [
-    { description: "Stationery", amount: 100.25 },
-    { description: "Local conveyance", amount: 50.25 },
+    { clientKey: "22222222-2222-4222-8222-222222222222", description: "Stationery", amount: 100.25 },
+    { clientKey: "33333333-3333-4333-8333-333333333333", description: "Local conveyance", amount: 50.25 },
   ],
 };
 

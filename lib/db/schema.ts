@@ -351,6 +351,11 @@ export const cashVoucherItems = pgTable("cash_voucher_items", {
     .references(() => paymentAdvices.id, { onDelete: "cascade" }),
   description: text("description").notNull(),
   amount: numeric("amount", { precision: 14, scale: 2 }).notNull(),
+  billNo: text("bill_no"),
+  billDate: date("bill_date"),
+  attachmentId: uuid("attachment_id").references(() => attachments.id, {
+    onDelete: "set null",
+  }),
   sortOrder: integer("sort_order").default(0).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true })
     .defaultNow()

@@ -29,6 +29,7 @@ const DOC_TYPE_LABELS: Record<string, string> = {
   PURCHASE_ORDER: "Purchase Order",
   DELIVERY_CHALLAN: "Delivery Challan",
   OTHER: "Other",
+  CASH_VOUCHER_BILL: "Bill / Supplementary Document",
 };
 
 const formatDate = formatDateOnly;
@@ -162,14 +163,14 @@ export default async function AdviceDetailPage({
             <Row label="Udyam / MSME No." value={advice.payeeUdyamNumber ?? "—"} />
           </Section>
 
-          <Section title="Reference">
+          {advice.paymentMode !== "CASH" ? <Section title="Reference">
             <Row label="P.O. No. / Date" value={`${advice.poNumber ?? "—"} / ${formatDate(advice.poDate)}`} />
             <Row
               label="Delivery Challan No. / Date"
               value={`${advice.deliveryChallanNo ?? "—"} / ${formatDate(advice.deliveryChallanDate)}`}
             />
             <Row label="Bill No. / Date" value={`${advice.billNo} / ${formatDate(advice.billDate)}`} />
-          </Section>
+          </Section> : null}
 
           <Section title="Money">
             {advice.isAdvance ? (
@@ -231,9 +232,12 @@ export default async function AdviceDetailPage({
             <Section title="Cash Voucher Items">
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm">
-                  <thead className="border-b border-gray-200 text-xs uppercase tracking-wide text-gray-500"><tr><th className="pb-2">Nature of Expenditure</th><th className="pb-2 text-right">Amount</th></tr></thead>
+                  <thead className="border-b border-gray-200 text-xs uppercase tracking-wide text-gray-500"><tr><th className="pb-2">Bill Date</th><th className="pb-2">Bill No.</th><th className="pb-2">Nature of Expenditure</th><th className="pb-2 text-right">Amount</th><th className="pb-2 pl-3">Bill</th></tr></thead>
                   <tbody>
-                    {voucherItems.map((item) => <tr key={item.id} className="border-b border-gray-100 last:border-0"><td className="py-2">{item.description}</td><td className="py-2 text-right">{formatAmount(item.amount)}</td></tr>)}
+                    {voucherItems.map((item) => {
+                      const bill = item.attachmentId ? adviceAttachments.find((attachment) => attachment.id === item.attachmentId) : undefined;
+                      return <tr key={item.id} className="border-b border-gray-100 last:border-0"><td className="py-2">{formatDate(item.billDate)}</td><td className="py-2">{item.billNo || "—"}</td><td className="py-2">{item.description}</td><td className="py-2 text-right">{formatAmount(item.amount)}</td><td className="py-2 pl-3">{bill ? <a className="font-medium text-[#0b1f3a] hover:underline" href={`/api/admin/attachments/${bill.id}`} target="_blank" rel="noreferrer">View</a> : "—"}</td></tr>;
+                    })}
                   </tbody>
                 </table>
               </div>

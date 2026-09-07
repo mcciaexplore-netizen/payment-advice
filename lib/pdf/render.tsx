@@ -97,7 +97,12 @@ export async function renderCashVoucherPdf(
         payeeName: advice.payeeName,
         items: advice.isAdvance
           ? particulars.map((p) => ({ description: p.description, amount: p.amount }))
-          : items.map((item) => ({ description: item.description, amount: item.amount })),
+          : items.map((item) => ({
+              billDate: item.billDate,
+              billNo: item.billNo,
+              description: item.description,
+              amount: item.amount,
+            })),
         submittedByName: advice.submittedByName,
         submittedAt: advice.submittedAt.toISOString(),
         recommendingAuthorityName,

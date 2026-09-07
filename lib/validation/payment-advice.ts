@@ -72,6 +72,7 @@ export const DOC_TYPES = [
   "PURCHASE_ORDER",
   "DELIVERY_CHALLAN",
   "OTHER",
+  "CASH_VOUCHER_BILL",
 ] as const;
 export const docTypeSchema = z.enum(DOC_TYPES);
 export type DocType = z.infer<typeof docTypeSchema>;
@@ -134,17 +135,24 @@ export const sanctionerNameCorrectionSchema = z.object({
  * preset-category-dropdown + "Other" shape, simplified to reuse this one
  * directly rather than maintaining a parallel schema/total-calculation
  * helper for a structurally identical line item). */
-export const cashVoucherItemSchema = z.object({
+const amountLineItemSchema = z.object({
   description: requiredTrimmed("Nature of expenditure is required"),
   amount: z
     .number()
     .positive("Each expenditure amount must be greater than 0")
     .multipleOf(0.01, "Each expenditure amount can have at most 2 decimal places"),
 });
+
+export const cashVoucherItemSchema = amountLineItemSchema.extend({
+  id: z.string().uuid().optional(),
+  clientKey: z.string().uuid(),
+  billNo: optionalTrimmed(),
+  billDate: optionalDateString(),
+});
 export type CashVoucherItem = z.infer<typeof cashVoucherItemSchema>;
 
 /** Sums currency using paise to avoid floating-point drift. */
-export function calculateCashVoucherTotal(items: CashVoucherItem[]): number {
+export function calculateCashVoucherTotal(items: Array<{ amount: number }>): number {
   return items.reduce((total, item) => total + Math.round(item.amount * 100), 0) / 100;
 }
 
@@ -224,7 +232,7 @@ export const paymentAdviceFormSchema = z
       .min(0, "Previous Pending Advance amount cannot be negative")
       .default(0),
     previousPendingAdvanceSince: optionalDateString(),
-    advanceParticulars: z.array(cashVoucherItemSchema).default([]),
+    advanceParticulars: z.array(amountLineItemSchema).default([]),
 
     // Section 4 — payment mode
     paymentMode: paymentModeSchema,
@@ -408,6 +416,22 @@ export const paymentAdviceFormSchema = z
             message: "Add at least one expenditure line item",
           });
         }
+        if (data.cashVoucherItems.length > 10) {
+          ctx.addIssue({
+            code: "custom",
+            path: ["cashVoucherItems"],
+            message: "Maximum 10 expenses per submission",
+          });
+        }
+        data.cashVoucherItems.forEach((item, index) => {
+          if (item.billDate && isFutureDateString(item.billDate)) {
+            ctx.addIssue({
+              code: "custom",
+              path: ["cashVoucherItems", index, "billDate"],
+              message: "Bill date cannot be in the future",
+            });
+          }
+        });
         const computedTotal = calculateCashVoucherTotal(data.cashVoucherItems);
         if (computedTotal <= 0) {
           ctx.addIssue({

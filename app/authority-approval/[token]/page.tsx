@@ -64,9 +64,15 @@ export default async function AuthorityApprovalPage({
       .where(eq(attachments.paymentAdviceId, advice.id)),
   ]);
 
-  const reviewDocs = adviceAttachments.filter(
-    (a) => a.docType === "TAX_INVOICE" || a.docType === "APPROVAL_BUDGET",
-  );
+  const reviewDocs = adviceAttachments;
+  const documentLabels: Record<string, string> = {
+    TAX_INVOICE: "Tax Invoice",
+    APPROVAL_BUDGET: "Approval / Budget Letter",
+    PURCHASE_ORDER: "Purchase Order",
+    DELIVERY_CHALLAN: "Delivery Challan",
+    OTHER: "Other Document",
+    CASH_VOUCHER_BILL: "Bill / Supplementary Document",
+  };
 
   const cookieStore = await cookies();
   const identityConfirmed = cookieStore.get(identityCookieName(token))?.value === "1";
@@ -114,7 +120,7 @@ export default async function AuthorityApprovalPage({
           payeeName: advice.payeeName,
           amount: Number(advice.amount).toLocaleString("en-IN", { minimumFractionDigits: 2 }),
           natureOfExpenditure: advice.natureOfExpenditure,
-          billReference: `${advice.billNo} / ${formatDate(advice.billDate)}`,
+          billReference: advice.paymentMode === "CASH" ? "See expense rows and attached bills" : `${advice.billNo} / ${formatDate(advice.billDate)}`,
           paymentMode: advice.paymentMode,
           submittedByName: advice.submittedByName,
           formDate: formatDate(advice.formDate),
@@ -122,7 +128,7 @@ export default async function AuthorityApprovalPage({
         documents={reviewDocs.map((d) => ({
           id: d.id,
           fileName: d.fileName,
-          label: d.docType === "TAX_INVOICE" ? "Tax Invoice" : "Approval / Budget Letter",
+          label: documentLabels[d.docType] ?? d.docType,
         }))}
       />
     </main>

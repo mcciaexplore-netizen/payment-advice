@@ -2336,4 +2336,33 @@ commit `1947fce` deployed Ready on Vercel. TypeScript, ESLint, 323 tests (7
 skipped), and production build clean. Browser control was unavailable, so no
 visual dashboard claim was made; production DB read-back is authoritative.
 
+2026-09-07 — Codex — Reworked Cash Voucher expense capture into one unified,
+per-row model (Cash Voucher only; Advance Particulars remains unchanged).
+Removed the standalone Cash Bill No./Bill Date inputs and the top-level Tax
+Invoice/Supplementary Document slot. Each of up to 10 expense rows now stores
+optional `bill_no`/`bill_date`, required description/amount, and a required
+PDF/JPEG/PNG Bill/Supplementary Document. Migration `0017` adds those nullable
+columns plus nullable `attachment_id` on `cash_voucher_items`, linked to the
+existing secured `attachments` table with `ON DELETE SET NULL`; it was applied
+successfully to the configured Neon database. All 8 historical item rows were
+confirmed intact with the new fields null.
+
+Per-row files use the existing browser-direct Vercel Blob upload route and the
+metadata-only final request (`CASH_VOUCHER_BILL` + a UUID client row key), so
+even a 10-file voucher does not send file bytes through `/api/submit` or
+`/api/edit/[token]`. Server validation requires exactly one correctly keyed
+bill per new Cash row; resubmission can retain, replace, add, or remove row
+attachments without cross-linking. Section 4 retains optional Approval/Budget
+Letter and adds optional Other Documents (maximum 3). Admin and Authority
+detail pages expose the new row values and secured bill links; historical nulls
+render as dashes. The Cash Voucher PDF now includes Bill Date, Bill No., Nature
+of Expenditure, and Amount columns. A realistic 10-row A4 render was visually
+inspected: all rows, total, and signature boxes fit on one page without clipping
+or overlap. Add-row regression coverage confirms one `append` call, blank
+amount, and the 10-row cap. Local rendered HTML confirmed the new fields and
+absence of the old Tax Invoice slot. Browser control was unavailable, so no
+interactive browser submission was claimed and no production reference number
+or test row was consumed. TypeScript, ESLint, 366 tests (7 skipped), and the
+production build were clean.
+
 *End of handoff file. Both agents: read §0 again before starting work.*

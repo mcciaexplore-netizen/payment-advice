@@ -106,6 +106,7 @@ describe("POST /api/edit/[token] — direct-upload replacement", () => {
         { id: "a1", paymentAdviceId: ADVICE_ID, docType: "TAX_INVOICE", blobPathname: OLD_PATH },
         { id: "a2", paymentAdviceId: ADVICE_ID, docType: "APPROVAL_BUDGET", blobPathname: "old-approval.pdf" },
       ]))
+      .mockImplementationOnce(() => queryResult([]))
       .mockImplementationOnce(() => queryResult([{ authorityName: "Asha Rao", email: null }]));
   });
 

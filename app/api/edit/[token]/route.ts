@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { del } from "@vercel/blob";
 import { db } from "@/lib/db";
@@ -30,6 +31,7 @@ import {
   validateAttachmentCounts,
 } from "@/lib/attachments/client-upload";
 import { verifyUploadedAttachments } from "@/lib/attachments/verify-uploaded";
+import { validateCashVoucherBillUploads } from "@/lib/attachments/cash-voucher-bills";
 
 export const runtime = "nodejs";
 
@@ -84,6 +86,10 @@ export async function POST(
     .select()
     .from(attachments)
     .where(eq(attachments.paymentAdviceId, advice.id));
+  const existingCashItems = await db
+    .select()
+    .from(cashVoucherItems)
+    .where(eq(cashVoucherItems.paymentAdviceId, advice.id));
   const existingByDocType = new Map<DocType, typeof existingAttachments>();
   for (const a of existingAttachments) {
     const docType = a.docType as DocType;
@@ -102,12 +108,39 @@ export async function POST(
     values.paymentMode,
   );
   if (countError) return NextResponse.json({ error: countError }, { status: 400 });
+  const existingCashItemIds = new Set(
+    existingCashItems.filter((item) => item.attachmentId).map((item) => item.id),
+  );
+  const cashBillError = values.paymentMode === "CASH" && !values.isAdvance
+    ? validateCashVoucherBillUploads(values.cashVoucherItems, newAttachments, existingCashItemIds)
+    : null;
+  if (cashBillError) return NextResponse.json({ error: cashBillError }, { status: 400 });
   const verificationError = await verifyUploadedAttachments(newAttachments, !values.isAdvance);
   if (verificationError) return NextResponse.json({ error: verificationError }, { status: 400 });
 
   const uploadedPathnames = newAttachments.map((attachment) => attachment.blobPathname);
   try {
-    const newAttachmentRecords = newAttachments;
+    const newAttachmentRecords = newAttachments.map((attachment) => ({
+      ...attachment,
+      id: randomUUID(),
+    }));
+    const newCashBillIds = new Map(
+      newAttachmentRecords
+        .filter((attachment) => attachment.docType === "CASH_VOUCHER_BILL")
+        .map((attachment) => [attachment.cashVoucherItemKey!, attachment.id]),
+    );
+    const oldCashAttachmentIdByItemId = new Map(
+      existingCashItems.flatMap((item) => item.attachmentId ? [[item.id, item.attachmentId] as const] : []),
+    );
+    const retainedCashAttachmentIds = new Set(
+      values.paymentMode === "CASH" && !values.isAdvance
+        ? values.cashVoucherItems.flatMap((item) =>
+            !newCashBillIds.has(item.clientKey) && item.id && oldCashAttachmentIdByItemId.has(item.id)
+              ? [oldCashAttachmentIdByItemId.get(item.id)!]
+              : [],
+          )
+        : [],
+    );
 
     const now = new Date();
     const oldBlobPathnamesToDelete: string[] = [];
@@ -227,6 +260,7 @@ export async function POST(
         .where(eq(paymentAdvices.id, advice.id));
 
       for (const docType of DOC_TYPES) {
+        if (docType === "CASH_VOUCHER_BILL") continue;
         if (byDocType[docType].length === 0) continue;
         const oldOnes = existingByDocType.get(docType) ?? [];
         if (oldOnes.length === 0) continue;
@@ -239,10 +273,37 @@ export async function POST(
       await tx
         .delete(cashVoucherItems)
         .where(eq(cashVoucherItems.paymentAdviceId, advice.id));
+
+      const staleCashAttachments = existingAttachments.filter(
+        (attachment) => attachment.docType === "CASH_VOUCHER_BILL" && !retainedCashAttachmentIds.has(attachment.id),
+      );
+      if (staleCashAttachments.length > 0) {
+        oldBlobPathnamesToDelete.push(...staleCashAttachments.map((attachment) => attachment.blobPathname));
+        for (const attachment of staleCashAttachments) {
+          await tx.delete(attachments).where(eq(attachments.id, attachment.id));
+        }
+      }
+
+      if (newAttachmentRecords.length > 0) {
+        await tx.insert(attachments).values(
+          newAttachmentRecords.map((a) => ({
+            id: a.id,
+            paymentAdviceId: advice.id,
+            docType: a.docType,
+            fileName: a.fileName,
+            blobPathname: a.blobPathname,
+            blobUrl: a.blobUrl,
+            sizeBytes: a.sizeBytes,
+          })),
+        );
+      }
       if (values.paymentMode === "CASH" && !values.isAdvance) {
         await tx.insert(cashVoucherItems).values(
           values.cashVoucherItems.map((item, sortOrder) => ({
             paymentAdviceId: advice.id,
+            billNo: item.billNo ?? null,
+            billDate: item.billDate ?? null,
+            attachmentId: newCashBillIds.get(item.clientKey) ?? (item.id ? oldCashAttachmentIdByItemId.get(item.id) : undefined),
             description: item.description,
             amount: item.amount.toFixed(2),
             sortOrder,
@@ -260,19 +321,6 @@ export async function POST(
             description: item.description,
             amount: item.amount.toFixed(2),
             sortOrder,
-          })),
-        );
-      }
-
-      if (newAttachmentRecords.length > 0) {
-        await tx.insert(attachments).values(
-          newAttachmentRecords.map((a) => ({
-            paymentAdviceId: advice.id,
-            docType: a.docType,
-            fileName: a.fileName,
-            blobPathname: a.blobPathname,
-            blobUrl: a.blobUrl,
-            sizeBytes: a.sizeBytes,
           })),
         );
       }

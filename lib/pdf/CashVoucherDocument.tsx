@@ -13,7 +13,7 @@ export type CashVoucherPdfData = {
   // For an advance, this is fed from advance_particulars rather than
   // cash_voucher_items — same description+amount shape either way, see
   // AGENT_HANDOFF.md.
-  items: { description: string; amount: string }[];
+  items: { billDate?: string | null; billNo?: string | null; description: string; amount: string }[];
   submittedByName: string;
   submittedAt: string; // ISO timestamp — drives the Submitted stamp's date
   recommendingAuthorityName: string;
@@ -54,6 +54,10 @@ const styles = StyleSheet.create({
   headerCell: { backgroundColor: NAVY, color: "#FFFFFF", fontFamily: "Helvetica-Bold", fontSize: 8, padding: 8, borderRight: BORDER, borderBottom: BORDER },
   description: { width: "76%" },
   amount: { width: "24%", textAlign: "right" },
+  billDate: { width: "16%" },
+  billNo: { width: "18%" },
+  cashDescription: { width: "42%" },
+  cashCell: { padding: 5, fontSize: 7.5, lineHeight: 1.2 },
   cell: { borderRight: BORDER, borderBottom: BORDER, padding: 8, lineHeight: 1.3 },
   totalLabel: { backgroundColor: "#EAF3ED", fontFamily: "Helvetica-Bold", color: NAVY },
   totalAmount: { backgroundColor: "#EAF3ED", fontFamily: "Helvetica-Bold", color: NAVY, textAlign: "right" },
@@ -131,20 +135,24 @@ export function CashVoucherDocument({ data }: { data: CashVoucherPdfData }) {
 
         <View style={styles.table}>
           <View style={styles.row}>
-            <Text style={[styles.headerCell, styles.description]}>
+            {!data.isAdvance ? <Text style={[styles.headerCell, styles.cashCell, styles.billDate]}>BILL DATE</Text> : null}
+            {!data.isAdvance ? <Text style={[styles.headerCell, styles.cashCell, styles.billNo]}>BILL NO.</Text> : null}
+            <Text style={[styles.headerCell, data.isAdvance ? styles.description : styles.cashDescription]}>
               {data.isAdvance ? "PARTICULARS" : "NATURE OF EXPENDITURE"}
             </Text>
             <Text style={[styles.headerCell, styles.amount]}>AMOUNT (RS.)</Text>
           </View>
           {data.items.map((item, index) => (
             <View style={styles.row} key={`${index}-${item.description}`} wrap={false}>
-              <Text style={[styles.cell, styles.description]}>{item.description}</Text>
-              <Text style={[styles.cell, styles.amount]}>{formatAmount(item.amount)}</Text>
+              {!data.isAdvance ? <Text style={[styles.cell, styles.cashCell, styles.billDate]}>{item.billDate ? formatDate(item.billDate) : "-"}</Text> : null}
+              {!data.isAdvance ? <Text style={[styles.cell, styles.cashCell, styles.billNo]}>{item.billNo || "-"}</Text> : null}
+              <Text style={[styles.cell, data.isAdvance ? {} : styles.cashCell, data.isAdvance ? styles.description : styles.cashDescription]}>{item.description}</Text>
+              <Text style={[styles.cell, data.isAdvance ? {} : styles.cashCell, styles.amount]}>{formatAmount(item.amount)}</Text>
             </View>
           ))}
           <View style={styles.row} wrap={false}>
-            <Text style={[styles.cell, styles.description, styles.totalLabel]}>TOTAL</Text>
-            <Text style={[styles.cell, styles.amount, styles.totalAmount]}>{formatAmount(total)}</Text>
+            <Text style={[styles.cell, data.isAdvance ? {} : styles.cashCell, data.isAdvance ? styles.description : { width: "76%" }, styles.totalLabel]}>TOTAL</Text>
+            <Text style={[styles.cell, data.isAdvance ? {} : styles.cashCell, styles.amount, styles.totalAmount]}>{formatAmount(total)}</Text>
           </View>
         </View>
 

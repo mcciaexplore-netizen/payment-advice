@@ -5,12 +5,13 @@ import {
   validateAttachmentCounts,
 } from "@/lib/attachments/client-upload";
 
-const upload = (docType: "TAX_INVOICE" | "APPROVAL_BUDGET" | "OTHER" | "PURCHASE_ORDER" | "DELIVERY_CHALLAN", fileName: string) => ({
+const upload = (docType: "TAX_INVOICE" | "APPROVAL_BUDGET" | "OTHER" | "PURCHASE_ORDER" | "DELIVERY_CHALLAN" | "CASH_VOUCHER_BILL", fileName: string, cashVoucherItemKey?: string) => ({
   docType,
   fileName,
   blobPathname: `pending-uploads/batch/${fileName}`,
   blobUrl: `https://store.private.blob.vercel-storage.com/pending-uploads/batch/${fileName}`,
   sizeBytes: 3_000_000,
+  ...(cashVoucherItemKey ? { cashVoucherItemKey } : {}),
 });
 
 describe("client-upload attachment metadata", () => {
@@ -44,15 +45,19 @@ describe("client-upload attachment metadata", () => {
     expect(validateAttachmentCounts(groupUploadedAttachments(parsed.attachments), false)).toBeNull();
   });
 
-  it("allows optional Other Documents for Payment Advice but not Cash Voucher", () => {
+  it("allows optional Other Documents for both Payment Advice and Cash Voucher", () => {
     const grouped = groupUploadedAttachments([
       upload("TAX_INVOICE", "invoice.pdf"),
       upload("OTHER", "supporting-document.pdf"),
     ]);
     expect(validateAttachmentCounts(grouped, false, undefined, "NEFT")).toBeNull();
-    expect(validateAttachmentCounts(grouped, false, undefined, "CASH")).toContain(
-      "available only for Payment Advice",
-    );
+    expect(validateAttachmentCounts(grouped, false, undefined, "CASH")).toBeNull();
+  });
+
+  it("accepts keyed per-row Cash Voucher bills and rejects an unkeyed one", () => {
+    const keyed = upload("CASH_VOUCHER_BILL", "bill.png", "22222222-2222-4222-8222-222222222222");
+    expect("error" in parseUploadedAttachments(JSON.stringify([keyed]))).toBe(false);
+    expect(parseUploadedAttachments(JSON.stringify([upload("CASH_VOUCHER_BILL", "bill.png")]))).toEqual({ error: "Attachment metadata is invalid." });
   });
 
   it("keeps Approval / Budget Letter mandatory for Advance Payment", () => {

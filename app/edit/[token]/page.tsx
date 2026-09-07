@@ -70,6 +70,13 @@ export default async function EditPage({
     const docType = a.docType as DocType;
     existingAttachments[docType] = [...(existingAttachments[docType] ?? []), a.fileName];
   }
+  const attachmentById = new Map(adviceAttachments.map((attachment) => [attachment.id, attachment]));
+  const existingCashVoucherItemAttachments = Object.fromEntries(
+    voucherItems.flatMap((item) => {
+      const attachment = item.attachmentId ? attachmentById.get(item.attachmentId) : undefined;
+      return attachment ? [[item.id, attachment.fileName]] : [];
+    }),
+  );
 
   return (
     <main className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-8 px-6 py-10">
@@ -99,6 +106,7 @@ export default async function EditPage({
         recommendingAuthorities={authorities}
         editToken={token}
         existingAttachments={existingAttachments}
+        existingCashVoucherItemAttachments={existingCashVoucherItemAttachments}
         prefill={{
           submittedByName: advice.submittedByName,
           submittedByEmail: advice.submittedByEmail,
@@ -126,6 +134,10 @@ export default async function EditPage({
           gstAmount: advice.gstAmount !== null ? Number(advice.gstAmount) : undefined,
           natureOfExpenditure: advice.natureOfExpenditure,
           cashVoucherItems: voucherItems.map((item) => ({
+            id: item.id,
+            clientKey: item.id,
+            billNo: item.billNo ?? undefined,
+            billDate: item.billDate ?? undefined,
             description: item.description,
             amount: Number(item.amount),
           })),

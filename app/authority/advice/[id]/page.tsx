@@ -25,6 +25,7 @@ const DOC_TYPE_LABELS: Record<string, string> = {
   PURCHASE_ORDER: "Purchase Order",
   DELIVERY_CHALLAN: "Delivery Challan",
   OTHER: "Other",
+  CASH_VOUCHER_BILL: "Bill / Supplementary Document",
 };
 
 function formatDate(value: string | Date | null) {
@@ -104,7 +105,7 @@ export default async function AuthorityAdviceDetailPage({
             <Row label="Udyam / MSME No." value={advice.payeeUdyamNumber ?? "—"} />
           </Section>
 
-          {!advice.isAdvance ? <Section title="Bill & Reference">
+          {!advice.isAdvance && advice.paymentMode !== "CASH" ? <Section title="Bill & Reference">
             <Row label="P.O. No. / Date" value={`${advice.poNumber ?? "—"} / ${formatDate(advice.poDate)}`} />
             <Row label="Delivery Challan No. / Date" value={`${advice.deliveryChallanNo ?? "—"} / ${formatDate(advice.deliveryChallanDate)}`} />
             <Row label="Bill No. / Date" value={`${advice.billNo} / ${formatDate(advice.billDate)}`} />
@@ -120,7 +121,7 @@ export default async function AuthorityAdviceDetailPage({
           </Section>
 
           {particulars.length ? <ItemsSection title="Particulars" items={particulars} /> : null}
-          {voucherItems.length ? <ItemsSection title="Nature of Expenditure" items={voucherItems} /> : null}
+          {voucherItems.length ? <CashVoucherItemsSection adviceId={advice.id} items={voucherItems} documents={documents} /> : null}
 
           <Section title="Details">
             <Row label={advice.isAdvance ? "Purpose of Advance" : "Nature of Expenditure"} value={advice.natureOfExpenditure} block />
@@ -175,6 +176,10 @@ function DecisionRecord({ advice }: { advice: { authorityApprovedAt: Date | null
 
 function ItemsSection({ title, items }: { title: string; items: Array<{ id: string; description: string; amount: string }> }) {
   return <Section title={title}><div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="border-b border-gray-200 text-xs uppercase text-gray-500"><tr><th className="pb-2">Description</th><th className="pb-2 text-right">Amount</th></tr></thead><tbody>{items.map((item) => <tr key={item.id} className="border-b border-gray-100 last:border-0"><td className="py-2">{item.description}</td><td className="py-2 text-right">{formatAmount(item.amount)}</td></tr>)}</tbody></table></div></Section>;
+}
+
+function CashVoucherItemsSection({ adviceId, items, documents }: { adviceId: string; items: Array<{ id: string; billDate: string | null; billNo: string | null; attachmentId: string | null; description: string; amount: string }>; documents: Array<{ id: string; fileName: string }> }) {
+  return <Section title="Cash Voucher Items"><div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="border-b border-gray-200 text-xs uppercase text-gray-500"><tr><th className="pb-2">Bill Date</th><th className="pb-2">Bill No.</th><th className="pb-2">Nature of Expenditure</th><th className="pb-2 text-right">Amount</th><th className="pb-2 pl-3">Bill</th></tr></thead><tbody>{items.map((item) => { const document = item.attachmentId ? documents.find((candidate) => candidate.id === item.attachmentId) : undefined; return <tr key={item.id} className="border-b border-gray-100 last:border-0"><td className="py-2">{formatDate(item.billDate)}</td><td className="py-2">{item.billNo || "—"}</td><td className="py-2">{item.description}</td><td className="py-2 text-right">{formatAmount(item.amount)}</td><td className="py-2 pl-3">{document ? <a href={`/api/authority/advice/${adviceId}/attachments/${document.id}`} target="_blank" rel="noreferrer" className="font-medium text-[#0b1f3a] hover:underline">View</a> : "—"}</td></tr>; })}</tbody></table></div></Section>;
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
