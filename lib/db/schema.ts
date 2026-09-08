@@ -93,7 +93,7 @@ export const vendors = pgTable("vendors", {
   updatedAt: timestamp("updated_at", { withTimezone: true }),
 });
 
-/** The pool of actual approvers (people, or the shared "DG" entity) — not
+/** The pool of actual recommending officers (people, or the shared "DG" entity) — not
  * departments. Assigned per staff member via staff_authority_options, not
  * implied by which department a submitter belongs to. */
 export const recommendingAuthorities = pgTable("recommending_authorities", {
@@ -269,8 +269,8 @@ export const paymentAdvices = pgTable("payment_advices", {
   }),
   revisionCount: integer("revision_count").default(0).notNull(),
 
-  // Recommending Authority approval — the specific authority chosen on the
-  // form must approve before Admin can. Derived state, not a status enum
+  // Recommending Authority recommendation — the specific authority chosen on the
+  // form must recommend before Admin can. Derived state, not a status enum
   // value: "waiting on authority" = status SUBMITTED && authorityApprovedAt
   // null; "ready for Finance" = status SUBMITTED && authorityApprovedAt set.
   // Reset to null (and authorityToken reissued) on every resubmission, since
@@ -284,15 +284,15 @@ export const paymentAdvices = pgTable("payment_advices", {
   }),
   authorityRemarks: text("authority_remarks"),
   // Unlike editToken, this is NOT single-use/nulled after action — the
-  // authority-approval page stays reachable at the same link afterward to
-  // show the read-only "already approved/sent back" banner.
+  // authority recommendation page stays reachable at the same link afterward to
+  // show the read-only "already recommended/sent back" banner.
   authorityToken: text("authority_token").unique(),
   authorityTokenExpiresAt: timestamp("authority_token_expires_at", {
     withTimezone: true,
   }),
 
   // Finance Verification + Sanctioning pipeline — runs after Authority
-  // approval, for both NEFT and Cash. All three stages happen inside the
+  // recommendation, for both NEFT and Cash. All three stages happen inside the
   // single shared Admin login (no individual accounts), so each stage
   // records WHICH named person (from a small hardcoded list, not a
   // CRUD-managed table — see lib/validation/payment-advice.ts) did it.

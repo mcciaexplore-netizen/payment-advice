@@ -94,7 +94,6 @@ export function PaymentAdviceForm({
   } = useForm<PaymentAdviceFormInput, unknown, PaymentAdviceFormValues>({
     resolver: zodResolver(paymentAdviceFormSchema),
     defaultValues: {
-      formDate: today,
       submittedByDepartmentOption: prefilledDepartmentOption,
       paymentMode: isCashVoucher ? "CASH" : "NEFT",
       cashVoucherItems: isCashVoucher ? [{ clientKey: crypto.randomUUID(), billNo: "", billDate: undefined, description: "", amount: undefined as unknown as number }] : [],
@@ -108,6 +107,10 @@ export function PaymentAdviceForm({
       // silently seeding two rows instead of one.
       advanceParticulars: isAdvance ? [{ description: "", amount: 0 }] : [],
       ...prefill,
+      // Form Date is system-controlled for both new submissions and
+      // resubmissions. A historical prefill must never override today's IST
+      // date in the read-only field.
+      formDate: today,
     },
   });
 
@@ -702,8 +705,9 @@ export function PaymentAdviceForm({
               })}
             />
           ) : null}
-          <Field label="Form Date" required error={errors.formDate?.message} help="Defaults to today; change if backdating.">
-            <Input type="date" max={today} hasError={!!errors.formDate} {...register("formDate")} />
+          <Field label="Form Date" required error={errors.formDate?.message} help="Automatically set to today.">
+            <input type="hidden" {...register("formDate")} />
+            <Input type="date" value={today} readOnly aria-readonly="true" tabIndex={-1} />
           </Field>
         </div>
       </Section>

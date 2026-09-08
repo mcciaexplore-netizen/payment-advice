@@ -38,7 +38,7 @@ export default async function StaffPage() {
         <h1 className="font-heading text-3xl text-[#0b1f3a]">Staff &amp; Recommending Authorities</h1>
         <p className="mt-1 text-sm text-gray-600">
           Staff members drive the public form&apos;s name auto-fill; recommending authorities are
-          the pool of approvers assigned to them.
+          the pool of recommending officers assigned to them.
         </p>
       </div>
 

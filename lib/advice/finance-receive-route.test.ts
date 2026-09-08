@@ -40,7 +40,7 @@ describe("POST /api/admin/advice/[id]/receive", () => {
     expect(mocks.transaction).not.toHaveBeenCalled();
   });
 
-  it("409s when the Recommending Authority hasn't approved yet", async () => {
+  it("409s when the Recommending Authority hasn't recommended yet", async () => {
     mocks.limit.mockResolvedValueOnce([
       { status: "SUBMITTED", authorityApprovedAt: null, financeReceivedAt: null },
     ]);
@@ -58,7 +58,7 @@ describe("POST /api/admin/advice/[id]/receive", () => {
     expect(mocks.transaction).not.toHaveBeenCalled();
   });
 
-  it("marks received and writes a FINANCE_RECEIVED audit entry when authority-approved and not yet received", async () => {
+  it("marks received and writes a FINANCE_RECEIVED audit entry when authority-recommended and not yet received", async () => {
     mocks.limit.mockResolvedValueOnce([
       { status: "SUBMITTED", authorityApprovedAt: new Date(), financeReceivedAt: null },
     ]);

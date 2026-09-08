@@ -7,7 +7,7 @@ export const metadata: Metadata = { title: "Change Password" };
 
 export default async function AuthorityChangePasswordPage() {
   const session = await getAdminSession();
-  const accountLabel = hasRole(session, "AUTHORITY") ? "Authority Approvals" : "Team Dashboard";
+  const accountLabel = hasRole(session, "AUTHORITY") ? "Authority Recommendations" : "Team Dashboard";
   return (
     <ChangePasswordPageContent
       description={`Update the password for your ${accountLabel} account.`}

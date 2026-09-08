@@ -48,12 +48,12 @@ describe("POST /api/authority-approval/[token]/approve", () => {
     expect(mocks.transaction).not.toHaveBeenCalled();
   });
 
-  it("409s when already approved (double-action prevention)", async () => {
+  it("409s when already recommended (double-action prevention)", async () => {
     mocks.limit.mockResolvedValueOnce([{ ...pending, authorityApprovedAt: new Date() }]);
     const res = await POST(req("t"), { params: Promise.resolve({ token: "t" }) });
     expect(res.status).toBe(409);
     await expect(res.json()).resolves.toEqual({
-      error: "This Payment Advice has already been approved.",
+      error: "This Payment Advice has already been recommended.",
     });
     expect(mocks.transaction).not.toHaveBeenCalled();
   });
@@ -74,7 +74,7 @@ describe("POST /api/authority-approval/[token]/approve", () => {
     expect(mocks.transaction).not.toHaveBeenCalled();
   });
 
-  it("records approval and writes an AUTHORITY_APPROVED audit entry when pending and valid", async () => {
+  it("records recommendation and writes the legacy AUTHORITY_APPROVED audit key when pending and valid", async () => {
     mocks.limit
       .mockResolvedValueOnce([pending]) // advice lookup
       .mockResolvedValueOnce([{ authorityName: "Asha Rao" }]); // authority name lookup

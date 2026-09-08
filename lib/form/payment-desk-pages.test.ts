@@ -36,6 +36,20 @@ describe("Payment Desk dedicated public pages", () => {
     }
   });
 
+  it("keeps Form Date read-only and server-controlled as today's IST date", () => {
+    const form = read("components/form/PaymentAdviceForm.tsx");
+    const submitRoute = read("app/api/submit/route.ts");
+    const editRoute = read("app/api/edit/[token]/route.ts");
+    expect(form).toContain('<input type="hidden" {...register("formDate")} />');
+    expect(form).toContain('value={today} readOnly aria-readonly="true"');
+    expect(form).toContain('help="Automatically set to today."');
+    expect(form).not.toContain("change if backdating");
+    expect(submitRoute).toContain("const formDate = todayInIst(now)");
+    expect(editRoute).toContain("const formDate = todayInIst(now)");
+    expect(submitRoute).not.toContain("formDate: values.formDate");
+    expect(editRoute).not.toContain("formDate: values.formDate");
+  });
+
   it("seeds one blank Cash row and appends one blank row per click", () => {
     const form = read("components/form/PaymentAdviceForm.tsx");
     const cashItems = read("components/form/CashVoucherItemsField.tsx");

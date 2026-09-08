@@ -7,7 +7,7 @@ export const EDIT_TOKEN_TTL_MS = 14 * 24 * 60 * 60 * 1000; // 14 days
 
 /**
  * Shared by Admin's own "Send Back" action and the Recommending Authority's
- * "Send Back" action on the approval page — both put the submission back in
+ * "Send Back" action on the recommendation page — both put the submission back in
  * the submitter's hands via the same one-time edit-token flow. `actor` is
  * written to the audit log so the admin queue/detail view can tell which of
  * the two triggered a given SENT_BACK cycle. Pass `authorityRejection: true`

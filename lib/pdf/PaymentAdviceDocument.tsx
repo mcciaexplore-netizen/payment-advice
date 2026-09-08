@@ -46,8 +46,8 @@ export type PaymentAdvicePdfData = {
   verifiedAt: string | null; // ISO timestamp — drives the Verified stamp's date
   sanctionedBy: string | null;
   submittedAt: string; // ISO timestamp
-  // ISO timestamp — drives the Recommended-by (Approved) stamp; null until
-  // the Recommending Authority actually approves.
+  // ISO timestamp — drives the Recommended-by stamp; null until
+  // the Recommending Authority actually recommends.
   authorityApprovedAt: string | null;
   approvedAt: string | null; // ISO timestamp
   approvedByName: string | null;

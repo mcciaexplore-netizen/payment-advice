@@ -100,7 +100,7 @@ export default function SubmittedPage() {
           <div className="flex flex-col items-center gap-2 rounded-md border border-[#e8a33d]/40 bg-[#e8a33d]/10 px-4 py-3 text-center text-sm text-[#8a5a12]">
             <p>
               Share this link with <span className="font-medium">{summary.authorityName}</span>{" "}
-              so they can review and approve this{" "}
+              so they can review and recommend this{" "}
               {documentLabelFor(summary.paymentMode as PaymentMode, summary.isAdvance)}.
             </p>
             <button

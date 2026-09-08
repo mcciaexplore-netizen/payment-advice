@@ -39,7 +39,7 @@ export async function POST(
     .where(eq(paymentAdvices.authorityToken, token))
     .limit(1);
   if (!advice) {
-    return NextResponse.json({ error: "This approval link is not valid." }, { status: 404 });
+    return NextResponse.json({ error: "This recommendation link is not valid." }, { status: 404 });
   }
 
   const actionError = authorityActionError(advice);

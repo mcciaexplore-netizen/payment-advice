@@ -67,7 +67,7 @@ function AuthorityInlineForm({
       {isEdit ? (
         <p className="w-full text-xs leading-relaxed text-amber-700">
           Only edit this for spelling/formatting fixes. Renaming will retroactively change the
-          name shown on all past PDFs and approval pages for this authority. If someone new has
+          name shown on all past PDFs and recommendation pages for this authority. If someone new has
           taken over this role, deactivate this record and create a new one instead.
         </p>
       ) : null}

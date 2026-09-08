@@ -5,9 +5,10 @@ import { describe, expect, it } from "vitest";
 describe("Team Dashboard scoped views", () => {
   const source = fs.readFileSync(path.join(process.cwd(), "app/authority/page.tsx"), "utf8");
 
-  it("filters Branch and Department grants against their exact snapshot columns", () => {
-    expect(source).toContain("eq(paymentAdvices.branch, activeGrant.scopeValue!)");
-    expect(source).toContain("eq(paymentAdvices.submittedByDepartment, activeGrant.scopeValue!)");
+  it("filters Branch and Department grants against their snapshot columns, case-insensitively", () => {
+    expect(source).toContain("caseInsensitiveEq(paymentAdvices.branch, activeGrant.scopeValue!)");
+    expect(source).toContain("caseInsensitiveEq(paymentAdvices.submittedByDepartment, activeGrant.scopeValue!)");
+    expect(source).toContain("sql`lower(${column}) = lower(${value})`");
   });
 
   it("reuses one email predicate for My Submissions in every dashboard context", () => {
@@ -36,7 +37,7 @@ describe("separate public login entry points", () => {
   });
 
   it("keeps Authority and Team credentials on distinct endpoints", () => {
-    expect(authorityLogin).toContain('title="Authority Approvals"');
+    expect(authorityLogin).toContain('title="Authority Recommendations"');
     expect(authorityLogin).toContain('endpoint="/api/authority/login"');
     expect(teamLogin).toContain('title="Team Dashboard"');
     expect(teamLogin).toContain('endpoint="/api/team/login"');

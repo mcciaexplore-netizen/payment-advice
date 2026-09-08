@@ -34,9 +34,9 @@ describe("authorityActionError", () => {
     expect(authorityActionError({ ...base, authorityTokenExpiresAt: null })).toBeNull();
   });
 
-  it("blocks a second action once already approved", () => {
+  it("blocks a second action once already recommended", () => {
     expect(authorityActionError({ ...base, authorityApprovedAt: new Date() })).toMatch(
-      /already been approved/,
+      /already been recommended/,
     );
   });
 
@@ -46,13 +46,13 @@ describe("authorityActionError", () => {
     );
   });
 
-  it("prefers the approved message when both timestamps are somehow set", () => {
+  it("prefers the recommended message when both timestamps are somehow set", () => {
     const error = authorityActionError({
       ...base,
       authorityApprovedAt: new Date(),
       authorityRejectedAt: new Date(),
     });
-    expect(error).toMatch(/already been approved/);
+    expect(error).toMatch(/already been recommended/);
   });
 
   it("blocks action on an expired, not-yet-actioned token", () => {

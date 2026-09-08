@@ -1,9 +1,8 @@
-import Link from "next/link";
 import { and, count, eq, sum } from "drizzle-orm";
 import { getAdminSession } from "@/lib/admin-session";
 import { defaultPaymentModeForRoles } from "@/lib/admin/role-scope";
-import { AdminTab, buildTabCondition } from "@/lib/admin/filters";
-import { STAGE_FOR_TAB, STAGE_STYLE } from "@/lib/advice/stage-style";
+import { buildTabCondition } from "@/lib/admin/filters";
+import { PipelineSummary, PIPELINE_SUMMARY_STAGES } from "@/components/admin/PipelineSummary";
 import { db } from "@/lib/db";
 import { paymentAdvices } from "@/lib/db/schema";
 import { financialYearFor } from "@/lib/serial";
@@ -16,18 +15,6 @@ import {
 } from "@/lib/date-time";
 
 export const dynamic = "force-dynamic";
-
-const STAGES: { tab: Exclude<AdminTab, "all">; label: string }[] = [
-  { tab: "waiting_authority", label: "Waiting on Authority" },
-  { tab: "awaiting_finance", label: "Awaiting Finance Review" },
-  { tab: "advance_payment", label: "Advance Payment" },
-  { tab: "received_in_process", label: "Received & In Process" },
-  { tab: "verified_ready_payment", label: "Verified — Ready for Payment" },
-  { tab: "partial_payment_done", label: "Partial Payment Done" },
-  { tab: "fully_payment_settled", label: "Fully Payment Settled" },
-  { tab: "payment_done", label: "Payment Done (Cash)" },
-  { tab: "sent_back", label: "Sent Back" },
-];
 
 function money(value: number) {
   return `₹ ${value.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -42,7 +29,7 @@ export default async function AdminDashboardPage() {
   const financialYear = financialYearFor(new Date());
 
   const [stageRows, analyticsRows] = await Promise.all([
-    Promise.all(STAGES.map(async ({ tab }) => {
+    Promise.all(PIPELINE_SUMMARY_STAGES.map(async ({ tab }) => {
       const [result] = await db.select({ count: count(), sum: sum(paymentAdvices.amount) })
         .from(paymentAdvices)
         .where(and(roleScope, buildTabCondition(tab)));
@@ -120,24 +107,10 @@ export default async function AdminDashboardPage() {
         </p>
       </header>
 
-      <section>
-        <h2 className="mb-3 font-heading text-xl text-[#0b1f3a]">Pipeline Summary</h2>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-          {STAGES.map(({ tab, label }) => {
-            const metric = stageRows.find((row) => row.tab === tab)!;
-            const modeParam = roleMode ? `&paymentMode=${roleMode}` : "";
-            const stageStyle = STAGE_STYLE[STAGE_FOR_TAB[tab]];
-            return <Link key={tab} href={`/admin/submissions?tab=${tab}${modeParam}`} className="flex min-h-32 flex-col justify-between rounded-lg border border-gray-200 bg-white p-4 hover:border-[#0b1f3a] hover:shadow-sm">
-              <span className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-gray-500">
-                <span className={`h-1.5 w-1.5 flex-none rounded-full ${stageStyle.dot}`} />
-                {label}
-              </span>
-              <span className="font-heading text-3xl text-[#0b1f3a]">{metric.count}</span>
-              <span className="text-xs text-gray-500">{money(metric.sum)}</span>
-            </Link>;
-          })}
-        </div>
-      </section>
+      <PipelineSummary
+        metrics={stageRows}
+        hrefFor={(tab) => `/admin/submissions?tab=${tab}${roleMode ? `&paymentMode=${roleMode}` : ""}`}
+      />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Panel title="Submissions over time" subtitle="Weekly count · last 90 days">
@@ -163,9 +136,9 @@ export default async function AdminDashboardPage() {
           {topVendors.length ? <ol className="divide-y divide-gray-100">{topVendors.map(([name, value], index) => <li key={name} className="flex items-center justify-between gap-4 py-3 first:pt-0 last:pb-0"><div className="flex min-w-0 items-center gap-3"><span className="text-sm text-gray-400">{index + 1}</span><div className="min-w-0"><p className="truncate font-medium text-[#0b1f3a]">{name}</p><p className="text-xs text-gray-500">{value.count} submission{value.count === 1 ? "" : "s"}</p></div></div><span className="whitespace-nowrap text-sm font-medium">{money(value.amount)}</span></li>)}</ol> : <Empty />}
         </Panel>
 
-        <Panel title="Authority approval time" subtitle="Average for approved submissions this financial year">
+        <Panel title="Authority recommendation time" subtitle="Average for recommended submissions this financial year">
           <p className="font-heading text-4xl text-[#0b1f3a]">{averageApprovalHours === null ? "—" : averageApprovalHours < 48 ? `${averageApprovalHours.toFixed(1)} hrs` : `${(averageApprovalHours / 24).toFixed(1)} days`}</p>
-          <p className="mt-2 text-sm text-gray-500">Based on {approvalCount} approved submission{approvalCount === 1 ? "" : "s"}.</p>
+          <p className="mt-2 text-sm text-gray-500">Based on {approvalCount} recommended submission{approvalCount === 1 ? "" : "s"}.</p>
         </Panel>
       </div>
 

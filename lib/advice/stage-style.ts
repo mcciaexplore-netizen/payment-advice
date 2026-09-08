@@ -36,11 +36,7 @@ export const STAGE_STYLE: Record<PipelineStage, StageStyle> = {
     dot: "bg-slate-500",
   },
   "Awaiting Finance Review": {
-    // "Recommended" rather than the task's suggested "Approved" — this
-    // app's own terminology already moved from Approve/Approved to
-    // Recommend/Recommended for the Authority's action (see the
-    // 2026-09-04 wording-alignment commits); reusing "Approved" here would
-    // reintroduce the exact inconsistency that work just removed.
+    // This label uses the Authority's business action: Recommended.
     shortLabel: "Recommended",
     badge: "bg-[#e8a33d]/15 text-[#8a5a12] border-[#e8a33d]/40",
     tabActive: "bg-[#e8a33d] text-white border-[#e8a33d]",

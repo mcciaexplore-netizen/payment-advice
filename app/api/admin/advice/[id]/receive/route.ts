@@ -34,7 +34,7 @@ export async function POST(
   }
   if (!advice.authorityApprovedAt) {
     return NextResponse.json(
-      { error: "Awaiting Recommending Authority approval first." },
+      { error: "Awaiting Recommending Authority recommendation first." },
       { status: 409 },
     );
   }

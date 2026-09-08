@@ -35,7 +35,7 @@ export async function POST(
     .where(eq(paymentAdvices.authorityToken, token))
     .limit(1);
   if (!advice) {
-    return NextResponse.json({ error: "This approval link is not valid." }, { status: 404 });
+    return NextResponse.json({ error: "This recommendation link is not valid." }, { status: 404 });
   }
 
   const actionError = authorityActionError(advice);
@@ -81,7 +81,7 @@ export async function POST(
     return NextResponse.json(
       {
         error:
-          "Identity confirmation isn't available for this approval right now. Please contact the Accounts department.",
+          "Identity confirmation isn't available for this recommendation right now. Please contact the Accounts department.",
       },
       { status: 503 },
     );
@@ -96,7 +96,7 @@ export async function POST(
       details: { attemptedEmail: parsed.data.email },
     });
     return NextResponse.json(
-      { error: "That email doesn't match our records for this approval." },
+      { error: "That email doesn't match our records for this recommendation." },
       { status: 401 },
     );
   }

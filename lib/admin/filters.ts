@@ -139,9 +139,9 @@ export const ADMIN_LIST_PAGE_SIZE = 25;
  *
  * "advance_payment" is Advance Payment's own landing tab (see
  * AGENT_HANDOFF.md) — split out of "awaiting_finance" using the exact same
- * underlying condition (authority-approved, not yet Finance-received), just
+ * underlying condition (authority-recommended, not yet Finance-received), just
  * also requiring `is_advance = true`; "awaiting_finance" is correspondingly
- * narrowed to `is_advance = false` so an approved advance lands in exactly
+ * narrowed to `is_advance = false` so a recommended advance lands in exactly
  * one of the two tabs, never both. This separation is deliberately only at
  * the landing point — once Finance marks an advance Received, it falls out
  * of "advance_payment" (financeReceivedAt is no longer null) and into the

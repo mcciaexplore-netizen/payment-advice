@@ -254,7 +254,7 @@ describe("lib/email/notify.ts", () => {
       expect(mocks.gmailSendMail).toHaveBeenCalledWith(
         expect.objectContaining({
           to: "ganeshm@mcciapune.com",
-          subject: "Approval Required: Payment Advice MCCIA/2026-27/0004",
+          subject: "Recommendation Required: Payment Advice MCCIA/2026-27/0004",
         }),
       );
     });
@@ -295,7 +295,7 @@ describe("lib/email/notify.ts", () => {
         expect.stringContaining("No email on file for authority Ganesh Mate"),
       );
       expect(infoSpy).toHaveBeenCalledWith(
-        expect.stringContaining("[Email preview: authority approval]"),
+        expect.stringContaining("[Email preview: authority recommendation]"),
         expect.anything(),
       );
     });

@@ -116,7 +116,7 @@ export function ChangePasswordForm() {
 }
 
 /** Shared page-width and heading treatment for both Finance Admin and
- * Authority Approvals. Keeping the centering here prevents the two routes
+ * Authority Recommendations. Keeping the centering here prevents the two routes
  * from drifting into different layouts while they share the same form. */
 export function ChangePasswordPageContent({
   description,

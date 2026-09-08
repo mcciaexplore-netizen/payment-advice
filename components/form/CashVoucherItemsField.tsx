@@ -53,31 +53,15 @@ export function CashVoucherItemsField({
 
   return (
     <div className="sm:col-span-2 rounded-md border border-[#0b1f3a]/20 bg-[#0b1f3a]/[0.02] p-4">
-      <div className="mb-4 flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <p className="text-sm font-medium text-[#0b1f3a]">
-            Expense Details <span className="text-xs text-[#b3261e]">Required</span>
-          </p>
-          <p className="mt-1 text-xs text-gray-600">
-            Add one row per expense. Each row must include its own bill or supplementary document.
-          </p>
-        </div>
-        {fields.length < MAX_EXPENSES ? (
-          <button
-            type="button"
-            onClick={addRow}
-            className="rounded-md border border-[#0b1f3a] px-3 py-1.5 text-sm font-medium text-[#0b1f3a] hover:bg-[#0b1f3a]/5"
-          >
-            Add row
-          </button>
-        ) : null}
+      <div className="mb-4">
+        <p className="text-sm font-medium text-[#0b1f3a]">
+          Expense Details <span className="text-xs text-[#b3261e]">Required</span>
+        </p>
+        <p className="mt-1 text-xs text-gray-600">
+          Add one row per expense. Each row must include its own bill or supplementary document.
+        </p>
       </div>
 
-      {fields.length >= MAX_EXPENSES ? (
-        <p className="mb-4 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">
-          Maximum 10 expenses per submission — contact Accounts if you need to submit more.
-        </p>
-      ) : null}
       {fieldErrors?.message ? (
         <p className="mb-3 text-sm font-medium text-[#b3261e]">{fieldErrors.message}</p>
       ) : null}
@@ -130,6 +114,22 @@ export function CashVoucherItemsField({
             </div>
           );
         })}
+      </div>
+
+      <div className="mt-4">
+        {fields.length < MAX_EXPENSES ? (
+          <button
+            type="button"
+            onClick={addRow}
+            className="rounded-md border border-[#0b1f3a] px-3 py-1.5 text-sm font-medium text-[#0b1f3a] hover:bg-[#0b1f3a]/5"
+          >
+            Add row
+          </button>
+        ) : (
+          <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">
+            Maximum 10 expenses per submission — contact Accounts if you need to submit more.
+          </p>
+        )}
       </div>
 
       <div className="mt-4 flex justify-end border-t border-[#0b1f3a]/15 pt-3 text-base font-semibold text-[#0b1f3a]">

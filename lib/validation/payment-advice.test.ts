@@ -27,7 +27,7 @@ describe("VERIFIER_NAMES spelling", () => {
 describe("shared Submitter details validation", () => {
   it("keeps the fixed Branch and Department options in the required order", () => {
     expect(BRANCH_OPTIONS).toEqual(["SB Road Office", "Tilak Road Office", "Hadapsar Office", "Bhosari Office", "Ahilyanagar Office"]);
-    expect(DEPARTMENT_OPTIONS).toEqual(["ADMIN", "AGRICULTURE", "AI STUDIO", "CBP", "MEMBERSHIP", "MSME HELPLINE", "RAMP", "OTHERS"]);
+    expect(DEPARTMENT_OPTIONS).toEqual(["ADMIN", "AGRICULTURE", "AI STUDIO", "CBP", "FOREIGN TRADE", "MEMBERSHIP", "MSME HELPLINE", "RAMP", "OTHERS"]);
   });
   it("requires one of the five fixed branches", () => {
     const missing = paymentAdviceFormSchema.safeParse({ ...baseNeftSubmission, branch: undefined });

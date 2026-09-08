@@ -1,7 +1,7 @@
 import Link from "next/link";
-import { and, desc, eq, isNotNull, isNull, or } from "drizzle-orm";
+import { and, count, desc, eq, inArray, isNotNull, isNull, or, sql, sum } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { adminUserRoles, adminUsers, paymentAdvices } from "@/lib/db/schema";
+import { adminUserRoles, adminUsers, paymentAdvices, paymentEntries } from "@/lib/db/schema";
 import { getAdminSession } from "@/lib/admin-session";
 import { displayNoFor } from "@/lib/advice/document-identity";
 import { pipelineStageFor } from "@/lib/advice/pipeline-stage";
@@ -9,6 +9,10 @@ import { StageBadge } from "@/components/admin/StageBadge";
 import { StageLegend } from "@/components/admin/StageLegend";
 import { PaymentMode } from "@/lib/validation/payment-advice";
 import { formatIstDate } from "@/lib/date-time";
+import { buildTabCondition, isAdminTab } from "@/lib/admin/filters";
+import { PIPELINE_SUMMARY_STAGES, PipelineSummary } from "@/components/admin/PipelineSummary";
+import { StageAgingIndicator } from "@/components/admin/StageAgingIndicator";
+import { compareByCurrentStageAge } from "@/lib/advice/stage-aging";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +22,9 @@ type DashboardRole = "AUTHORITY" | "BRANCH" | "DEPARTMENT";
 type DashboardGrant = { role: DashboardRole; recommendingAuthorityId: string | null; scopeValue: string | null };
 
 function date(value: Date | string) { return formatIstDate(value); }
+function caseInsensitiveEq(column: typeof paymentAdvices.branch | typeof paymentAdvices.submittedByDepartment, value: string) {
+  return sql`lower(${column}) = lower(${value})`;
+}
 function isDashboardRole(value: string | undefined): value is DashboardRole {
   return value === "AUTHORITY" || value === "BRANCH" || value === "DEPARTMENT";
 }
@@ -25,7 +32,7 @@ function roleLabel(grant: DashboardGrant): string {
   return grant.role === "AUTHORITY" ? "Recommendations" : `${grant.role === "BRANCH" ? "Branch" : "Department"}: ${grant.scopeValue}`;
 }
 
-export default async function TeamDashboard({ searchParams }: { searchParams: Promise<{ view?: string; role?: string }> }) {
+export default async function TeamDashboard({ searchParams }: { searchParams: Promise<{ view?: string; role?: string; stage?: string }> }) {
   const session = await getAdminSession();
   if (!session) return null;
   const [accounts, roleRows] = await Promise.all([
@@ -52,15 +59,22 @@ export default async function TeamDashboard({ searchParams }: { searchParams: Pr
   const ownSubmissions = eq(paymentAdvices.submittedByEmail, account.email);
   const authorityScope = eq(paymentAdvices.recommendingAuthorityId, activeGrant.recommendingAuthorityId!);
   const teamScope = activeGrant.role === "BRANCH"
-    ? eq(paymentAdvices.branch, activeGrant.scopeValue!)
-    : eq(paymentAdvices.submittedByDepartment, activeGrant.scopeValue!);
-  const where = view === "my-submissions" ? ownSubmissions : isAuthority
+    ? caseInsensitiveEq(paymentAdvices.branch, activeGrant.scopeValue!)
+    : activeGrant.role === "DEPARTMENT"
+      ? caseInsensitiveEq(paymentAdvices.submittedByDepartment, activeGrant.scopeValue!)
+      : authorityScope;
+  const scopeWhere = view === "my-submissions" ? ownSubmissions : isAuthority
     ? and(authorityScope, view === "history"
       ? or(isNotNull(paymentAdvices.authorityApprovedAt), isNotNull(paymentAdvices.authorityRejectedAt))
       : and(eq(paymentAdvices.status, "SUBMITTED"), isNull(paymentAdvices.authorityApprovedAt), isNull(paymentAdvices.authorityRejectedAt)))
     : teamScope;
+  const requestedStage = isAdminTab(params.stage) && params.stage !== "all" ? params.stage : undefined;
+  const showSummary = view === "my-submissions" || !isAuthority;
+  const summaryScope = view === "my-submissions" ? ownSubmissions : teamScope;
+  const where = requestedStage && showSummary ? and(scopeWhere, buildTabCondition(requestedStage)) : scopeWhere;
 
-  const rows = await db.select({
+  const [rawRows, summaryRows] = await Promise.all([
+    db.select({
     id: paymentAdvices.id, serialNo: paymentAdvices.serialNo, cashVoucherNo: paymentAdvices.cashVoucherNo,
     advanceNo: paymentAdvices.advanceNo, isAdvance: paymentAdvices.isAdvance, paymentMode: paymentAdvices.paymentMode,
     payeeName: paymentAdvices.payeeName, amount: paymentAdvices.amount, nature: paymentAdvices.natureOfExpenditure,
@@ -69,7 +83,30 @@ export default async function TeamDashboard({ searchParams }: { searchParams: Pr
     authorityRemarks: paymentAdvices.authorityRemarks, adminRemarks: paymentAdvices.adminRemarks,
     financeReceivedAt: paymentAdvices.financeReceivedAt, verifiedAt: paymentAdvices.verifiedAt,
     paymentDoneAt: paymentAdvices.paymentDoneAt, totalPaid: paymentAdvices.totalPaid, revisionCount: paymentAdvices.revisionCount,
-  }).from(paymentAdvices).where(where).orderBy(desc(paymentAdvices.submittedAt));
+    updatedAt: paymentAdvices.updatedAt, sentBackAt: paymentAdvices.sentBackAt,
+  }).from(paymentAdvices).where(where).orderBy(desc(paymentAdvices.submittedAt)),
+    showSummary ? Promise.all(PIPELINE_SUMMARY_STAGES.map(async ({ tab }) => {
+      const [result] = await db.select({ count: count(), sum: sum(paymentAdvices.amount) })
+        .from(paymentAdvices)
+        .where(and(summaryScope, buildTabCondition(tab)));
+      return { tab, count: result?.count ?? 0, sum: Number(result?.sum ?? 0) };
+    })) : Promise.resolve([]),
+  ]);
+
+  const firstPaymentByAdvice = new Map<string, Date>();
+  if (rawRows.length > 0) {
+    const entries = await db.select({ adviceId: paymentEntries.paymentAdviceId, paidAt: paymentEntries.paidAt })
+      .from(paymentEntries)
+      .where(inArray(paymentEntries.paymentAdviceId, rawRows.map((row) => row.id)));
+    for (const entry of entries) {
+      const existing = firstPaymentByAdvice.get(entry.adviceId);
+      if (!existing || entry.paidAt < existing) firstPaymentByAdvice.set(entry.adviceId, entry.paidAt);
+    }
+  }
+  const rows = rawRows.map((row) => ({ ...row, firstPaymentAt: firstPaymentByAdvice.get(row.id) ?? null }));
+  if (!(isAuthority && view === "history")) {
+    rows.sort(compareByCurrentStageAge);
+  }
 
   const subtitle = isAuthority
     ? view === "history" ? "Your previous recommendation decisions"
@@ -94,6 +131,10 @@ export default async function TeamDashboard({ searchParams }: { searchParams: Pr
       </>}
       <div className="ml-auto mb-1.5"><StageLegend /></div>
     </nav>
+    {showSummary ? <PipelineSummary
+      metrics={summaryRows}
+      hrefFor={(tab) => `/authority?role=${activeGrant.role}&view=${view}&stage=${tab}`}
+    /> : null}
     {rows.length === 0 ? <div className="rounded-lg border border-gray-200 p-10 text-center text-sm text-gray-500">
       {isAuthority && view === "history" ? "No decisions recorded yet." : view === "my-submissions" ? "No submissions found for your login email." : isAuthority ? "Nothing is waiting for your recommendation." : "No submissions found for this team scope."}
     </div> : <div className="overflow-x-auto rounded-lg border border-gray-200"><table className="w-full text-left text-sm">
@@ -103,7 +144,7 @@ export default async function TeamDashboard({ searchParams }: { searchParams: Pr
         <td className="p-3"><div className="font-medium">{row.payeeName}</div><div className="mt-1 max-w-xs text-xs text-gray-600">{row.nature}</div>{isAuthority && view === "pending" && row.revisionCount >= 1 ? <div className="mt-2 max-w-sm rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs text-amber-900"><strong>Resubmission — revision {row.revisionCount}</strong>{row.adminRemarks ? <div className="mt-1">Previous remarks: {row.adminRemarks}</div> : null}</div> : null}</td>
         <td className="p-3 whitespace-nowrap">₹ {Number(row.amount).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
         <td className="p-3 whitespace-nowrap">{view !== "my-submissions" ? <div>{row.submittedBy}</div> : null}<div className="text-xs text-gray-500">{date(row.submittedAt)}</div></td>
-        <td className="p-3">{isAuthority && view === "pending" ? <div className="flex flex-col items-start gap-2"><StageBadge stage="Waiting on Authority" /><ViewLink adviceId={row.id} from="pending" /></div> : isAuthority && view === "history" ? <div className="text-xs"><StageBadge stage={row.approvedAt ? "Awaiting Finance Review" : "Sent Back"} /><div className="mt-1 text-gray-500">{date(row.approvedAt ?? row.rejectedAt!)}</div>{row.authorityRemarks ? <div className="mt-1 max-w-xs text-gray-600">{row.authorityRemarks}</div> : null}</div> : <div className="text-xs"><StageBadge stage={pipelineStageFor(row)} />{row.adminRemarks ? <div className="mt-2 max-w-xs rounded bg-amber-50 px-2 py-1 text-amber-800">Sent-back remarks: {row.adminRemarks}</div> : null}</div>}</td>
+        <td className="p-3">{isAuthority && view === "pending" ? <div className="flex flex-col items-start gap-2"><StageBadge stage="Waiting on Authority" /><StageAgingIndicator advice={row} /><ViewLink adviceId={row.id} from="pending" /></div> : isAuthority && view === "history" ? <div className="text-xs"><StageBadge stage={row.approvedAt ? "Awaiting Finance Review" : "Sent Back"} /><div className="mt-1 text-gray-500">{date(row.approvedAt ?? row.rejectedAt!)}</div>{row.authorityRemarks ? <div className="mt-1 max-w-xs text-gray-600">{row.authorityRemarks}</div> : null}</div> : <div className="text-xs"><StageBadge stage={pipelineStageFor(row)} /><div><StageAgingIndicator advice={row} /></div>{row.adminRemarks ? <div className="mt-2 max-w-xs rounded bg-amber-50 px-2 py-1 text-amber-800">Sent-back remarks: {row.adminRemarks}</div> : null}</div>}</td>
         {isAuthority && view === "history" ? <td className="p-3"><ViewLink adviceId={row.id} from="history" /></td> : null}
       </tr>)}</tbody>
     </table></div>}

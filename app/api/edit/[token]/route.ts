@@ -32,6 +32,7 @@ import {
 } from "@/lib/attachments/client-upload";
 import { verifyUploadedAttachments } from "@/lib/attachments/verify-uploaded";
 import { validateCashVoucherBillUploads } from "@/lib/attachments/cash-voucher-bills";
+import { todayInIst } from "@/lib/date-time";
 
 export const runtime = "nodejs";
 
@@ -143,6 +144,7 @@ export async function POST(
     );
 
     const now = new Date();
+    const formDate = todayInIst(now);
     const oldBlobPathnamesToDelete: string[] = [];
     const { token: authorityToken, expiresAt: authorityTokenExpiresAt } = generateAuthorityToken();
 
@@ -177,16 +179,16 @@ export async function POST(
       : values.paymentMode === "CASH"
         ? (values.billNo ?? "")
         : values.billNo!;
-    const billDate = values.isAdvance || values.paymentMode === "CASH" ? (values.billDate ?? values.formDate) : values.billDate!;
+    const billDate = values.isAdvance || values.paymentMode === "CASH" ? (values.billDate ?? formDate) : values.billDate!;
 
     await db.transaction(async (tx) => {
       await tx
         .update(paymentAdvices)
         .set({
-          formDate: values.formDate,
+          formDate,
           serialNo,
           // A resubmission is a materially new submission — the Authority's
-          // prior approve/reject decision no longer applies, and a fresh
+          // prior recommend/reject decision no longer applies, and a fresh
           // token is issued so an already-actioned link can't be reused to
           // silently reopen the old decision on the new content.
           authorityApprovedAt: null,
@@ -365,7 +367,7 @@ export async function POST(
             : values.natureOfExpenditure ?? "",
         billReference: billNo,
         paymentMode: values.paymentMode,
-        formDate: values.formDate,
+        formDate,
         approvalLink: `${origin}/authority-approval/${authorityToken}`,
         revisionCount: advice.revisionCount + 1,
         previousRemarks: advice.adminRemarks,

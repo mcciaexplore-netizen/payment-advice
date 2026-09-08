@@ -3,16 +3,16 @@
  * login system. The token itself (unguessable, emailed only to the named
  * Recommending Authority) was previously the only real protection; if that
  * email is ever forwarded or an inbox shared/compromised, anyone with the
- * link could approve or reject a real payment. This adds one extra check:
+ * link could recommend or reject a real payment. This adds one extra check:
  * the visitor must type the email on file for THIS advice's authority
- * before Approve/Send Back are shown. See AGENT_HANDOFF.md for the full
+ * before Recommend/Send Back are shown. See AGENT_HANDOFF.md for the full
  * writeup of the risk this closes.
  */
 
 const IDENTITY_COOKIE_PREFIX = "mccia_authority_identity_";
 
 /** One cookie per token (not a single shared cookie) so an authority with
- * more than one pending approval doesn't have to re-confirm on one link
+ * more than one pending recommendation doesn't have to re-confirm on one link
  * just because they confirmed on another. Safe to derive the cookie name
  * directly from the token: forging it requires already knowing the token,
  * the same bar the rest of this link-based flow already relies on. */

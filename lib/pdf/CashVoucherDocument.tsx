@@ -18,8 +18,8 @@ export type CashVoucherPdfData = {
   submittedByName: string;
   submittedAt: string; // ISO timestamp — drives the Submitted stamp's date
   recommendingAuthorityName: string;
-  // ISO timestamp — drives the Recommended-by (Approved) stamp; null until
-  // the Recommending Authority actually approves.
+  // ISO timestamp — drives the Recommended-by stamp; null until
+  // the Recommending Authority actually recommends.
   authorityApprovedAt: string | null;
   sanctionedBy: string | null;
   // Advance Payment fields — all null/empty for a regular Cash Voucher.

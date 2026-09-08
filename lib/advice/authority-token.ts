@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 
 /**
  * Unlike the 14-day edit-token TTL, this is generous (90 days): the
- * authority-approval link is the first gate a submission has to clear, and
+ * authority recommendation link is the first gate a submission has to clear, and
  * an expired link with no reminder/resend mechanism would strand the whole
  * payment with no way to recover except a full send-back/resubmit cycle.
  */
@@ -17,9 +17,9 @@ export function generateAuthorityToken(): { token: string; expiresAt: Date } {
 
 /**
  * Returns a user-facing error if this token can no longer be acted on
- * (already approved, already rejected, or expired while still pending) —
- * or null if Approve/Send Back are still valid actions. Shared by the
- * approve and reject routes so double-action prevention can't drift between
+ * (already recommended, already rejected, or expired while still pending) —
+ * or null if Recommend/Send Back are still valid actions. Shared by the
+ * recommend and reject routes so double-action prevention can't drift between
  * them.
  */
 export function authorityActionError(advice: {
@@ -28,13 +28,13 @@ export function authorityActionError(advice: {
   authorityTokenExpiresAt: Date | null;
 }): string | null {
   if (advice.authorityApprovedAt) {
-    return "This Payment Advice has already been approved.";
+    return "This Payment Advice has already been recommended.";
   }
   if (advice.authorityRejectedAt) {
     return "This Payment Advice has already been sent back to the submitter.";
   }
   if (advice.authorityTokenExpiresAt && advice.authorityTokenExpiresAt < new Date()) {
-    return "This approval link has expired. Please contact Accounts.";
+    return "This recommendation link has expired. Please contact Accounts.";
   }
   return null;
 }

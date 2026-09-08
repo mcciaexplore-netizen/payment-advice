@@ -195,10 +195,10 @@ export async function notifyAuthorityApproval(
   const message = renderAuthorityApprovalEmail(data);
   if (!to) {
     console.warn(`No email on file for authority ${data.authorityName}, falling back to preview.`);
-    preview("authority approval", message);
+    preview("authority recommendation", message);
     return message;
   }
-  await send("authority approval", to, message, adviceId);
+  await send("authority recommendation", to, message, adviceId);
   return message;
 }
 

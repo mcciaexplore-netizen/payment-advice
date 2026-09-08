@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { AccountMenu } from "@/components/account/AccountMenu";
+import { NewSubmissionLink } from "@/components/account/NewSubmissionLink";
 import { getAdminSession } from "@/lib/admin-session";
 import { hasRole } from "@/lib/auth";
 
@@ -63,10 +64,11 @@ export default async function AdminLayout({ children }: { children: React.ReactN
               </Link>
               {hasRole(session, "AUTHORITY") ? (
                 <Link href="/authority" className="hover:text-white">
-                  My Approvals
+                  My Recommendations
                 </Link>
               ) : null}
-              <div className="border-l border-white/20 pl-6">
+              <div className="flex items-center gap-5 border-l border-white/20 pl-6">
+                <NewSubmissionLink />
                 <AccountMenu
                   label={roleSummaryLabel(session.fullName, session.roles)}
                   changePasswordHref="/admin/change-password"

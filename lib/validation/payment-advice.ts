@@ -85,7 +85,7 @@ export type Status = z.infer<typeof statusSchema>;
 
 /**
  * Finance Verification + Sanctioning pipeline (runs after Recommending
- * Authority approval, for both NEFT and Cash).
+ * Authority recommendation, for both NEFT and Cash).
  *
  * VERIFIER_NAMES / verifierNameSchema: retained ONLY for the still-existing
  * `PATCH .../verify` correction route and its historical audit_log entries
@@ -167,6 +167,7 @@ export const DEPARTMENT_OPTIONS = [
   "AGRICULTURE",
   "AI STUDIO",
   "CBP",
+  "FOREIGN TRADE",
   "MEMBERSHIP",
   "MSME HELPLINE",
   "RAMP",

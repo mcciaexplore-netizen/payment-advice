@@ -9,7 +9,7 @@ import {
 } from "./templates";
 
 describe("email templates", () => {
-  it("renders a fully substituted authority approval email with the expected subject", () => {
+  it("renders a fully substituted authority recommendation email with the expected subject", () => {
     const message = renderAuthorityApprovalEmail({
       displayNo: "MCCIA/2026-27/0001",
       documentLabel: "Payment Advice",
@@ -23,7 +23,10 @@ describe("email templates", () => {
       formDate: "2026-07-30",
       approvalLink: "https://example.test/approval/token",
     });
-    expect(message.subject).toBe("Approval Required: Payment Advice MCCIA/2026-27/0001");
+    expect(message.subject).toBe("Recommendation Required: Payment Advice MCCIA/2026-27/0001");
+    expect(message.html).toContain("Payment Advice Recommendation Request");
+    expect(message.html).toContain("Review &amp; Recommend");
+    expect(message.html).not.toContain("Review &amp; Approve");
     expect(message.html).toContain("Event printing");
     expect(message.html).toContain("30/07/2026");
     expect(message.html).not.toContain("2026-07-30");
@@ -31,7 +34,7 @@ describe("email templates", () => {
     expect(message.html).not.toContain("{{");
   });
 
-  it("clearly marks an authority approval email for a resubmission and includes escaped prior remarks", () => {
+  it("clearly marks an authority recommendation email for a resubmission and includes escaped prior remarks", () => {
     const message = renderAuthorityApprovalEmail({
       displayNo: "MCCIA/2026-27/0001",
       documentLabel: "Payment Advice",
@@ -48,14 +51,14 @@ describe("email templates", () => {
       previousRemarks: "Correct GST <script>alert(1)</script>",
     });
     expect(message.subject).toBe(
-      "[Resubmission — Revision 2] Approval Required: Payment Advice MCCIA/2026-27/0001",
+      "[Resubmission — Revision 2] Recommendation Required: Payment Advice MCCIA/2026-27/0001",
     );
     expect(message.html).toContain("This is a resubmission (revision 2)");
     expect(message.html).toContain("Previous remarks: Correct GST &lt;script&gt;alert(1)&lt;/script&gt;");
     expect(message.html).not.toContain("<script>alert(1)</script>");
   });
 
-  it("uses 'Cash Payment Voucher' + cash_voucher_no in the authority approval subject/body for Cash submissions", () => {
+  it("uses 'Cash Payment Voucher' + cash_voucher_no in the authority recommendation subject/body for Cash submissions", () => {
     const message = renderAuthorityApprovalEmail({
       displayNo: "CASH/MCCIA/2026-27/0001",
       documentLabel: "Cash Payment Voucher",
@@ -69,9 +72,9 @@ describe("email templates", () => {
       formDate: "30/07/2026",
       approvalLink: "https://example.test/approval/token",
     });
-    expect(message.subject).toBe("Approval Required: Cash Payment Voucher CASH/MCCIA/2026-27/0001");
+    expect(message.subject).toBe("Recommendation Required: Cash Payment Voucher CASH/MCCIA/2026-27/0001");
     expect(message.html).toContain("CASH/MCCIA/2026-27/0001");
-    expect(message.html).toContain("Cash Payment Voucher Approval Request");
+    expect(message.html).toContain("Cash Payment Voucher Recommendation Request");
     expect(message.html).not.toContain("{{");
   });
 

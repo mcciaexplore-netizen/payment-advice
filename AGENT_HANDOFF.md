@@ -47,7 +47,18 @@ Design system: Navy `#0B1F3A`, Forest green `#2E8B57`, Amber `#E8A33D`. Headings
 
 ## 3. Current State (update this every session)
 
-**Last updated:** 7 September 2026, by Codex (Team Dashboard audit closed with full matching record and full-suite/build verification)
+**Last updated:** 8 September 2026, by Codex (Form Date locked to today's IST date across all submission flows)
+
+### Shipped — System-controlled Form Date (Codex, 2026-09-08)
+- The one shared Payment Advice/Cash Voucher/Advance form no longer permits backdating: Form Date is displayed as a read-only date with “Automatically set to today.” A hidden registered value keeps normal form validation/submission behavior, and historical `/edit/[token]` prefill cannot replace today's value.
+- Both initial submit and edit/resubmit routes independently derive `form_date` from `todayInIst(new Date())` and use that server-owned value for persistence, Cash/Advance fallback bill dates, and outgoing email data. A tampered client `formDate` therefore cannot change the stored business date.
+- Live local HTML checks confirmed exactly one read-only Form Date showing `2026-09-08` on Payment Advice, Cash Voucher, and Advance. TypeScript and ESLint are clean, the full Vitest suite passes (**58/58 files, 398 passed, 7 intentionally skipped**), and a fresh production build completes successfully. The unrelated temporary investigation script that had blocked the first TypeScript/build attempt is no longer present.
+
+### Shipped — Scoped pipeline visibility and current-stage aging (Codex, 2026-09-08)
+- Extracted Finance Admin's existing nine-card Pipeline Summary presentation into the shared `components/admin/PipelineSummary.tsx`; Finance `/admin` still renders the same stages, colors, counts, totals, and filtered links through that component. Authority **My Submissions**, Team **Team Submissions**, and Team **My Submissions** now reuse it with their existing email/Branch/Department SQL scope. Card links retain the active role/view and filter that list to the selected stage.
+- Added one shared current-stage aging derivation. Waiting on Authority uses the original `submitted_at`, or `updated_at` after resubmission; Awaiting Finance/Advance uses `authority_approved_at`; Received uses `finance_received_at`; Verified uses `verified_at`; Partial Payment uses the earliest `payment_entries.paid_at`; Sent Back uses `sent_back_at`. Paid/settled states are final and deliberately show no age. Lists show `X days in [stage]`, use the established amber stale treatment after 7 days, and sort non-final work by earliest current-stage entry first. Authority History stays unchanged.
+- Read-only live verification against the real data-backed local server used Aniruddha Brahma's Authority context and Sandhya Acharya's CBP Department context. Both rendered scoped summaries and aging; Aniruddha's email-matched row appeared while another submitter's did not; a CBP row appeared for Sandhya while a RAMP row did not; and an existing progressed CBP row's displayed label matched its current-stage timestamp rather than its older submission timestamp. No production data was created or modified.
+- Verification: TypeScript and ESLint clean; full Vitest suite **58/58 files, 397 passed, 7 intentionally skipped**; production build passed. The first sandboxed build attempt hit Turbopack's environment-denied internal worker port, then passed unchanged outside that sandbox restriction.
 
 ### Shipped — Team Dashboard Branch/Department tracking access (Codex, 2026-09-07)
 - The original rollout temporarily renamed the shared `/authority/login` shell to **Team Dashboard**. The human subsequently clarified that Authority must retain its own entry point: `/authority/login` is restored as **Authority Approvals** and accepts only linked AUTHORITY grants, while new `/team/login` + `/api/team/login` handle only BRANCH/DEPARTMENT accounts. The public Login menu now has three distinct choices: Finance Admin Login, Authority Login, and Team Dashboard Login. Both authenticated account types still land on the established `/authority` dashboard implementation, whose header/login return path is context-aware; no roles or scoped data changed.
@@ -2537,5 +2548,200 @@ would make the expense table unusable; the same underlying secured document is
 still one click away there. Final verification after the inline-view change:
 TypeScript and ESLint clean; 57/57 Vitest files passed with 392 tests passing
 and 7 intentionally skipped; fresh production build passed.
+
+2026-09-08 — Claude — Relocated Cash Voucher's "Add row" button in
+`components/form/CashVoucherItemsField.tsx`. It previously sat at the top of
+"Expense Details," forcing the user to scroll back up after finishing a row
+(which ends near the bottom, at the file attachment) to add the next expense.
+It now renders once, immediately after the last expense row and directly above
+the Total — it naturally moves down with the list, always landing right where
+the user just finished typing. The top button was removed outright, not
+duplicated; there is still exactly one "Add row" button on the page at any
+time. The section header ("Expense Details" + helper text) stays at the top,
+unchanged. The 10-row cap behavior (button disabled/hidden, "Maximum 10
+expenses" message shown) is unchanged in logic and now appears at the
+relocated position. "Remove" per row is untouched (still top-right of each
+expense block). `addRow()`/`removeRow()` logic was not touched — only JSX
+layout moved — so the existing regression coverage in
+`lib/form/payment-desk-pages.test.ts` (one `append` call, blank amount, 10-row
+cap) still applies unchanged and still passes.
+
+Live-tested via Playwright against a local dev server: confirmed exactly one
+"Add row" button exists at every state, confirmed one row is appended per
+click (rows went 2→3→4→5 across 4 clicks, never more), confirmed via DOM
+document-position checks that the last expense row precedes the button and
+the button precedes "Total," and confirmed that clicking to 10 rows correctly
+hides the button and shows the cap message in its place (screenshot
+inspected: all 10 rows + cap message + Total render correctly, no clipping).
+TypeScript, ESLint, and the full Vitest suite (396 passed, 7 skipped) were
+clean; production build passed.
+
+2026-09-08 — Codex — Added the shared Finance-style Pipeline Summary to
+Authority My Submissions and both Team dashboard views, scoped by the same
+email/Branch/Department predicates as their lists. Added shared current-stage
+aging, amber >7-day flags, and oldest-stage-first ordering to Authority Pending
+and My Submissions plus Team/My lists. Stage age uses the actual transition
+timestamp, including earliest payment entry for partial payments and the
+resubmission update time for a renewed Authority wait. Authenticated read-only
+live checks passed for Aniruddha and Sandhya/CBP, including cross-scope exclusion
+and a progressed record. TypeScript, ESLint, 397 tests (7 skipped), and build
+clean. No data mutation or schema change.
+
+2026-09-08 — Claude — Root-caused and fixed the "Aishwarya's My Submissions
+(29) doesn't match MSME HELPLINE's Team Submissions (8)" report, then closed
+every remaining historical-data question the human raised in follow-up before
+writing any fix. Full investigation and final decisions below so this is never
+re-derived from scratch.
+
+**Root cause.** The Department dropdown (`DEPARTMENT_OPTIONS`, fixed 8-option
+enum) and the `branch` column both landed in commit `4c8c7ba` ("add submitter
+branch and department choices"), deployed 2026-09-07 (empirical DB boundary:
+last `branch IS NULL` row at 06:30:01 UTC, first non-null `branch` row at
+09:29:46 UTC — matches the known branch-column migration-lag incident).
+Before that, `submitted_by_department` was free text; `branch` didn't exist
+as a column at all. Team Submissions' Department/Branch filters used
+`eq()` (case-sensitive exact match) against the live scope value, so any
+pre-dropdown free-text row whose casing didn't exactly match (e.g. "MSME
+Helpline" vs "MSME HELPLINE") silently failed to match and never appeared in
+Team Submissions, while still appearing in My Submissions (which only filters
+by email). Today's filter was never broken for current data — every
+post-dropdown row matched correctly; the gap was 100% historical.
+
+**Full per-scope variant table** (cutoff = empirical boundary above; "variant"
+= differs only in case/whitespace from the canonical value; "unmatched" =
+genuinely different text, not safely auto-mappable):
+
+| Canonical Department | Pre-cutoff exact | Casing-only variant | Unmatched |
+|---|---|---|---|
+| ADMIN | 0 | — | — |
+| AGRICULTURE | 0 | — | — |
+| AI STUDIO | 0 | — | — |
+| CBP | 2 | — | — |
+| MEMBERSHIP | 0 | "Membership" ×3 | — |
+| MSME HELPLINE | 0 | "MSME Helpline" ×21 | — |
+| RAMP | 2 | — | — |
+
+Unmatched department values (5 distinct, 11 rows) that do **not**
+case-insensitively match any canonical value: "Foreign Trade" ×5 (Saahil
+Amritkar, Sonal Phadnis — both MEMBERSHIP-scoped), "Bhosari Office" ×2 (Mandar
+Marathe, who holds the BRANCH: Bhosari Office scope — a branch name typed
+into the department field by mistake), "HR & Admin" ×2 (Satavisha Natu, no
+department scope), "AI" ×1 (Pratik Jadhav, aistudio@mcciapune.com), "Accounts"
+×1 (Chandrashekhar Shah, gauri.fellow@mcciapune.com).
+
+Branch: all 39 pre-cutoff rows are `NULL` — zero casing variants and zero
+unmatched values, because the column simply didn't exist yet. Clean in every
+canonical branch.
+
+**Human's final decisions, implemented exactly:**
+
+1. **Case-insensitive matching for both Department and Branch Team
+   Submissions filters.** `app/authority/page.tsx`'s `teamScope` now uses a
+   `caseInsensitiveEq(column, value)` helper (`sql\`lower(${column}) =
+   lower(${value})\``) instead of `eq()`, for both the `BRANCH` and
+   `DEPARTMENT` grant branches. Verified directly against the DB that this
+   change alone resolves "MSME Helpline"/"MEMBERSHIP" casing gaps and does
+   **not** pull in any of the 5 unmatched values — each was individually
+   checked against all 8 canonical department values with `lower(val) =
+   lower(canonical)` and confirmed to match none (Foreign Trade excepted,
+   see next point, by design).
+2. **Added `"FOREIGN TRADE"` as a real 9th `DEPARTMENT_OPTIONS` value**
+   (`lib/validation/payment-advice.ts`, inserted alphabetically between CBP
+   and MEMBERSHIP; `OTHERS` stays last). The 5 historical "Foreign Trade" rows
+   were deliberately **not** remapped — once the option exists, case-insensitive
+   matching from step 1 picks them up on its own (confirmed: 6 rows now match,
+   the 6th being a 2026-09-08 submission where Sonal Phadnis had typed "Foreign
+   Trade" into the `OTHERS` free-text field before this option existed). No
+   Team Dashboard login currently holds the FOREIGN TRADE scope — the option is
+   visible in the submission form only, confirmed intentional by the human,
+   not an oversight.
+3. **Two narrow, explicit one-off historical corrections — applied as direct,
+   backed-up, per-row data corrections, not a general mapping rule:**
+   - Chandrashekhar Shah's `CASH/MCCIA/2026-27/0001` (2026-09-04, id
+     `80a7fb34-417a-4e7e-bb62-c8129ebf83e7`): `submitted_by_department`
+     corrected from `"Accounts"` to `"CBP"`.
+   - Pratik Jadhav's `CASH/MCCIA/2026-27/0008` (2026-09-05, id
+     `62974850-48c8-4e1d-8bb3-c8bf23436c9f`): `submitted_by_department`
+     corrected from `"AI"` to `"AI STUDIO"`.
+   Both confirmed correct by the human before applying. A pre-update backup of
+   both rows is at `.local-backups/department-one-off-correction-pre-update-*.json`
+   (gitignored). Each correction also wrote a `DEPARTMENT_CORRECTED` `audit_log`
+   entry (actor `"System"`) recording the from/to value and reason, following
+   the same transparency precedent as the earlier reference-renumbering
+   correction. No code contains an "Accounts"→CBP or "AI"→AI STUDIO mapping —
+   the stored data itself was corrected, so the same case-insensitive exact
+   match from step 1 now picks these two rows up naturally.
+4. **Left alone, deliberately, per explicit human instruction — no mapping,
+   no note, no special UI:** Mandar Marathe's "Bhosari Office" rows (×2) and
+   Satavisha Natu's "HR & Admin" rows (×2). Both remain visible only in each
+   person's own My Submissions, outside every Team Submissions view, exactly
+   as before this session. If either surfaces again, don't re-guess a
+   mapping — ask the human first, same as this time.
+
+**No general fuzzy-matching rule was introduced anywhere** — only the one
+case-insensitive exact-match helper (step 1) and the two explicit,
+ID-targeted one-off data corrections (step 3).
+
+**Live-tested** against the real dev server (same DATABASE_URL as
+production) using real accounts plus one throwaway DEPARTMENT/AI STUDIO
+account (created, tested, deleted): logged in as Aishwary Songirkar →
+Team Submissions now shows **"29 submissions in MSME HELPLINE"**, exactly
+matching her My Submissions count (screenshotted, all 29 rows rendered,
+old-casing and new-casing rows unified into one list). Logged in as
+Chandrashekhar Shah → CBP Team Submissions shows 9 submissions and includes
+his corrected `CASH/MCCIA/2026-27/0001` row. Logged in as the throwaway
+AI STUDIO account → shows 1 submission, Pratik's corrected
+`CASH/MCCIA/2026-27/0008` row. Updated
+`lib/team-dashboard-ui.test.ts` (source-text assertion now checks for
+`caseInsensitiveEq(...)` instead of the old `eq(...)` calls) and
+`lib/validation/payment-advice.test.ts` (DEPARTMENT_OPTIONS snapshot now
+includes FOREIGN TRADE). TypeScript, ESLint, full Vitest suite (398 passed,
+7 skipped), and production build all clean.
+
+### Closed — exhaustive Recommending Authority wording audit (Codex, 2026-09-08)
+
+- Ran a case-insensitive repository-wide `Approve|Approved|Approval` scan across every repository-owned `.ts`/`.tsx` file (including UI, API errors, email templates, PDF components, scripts, and tests). The initial scan returned 410 matching lines; the complete classification and retained-match rationale are recorded in `AUTHORITY_WORDING_AUDIT_2026-09-08.md`.
+- Corrected every user-facing instance that described a Recommending Authority's action. Surfaces included the Finance Admin detail/action panel, Admin dashboard metric and navigation, Staff/Authorities copy, Authority login/change-password/access messages, public submission instructions, recommendation email subject/body/CTA and diagnostics, token-link validation/errors, Finance receive prerequisite, related comments, and regression expectations. The action is now consistently Recommend/Recommended/Recommendation.
+- Intentionally retained only genuinely unrelated uses: the `Approval / Budget Letter` document type; Finance/final-processing approval terminology and legacy persistence fields/statuses; stable internal route/schema/API identifiers such as `authorityApprovedAt`, `/authority-approval`, and `AUTHORITY_APPROVED`; ordinary English fixtures; and negative regression assertions.
+- Added `lib/advice/authority-recommendation-wording.test.ts`, which scans repository source and prevents the identified Authority-action phrases from returning. Final targeted grep has only two visible-wording hits: a negative assertion for `Review &amp; Approve`, and Finance Excel's separate `Approved By` final-processing column—zero matches describing an Authority action.
+- Live-tested read-only with real recommended submission `MCCIA/2026-27/0033` (ANIRUDDHA BRAHMA): authenticated Finance detail returned HTTP 200 and rendered `Recommended by ANIRUDDHA BRAHMA on 07/09/2026`; the former `Approved by ANIRUDDHA BRAHMA` text was absent. No production record was mutated.
+- Verification: TypeScript clean; ESLint **0 errors/0 warnings**; Vitest **58/58 files, 399 passed, 7 intentionally skipped**; production build passed.
+
+2026-09-08 — Claude — Added a persistent "+ New Submission" link to every
+logged-in dashboard header (Finance Admin, Authority, and Branch/Department —
+the latter two share `app/authority/layout.tsx`). New shared component
+`components/account/NewSubmissionLink.tsx`, rendered immediately next to
+`AccountMenu` in both `app/admin/layout.tsx` and `app/authority/layout.tsx`
+(one addition covers all three dashboard types, since Authority and Team
+Dashboard already share one layout). It's a plain `<Link href="/"
+target="_blank" rel="noopener noreferrer">` — opens the public Payment Desk
+landing screen ("What would you like to submit?") in a new tab. No backend
+or auth change: submission has always been a separate, login-optional public
+flow, identical whether or not the person has a dashboard open in another
+tab.
+
+Live-tested against the real dev server (real `DATABASE_URL`) with three
+accounts — a throwaway ALL-access Finance Admin account (created, tested,
+deleted), Satish Joshi (Authority), and Aishwary Songirkar (Department: MSME
+HELPLINE) — via Playwright: for each, logged in, clicked "+ New Submission,"
+confirmed a new tab opened showing the landing screen, and confirmed the
+original dashboard tab's URL never changed (screenshotted the Authority
+header showing the button placed consistently next to the account name).
+
+One dev-environment-only wrinkle worth flagging for whoever hits this next:
+in local Turbopack dev, the client-side `router.push()` that follows a
+successful admin login can occasionally leave the address bar on
+`/login` even though the RSC fetch for the destination route already
+returned 200 (observed via response tracing — not a real auth failure, and
+not reproducible through a fresh full-page navigation, which always lands
+correctly). Not investigated further since it's pre-existing app behavior
+unrelated to this change and doesn't reproduce in production-style
+navigation; flagging in case it's ever mistaken for a real login bug during
+future local testing.
+
+TypeScript, ESLint, and the full Vitest suite (399 passed, 7 skipped) are
+clean; production build passed. No files outside this feature were touched —
+the large concurrent Authority-wording and pipeline-summary work already in
+the working tree from other sessions was left exactly as found.
 
 *End of handoff file. Both agents: read §0 again before starting work.*

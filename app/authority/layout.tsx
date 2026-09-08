@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { AccountMenu } from "@/components/account/AccountMenu";
+import { NewSubmissionLink } from "@/components/account/NewSubmissionLink";
 import { getAdminSession } from "@/lib/admin-session";
 import { hasFinanceRole, hasRole, hasTeamDashboardRole } from "@/lib/auth";
 
@@ -29,6 +30,7 @@ export default async function AuthorityLayout({ children }: { children: React.Re
                   Full Admin
                 </Link>
               ) : null}
+              <NewSubmissionLink />
               <AccountMenu
                 label={session.fullName}
                 changePasswordHref="/authority/change-password"

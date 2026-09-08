@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
   const authorityGrant = roleGrants.find((r) => r.role === "AUTHORITY");
   if (!authorityGrant || !authorityGrant.recommendingAuthorityId) {
     return NextResponse.json(
-      { error: "This account does not have access to Authority Approvals." },
+      { error: "This account does not have access to Authority Recommendations." },
       { status: 403 },
     );
   }

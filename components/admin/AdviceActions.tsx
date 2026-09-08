@@ -418,7 +418,7 @@ export function AdviceActions({
 
       {authorityApprovedAt ? (
         <div className="rounded-md border border-[#2e8b57]/30 bg-[#2e8b57]/5 p-3 text-sm text-[#1e5c39]">
-          Approved by {authorityName} on{" "}
+          Recommended by {authorityName} on{" "}
           {formatIstDate(authorityApprovedAt)}
           .
         </div>
@@ -426,7 +426,7 @@ export function AdviceActions({
         <div className="flex flex-col gap-2 rounded-md border border-[#e8a33d]/40 bg-[#e8a33d]/10 p-3 text-sm text-[#8a5a12]">
           <p>
             Waiting on <span className="font-medium">{authorityName}</span> (Recommending
-            Authority) to approve before Finance can proceed.
+            Authority) to recommend before Finance can proceed.
           </p>
           {authorityToken ? (
             <button

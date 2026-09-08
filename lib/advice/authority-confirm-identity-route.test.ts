@@ -46,7 +46,7 @@ describe("POST /api/authority-approval/[token]/confirm-identity", () => {
     expect(res.status).toBe(404);
   });
 
-  it("409s when already approved (nothing left to confirm)", async () => {
+  it("409s when already recommended (nothing left to confirm)", async () => {
     mocks.limit.mockResolvedValueOnce([{ ...pending, authorityApprovedAt: new Date() }]);
     const res = await POST(req("t", { email: "x@y.com" }), { params: Promise.resolve({ token: "t" }) });
     expect(res.status).toBe(409);
@@ -105,7 +105,7 @@ describe("POST /api/authority-approval/[token]/confirm-identity", () => {
     });
     expect(res.status).toBe(401);
     const body = await res.json();
-    expect(body.error).toBe("That email doesn't match our records for this approval.");
+    expect(body.error).toBe("That email doesn't match our records for this recommendation.");
     expect(body.error).not.toContain("real.authority@mcciapune.com");
     expect(mocks.insert).toHaveBeenCalledWith(expect.anything());
     expect(mocks.values).toHaveBeenCalledWith(

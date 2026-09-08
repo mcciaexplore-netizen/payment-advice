@@ -50,12 +50,12 @@ function authorityStatusSuffix(advice: {
   authorityRejectedAt: Date | null;
 }) {
   if (advice.authorityApprovedAt) {
-    return ` · Approved ${formatDateTime(advice.authorityApprovedAt)}`;
+    return ` · Recommended ${formatDateTime(advice.authorityApprovedAt)}`;
   }
   if (advice.authorityRejectedAt) {
     return ` · Sent back ${formatDateTime(advice.authorityRejectedAt)}`;
   }
-  return " · Awaiting approval";
+  return " · Awaiting recommendation";
 }
 
 export default async function AdviceDetailPage({

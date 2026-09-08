@@ -31,6 +31,7 @@ import {
 } from "@/lib/attachments/client-upload";
 import { verifyUploadedAttachments } from "@/lib/attachments/verify-uploaded";
 import { validateCashVoucherBillUploads } from "@/lib/attachments/cash-voucher-bills";
+import { todayInIst } from "@/lib/date-time";
 
 export const runtime = "nodejs";
 
@@ -67,6 +68,10 @@ export async function POST(req: NextRequest) {
   if (verificationError) return NextResponse.json({ error: verificationError }, { status: 400 });
 
   const now = new Date();
+  // Never trust an editable/tampered client value for this system-owned
+  // business date. All three submission types use today's calendar date in
+  // India, matching the read-only field shown by the shared form.
+  const formDate = todayInIst(now);
   let serialNo = "";
   let financialYear = "";
   let cashVoucherNo: string | null = null;
@@ -106,7 +111,7 @@ export async function POST(req: NextRequest) {
         : values.paymentMode === "CASH"
           ? (values.billNo ?? "")
           : values.billNo!;
-      const billDate = values.isAdvance || values.paymentMode === "CASH" ? (values.billDate ?? values.formDate) : values.billDate!;
+      const billDate = values.isAdvance || values.paymentMode === "CASH" ? (values.billDate ?? formDate) : values.billDate!;
 
       const [advice] = await tx
         .insert(paymentAdvices)
@@ -126,7 +131,7 @@ export async function POST(req: NextRequest) {
           status: "SUBMITTED",
           authorityToken,
           authorityTokenExpiresAt,
-          formDate: values.formDate,
+          formDate,
           vendorId: values.vendorId ?? null,
           payeeName: values.payeeName,
           payeeAddress: values.payeeAddress ?? "",
@@ -240,7 +245,7 @@ export async function POST(req: NextRequest) {
         payeeName: values.payeeName,
         amount: values.amount.toLocaleString("en-IN", { minimumFractionDigits: 2 }),
         paymentMode: values.paymentMode,
-        formDate: values.formDate,
+        formDate,
         paymentAdvicePdfLink:
           values.paymentMode === "CASH" ? undefined : `${origin}/api/advice/${adviceId}/pdf`,
         cashVoucherPdfLink:
@@ -266,7 +271,7 @@ export async function POST(req: NextRequest) {
             : values.natureOfExpenditure ?? "",
         billReference: billNo,
         paymentMode: values.paymentMode,
-        formDate: values.formDate,
+        formDate,
         approvalLink: `${origin}/authority-approval/${authorityToken}`,
       },
       authority?.email ?? null,

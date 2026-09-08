@@ -34,7 +34,7 @@ export function pipelineStageFor(advice: PipelineStageAdvice): PipelineStage {
   }
   if (!advice.approvedAt) return "Waiting on Authority";
   // Mirrors buildTabCondition's advance_payment/awaiting_finance split — an
-  // authority-approved advance lands here instead of "Awaiting Finance
+  // authority-recommended advance lands here instead of "Awaiting Finance
   // Review" until Finance marks it Received, at which point isAdvance no
   // longer affects the derived stage (same "landing point only" rule
   // documented in AGENT_HANDOFF.md for the tab itself).
