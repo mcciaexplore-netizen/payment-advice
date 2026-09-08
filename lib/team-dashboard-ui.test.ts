@@ -21,6 +21,34 @@ describe("Team Dashboard scoped views", () => {
     expect(source).toContain('<ViewLink adviceId={row.id} from="pending" />');
     expect(source).not.toContain("AuthorityQueueActions");
   });
+
+  it("routes only the linked DG authority record to the executive dashboard", () => {
+    expect(source).toContain('authorityRows[0]?.authorityName.trim().toUpperCase() === "DG"');
+    expect(source).toContain('if (isDg && (!params.view || params.view === "executive")) return loadDgExecutiveDashboard()');
+  });
+});
+
+describe("DG Phase 1 summary", () => {
+  const dg = fs.readFileSync(path.join(process.cwd(), "components/admin/DgExecutiveDashboard.tsx"), "utf8");
+  const admin = fs.readFileSync(path.join(process.cwd(), "app/admin/page.tsx"), "utf8");
+  const metrics = fs.readFileSync(path.join(process.cwd(), "lib/advice/dg-dashboard.ts"), "utf8");
+
+  it("shows four executive cards and merges exactly the five requested Finance stages", () => {
+    expect(dg).toContain('label: "In Finance Processing"');
+    expect(dg.match(/tab: "/g)).toHaveLength(4);
+    expect(metrics).toContain('"received_in_process"');
+    expect(metrics).toContain('"verified_ready_payment"');
+    expect(metrics).toContain('"partial_payment_done"');
+    expect(metrics).toContain('"fully_payment_settled"');
+    expect(metrics).toContain('"payment_done"');
+  });
+
+  it("leaves Finance Admin on the existing nine-card summary", () => {
+    expect(admin).toContain("PIPELINE_SUMMARY_STAGES.map");
+    expect(admin).toContain("<PipelineSummary");
+    expect(admin).not.toContain("DgExecutiveDashboard");
+    expect(admin).not.toContain("finance_processing");
+  });
 });
 
 describe("separate public login entry points", () => {

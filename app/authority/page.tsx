@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { and, count, desc, eq, inArray, isNotNull, isNull, or, sql, sum } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { adminUserRoles, adminUsers, paymentAdvices, paymentEntries } from "@/lib/db/schema";
+import { adminUserRoles, adminUsers, paymentAdvices, paymentEntries, recommendingAuthorities } from "@/lib/db/schema";
 import { getAdminSession } from "@/lib/admin-session";
 import { displayNoFor } from "@/lib/advice/document-identity";
 import { pipelineStageFor } from "@/lib/advice/pipeline-stage";
@@ -13,6 +13,8 @@ import { buildTabCondition, isAdminTab } from "@/lib/admin/filters";
 import { PIPELINE_SUMMARY_STAGES, PipelineSummary } from "@/components/admin/PipelineSummary";
 import { StageAgingIndicator } from "@/components/admin/StageAgingIndicator";
 import { compareByCurrentStageAge } from "@/lib/advice/stage-aging";
+import { DgExecutiveDashboard } from "@/components/admin/DgExecutiveDashboard";
+import { buildDgSummaryMetrics, calculateDgIntervalMetrics } from "@/lib/advice/dg-dashboard";
 
 export const dynamic = "force-dynamic";
 
@@ -35,10 +37,14 @@ function roleLabel(grant: DashboardGrant): string {
 export default async function TeamDashboard({ searchParams }: { searchParams: Promise<{ view?: string; role?: string; stage?: string }> }) {
   const session = await getAdminSession();
   if (!session) return null;
-  const [accounts, roleRows] = await Promise.all([
+  const [accounts, roleRows, authorityRows] = await Promise.all([
     db.select({ email: adminUsers.email }).from(adminUsers).where(eq(adminUsers.id, session.adminUserId)).limit(1),
     db.select({ role: adminUserRoles.role, recommendingAuthorityId: adminUserRoles.recommendingAuthorityId, scopeValue: adminUserRoles.scopeValue })
       .from(adminUserRoles).where(eq(adminUserRoles.adminUserId, session.adminUserId)),
+    session.recommendingAuthorityId
+      ? db.select({ authorityName: recommendingAuthorities.authorityName }).from(recommendingAuthorities)
+          .where(eq(recommendingAuthorities.id, session.recommendingAuthorityId)).limit(1)
+      : Promise.resolve([]),
   ]);
   const account = accounts[0];
   if (!account) return null;
@@ -52,6 +58,8 @@ export default async function TeamDashboard({ searchParams }: { searchParams: Pr
   const requestedRole = isDashboardRole(params.role) ? params.role : undefined;
   const activeGrant = grants.find((grant) => grant.role === requestedRole) ?? grants[0];
   const isAuthority = activeGrant.role === "AUTHORITY";
+  const isDg = isAuthority && authorityRows[0]?.authorityName.trim().toUpperCase() === "DG";
+  if (isDg && (!params.view || params.view === "executive")) return loadDgExecutiveDashboard();
   const authorityView: AuthorityView = params.view === "history" ? "history" : params.view === "my-submissions" ? "my-submissions" : "pending";
   const teamView: TeamView = params.view === "my-submissions" ? "my-submissions" : "team-submissions";
   const view = isAuthority ? authorityView : teamView;
@@ -122,7 +130,7 @@ export default async function TeamDashboard({ searchParams }: { searchParams: Pr
     </nav> : null}
     <nav className="flex flex-wrap items-center gap-2 border-b border-gray-200 pb-0">
       {isAuthority ? <>
-        <Tab href="/authority?role=AUTHORITY" active={view === "pending"}>Pending My Recommendation</Tab>
+        <Tab href={`/authority?role=AUTHORITY${isDg ? "&view=pending" : ""}`} active={view === "pending"}>Pending My Recommendation</Tab>
         <Tab href="/authority?role=AUTHORITY&view=history" active={view === "history"}>History</Tab>
         <Tab href="/authority?role=AUTHORITY&view=my-submissions" active={view === "my-submissions"}>My Submissions</Tab>
       </> : <>
@@ -149,6 +157,49 @@ export default async function TeamDashboard({ searchParams }: { searchParams: Pr
       </tr>)}</tbody>
     </table></div>}
   </div>;
+}
+
+async function loadDgExecutiveDashboard() {
+  const [stageRows, adviceRows, entryRows] = await Promise.all([
+    Promise.all(PIPELINE_SUMMARY_STAGES.map(async ({ tab }) => {
+      const [result] = await db.select({ count: count(), sum: sum(paymentAdvices.amount) })
+        .from(paymentAdvices).where(buildTabCondition(tab));
+      return { tab, count: result?.count ?? 0, sum: Number(result?.sum ?? 0) };
+    })),
+    db.select({
+      id: paymentAdvices.id,
+      serialNo: paymentAdvices.serialNo,
+      cashVoucherNo: paymentAdvices.cashVoucherNo,
+      advanceNo: paymentAdvices.advanceNo,
+      isAdvance: paymentAdvices.isAdvance,
+      paymentMode: paymentAdvices.paymentMode,
+      status: paymentAdvices.status,
+      submittedAt: paymentAdvices.submittedAt,
+      authorityApprovedAt: paymentAdvices.authorityApprovedAt,
+      financeReceivedAt: paymentAdvices.financeReceivedAt,
+      paymentDoneAt: paymentAdvices.paymentDoneAt,
+    }).from(paymentAdvices),
+    db.select({ adviceId: paymentEntries.paymentAdviceId, paidAt: paymentEntries.paidAt }).from(paymentEntries),
+  ]);
+
+  const summaryRows = buildDgSummaryMetrics(stageRows);
+
+  const firstPaymentByAdvice = new Map<string, Date>();
+  for (const entry of entryRows) {
+    const existing = firstPaymentByAdvice.get(entry.adviceId);
+    if (!existing || entry.paidAt < existing) firstPaymentByAdvice.set(entry.adviceId, entry.paidAt);
+  }
+  const intervalRows = adviceRows.map((row) => ({
+    id: row.id,
+    reference: displayNoFor(row.paymentMode as PaymentMode, row.serialNo, row.cashVoucherNo, row.isAdvance, row.advanceNo),
+    status: row.status,
+    submittedAt: row.submittedAt,
+    authorityApprovedAt: row.authorityApprovedAt,
+    financeReceivedAt: row.financeReceivedAt,
+    paymentDoneAt: row.paymentDoneAt,
+    firstPaymentAt: firstPaymentByAdvice.get(row.id) ?? null,
+  }));
+  return <DgExecutiveDashboard metrics={summaryRows} intervals={calculateDgIntervalMetrics(intervalRows)} />;
 }
 
 function ViewLink({ adviceId, from }: { adviceId: string; from: "pending" | "history" }) {

@@ -47,7 +47,16 @@ Design system: Navy `#0B1F3A`, Forest green `#2E8B57`, Amber `#E8A33D`. Headings
 
 ## 3. Current State (update this every session)
 
-**Last updated:** 8 September 2026, by Codex (Form Date locked to today's IST date across all submission flows)
+**Last updated:** 8 September 2026, by Codex (DG Executive Dashboard Phase 1)
+
+### Shipped — DG Executive Dashboard, Phase 1 (Codex, 2026-09-08)
+- Confirmed the earlier shared Pipeline Summary/current-stage aging work was already on `main` and extended its `PipelineSummary` component; no parallel card implementation was created. This is explicitly Phase 1 and more DG requirements are expected later.
+- Read-only production DB audit found one active `DG` recommending-authority row (`dg@mcciapune.com`) and one active `admin_users` account with a correctly linked `AUTHORITY` grant. No account, role, or password was created or changed.
+- Only the database-linked DG Authority account now receives an organization-wide **DG Executive Dashboard** at `/authority`. Its simplified summary has four cards: Waiting on Authority, Awaiting Finance Review, In Finance Processing, and Sent Back. In Finance Processing is the exact count/amount sum of Received & In Process + Verified — Ready for Payment + Partial Payment Done + Fully Payment Settled + Payment Done (Cash). Per the literal brief, the separate Advance Payment landing stage is not silently folded into that five-stage merged card.
+- DG's existing Authority duties remain reachable through Executive Dashboard / Pending My Recommendation / History / My Submissions tabs; the new default executive view does not remove or weaken DG's recommendation queue/actions.
+- Added Authority Response Time (submission → recommendation), Finance Intake Time (recommendation → Finance received), and Finance Processing Time (Finance received → first partial/full payment). Each average includes only completed intervals; current waiting count and longest-pending reference/duration are calculated separately. NEFT uses the earliest `payment_entries.paid_at`; Cash uses `payment_done_at`.
+- Real-data sanity check: the five source Finance cards were 1/₹202 + 9/₹807,662.96 + 0 + 0 + 0, exactly matching DG's merged 10/₹807,864.96. Live authenticated local renders returned HTTP 200: DG showed the four-card executive view plus Processing Efficiency; Chintamani's existing Finance Admin view still showed all nine established card labels and no DG heading, merged card, or efficiency panel. No data was mutated.
+- Verification: TypeScript and ESLint clean; full Vitest suite **59/59 files, 407 passed, 7 intentionally skipped**; production build passed.
 
 ### Shipped — System-controlled Form Date (Codex, 2026-09-08)
 - The one shared Payment Advice/Cash Voucher/Advance form no longer permits backdating: Form Date is displayed as a read-only date with “Automatically set to today.” A hidden registered value keeps normal form validation/submission behavior, and historical `/edit/[token]` prefill cannot replace today's value.
@@ -2743,5 +2752,7 @@ TypeScript, ESLint, and the full Vitest suite (399 passed, 7 skipped) are
 clean; production build passed. No files outside this feature were touched —
 the large concurrent Authority-wording and pipeline-summary work already in
 the working tree from other sessions was left exactly as found.
+
+2026-09-08 — Codex — Delivered DG Executive Dashboard Phase 1 on top of the merged shared Pipeline Summary. Verified the existing active DG login/role link without modifying credentials; added DG-only four-card organization summary and three completed-only efficiency intervals with live bottleneck counts/longest item; preserved DG's recommendation tabs and the Finance Admin nine-card dashboard. Real-data card reconciliation passed exactly. Authenticated read-only local checks passed for DG and Chintamani; no production data was mutated. TypeScript/ESLint clean, 59 Vitest files passed (407 tests, 7 skipped), and production build passed.
 
 *End of handoff file. Both agents: read §0 again before starting work.*
