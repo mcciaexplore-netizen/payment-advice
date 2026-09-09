@@ -47,7 +47,19 @@ Design system: Navy `#0B1F3A`, Forest green `#2E8B57`, Amber `#E8A33D`. Headings
 
 ## 3. Current State (update this every session)
 
-**Last updated:** 8 September 2026, by Codex (DG Executive Dashboard Phase 1)
+**Last updated:** 9 September 2026, by Codex (My Submissions PDF downloads + Recommend-email diagnosis)
+
+### Shipped — My Submissions PDF downloads (Codex, 2026-09-09)
+- Authority and Branch/Department **My Submissions** now show a Download column immediately after Current Stage. It reuses the existing public, UUID-keyed routes from the post-submission page: regular NEFT and Advance use `/api/advice/[id]/pdf`; Cash uses `/api/advice/[id]/cash-voucher-pdf`. No PDF route or renderer was added.
+- The column is conditional on `view === "my-submissions"`; authenticated live rendering confirmed it is absent from Pending My Recommendation. Team Submissions uses the same non-own view condition and remains unchanged, so no download access to somebody else's submission was introduced.
+- Live-tested Aniruddha's real My Submissions: its own NEFT and Cash rows produced HTTP 200, `application/pdf`, valid `%PDF` bytes, and type-correct filenames. No current dashboard account owns an Advance submission, so an Advance download could not honestly be exercised from a real My Submissions screen without creating an account or accessing another person's submission; neither was done. Route selection for an Advance is covered by an explicit test and uses the same existing `/pdf` route whose renderer already branches on `isAdvance`.
+- Verification: TypeScript/ESLint clean; Vitest **60/60 files, 411 passed, 7 intentionally skipped**; production build passed.
+
+### Diagnosed — no submitter email exists at Authority Recommend step (Codex, 2026-09-09; awaiting approval to build)
+- This is a **missing feature, not a failed email regression**. Both `POST /api/authority/advice/[id]/approve` and `POST /api/authority-approval/[token]/approve` call the same `performAuthorityApproval()`. That function only updates `authority_approved_at` and writes `AUTHORITY_APPROVED`; it has no notification call and does not even receive the submitter's email/details.
+- Existing submitter-facing notifications are Submission Confirmation, Sent Back, Verified, partial/final Payment Entry, and Cash Payment Done. `notifyAuthorityApproval()` has the opposite direction: it sends the initial recommendation request to the Authority during submit/resubmit. Git history back to the original approval workflow/template commits contains no `notifySubmissionRecommended`/recommended-submitter template.
+- Production Vercel evidence: a real dashboard Recommend request at **2026-09-09 13:19:24 IST**, `POST /api/authority/advice/52771c3a-24c0-48d6-89c4-ff79083427ed/approve`, returned HTTP 200. There is no email-send log/message ID because this route never enters `lib/email/notify.ts`; therefore Gmail SMTP was never called, rather than called and failing.
+- Proposed follow-up, deliberately not built pending human confirmation: add one MCCIA HTML “Your submission has been recommended and forwarded to Finance” template/notifier, and invoke it from the shared `performAuthorityApproval()` path so both token and dashboard actions behave identically. The shared action will need the submission identity and submitter recipient passed in (or loaded transactionally), with normal `EMAIL_SEND_FAILED` audit behavior and route tests.
 
 ### Shipped — DG Executive Dashboard, Phase 1 (Codex, 2026-09-08)
 - Confirmed the earlier shared Pipeline Summary/current-stage aging work was already on `main` and extended its `PipelineSummary` component; no parallel card implementation was created. This is explicitly Phase 1 and more DG requirements are expected later.
@@ -2754,5 +2766,7 @@ the large concurrent Authority-wording and pipeline-summary work already in
 the working tree from other sessions was left exactly as found.
 
 2026-09-08 — Codex — Delivered DG Executive Dashboard Phase 1 on top of the merged shared Pipeline Summary. Verified the existing active DG login/role link without modifying credentials; added DG-only four-card organization summary and three completed-only efficiency intervals with live bottleneck counts/longest item; preserved DG's recommendation tabs and the Finance Admin nine-card dashboard. Real-data card reconciliation passed exactly. Authenticated read-only local checks passed for DG and Chintamani; no production data was mutated. TypeScript/ESLint clean, 59 Vitest files passed (407 tests, 7 skipped), and production build passed.
+
+2026-09-09 — Codex — Added type-correct UUID PDF downloads exclusively to shared My Submissions and diagnosed the reported missing Recommend email as a never-built feature, not a delivery regression. Live-tested Aniruddha's own NEFT/Cash downloads and confirmed Pending has no download column; Advance route mapping is tested but no existing dashboard account owns an Advance for a compliant real-screen test. Vercel showed a real Recommend POST 200 with no mail path invoked. Proposed submitter-recommended HTML email is awaiting explicit human approval. TypeScript/ESLint clean, 60 Vitest files passed (411 tests, 7 skipped), build passed.
 
 *End of handoff file. Both agents: read §0 again before starting work.*
