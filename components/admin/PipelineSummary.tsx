@@ -12,6 +12,7 @@ export const PIPELINE_SUMMARY_STAGES: { tab: Exclude<AdminTab, "all">; label: st
   { tab: "fully_payment_settled", label: "Fully Payment Settled" },
   { tab: "payment_done", label: "Payment Done (Cash)" },
   { tab: "sent_back", label: "Sent Back" },
+  { tab: "rejected", label: "Rejected" },
 ];
 
 export type PipelineSummaryMetric = {

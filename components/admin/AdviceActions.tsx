@@ -154,6 +154,10 @@ export function AdviceActions({
   const [remarks, setRemarks] = useState("");
   const [sendBackError, setSendBackError] = useState<string | null>(null);
   const [sendingBack, setSendingBack] = useState(false);
+  const [showReject, setShowReject] = useState(false);
+  const [rejectionRemarks, setRejectionRemarks] = useState("");
+  const [rejectError, setRejectError] = useState<string | null>(null);
+  const [rejecting, setRejecting] = useState(false);
 
   const [editToken, setEditToken] = useState(initialEditToken);
   const [copied, setCopied] = useState(false);
@@ -287,6 +291,16 @@ export function AdviceActions({
     }
   }
 
+  async function rejectSubmission() {
+    setRejectError(null); setRejecting(true);
+    try {
+      const res = await fetch(`/api/admin/advice/${adviceId}/reject`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ remarks: rejectionRemarks }) });
+      const data = await res.json();
+      if (!res.ok) { setRejectError(data.error ?? "Could not reject this submission."); return; }
+      router.refresh();
+    } finally { setRejecting(false); }
+  }
+
   function copyEditLink() {
     if (!editToken) return;
     const url = `${window.location.origin}/edit/${editToken}`;
@@ -294,6 +308,8 @@ export function AdviceActions({
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }
+
+  if (status === "REJECTED") return <div className="rounded-md border border-red-400 bg-red-50 p-4 text-sm text-red-950">This submission is permanently rejected. Its reference number remains assigned and will not be reused.</div>;
 
   if (status === "APPROVED") {
     if (paymentMode === "CASH") {
@@ -598,13 +614,13 @@ export function AdviceActions({
             Send Back is unavailable once a payment has been recorded against this advice.
           </p>
         ) : (
-          <button
+          <><button
             type="button"
             onClick={() => setShowSendBack((v) => !v)}
             className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
           >
             Send Back
-          </button>
+          </button><button type="button" onClick={() => setShowReject((v) => !v)} className="rounded-md border border-red-500 px-4 py-2 text-sm font-medium text-red-950 hover:bg-red-50">Reject</button></>
         )}
       </div>
 
@@ -632,6 +648,7 @@ export function AdviceActions({
           </div>
         </div>
       ) : null}
+      {showReject && !hasPaymentEntries ? <div className="flex flex-col gap-3 rounded-md border border-red-400 bg-red-50 p-4"><p className="text-sm text-red-950">Permanently close this submission. The reference number will not be reused.</p><label className="text-sm font-medium text-red-950">Rejection remarks <span className="text-xs font-normal text-[#b3261e]">Required</span></label><textarea value={rejectionRemarks} onChange={(e) => setRejectionRemarks(e.target.value)} rows={3} className="admin-filter-input"/>{rejectError ? <p className="text-sm font-medium text-[#b3261e]">{rejectError}</p> : null}<button type="button" onClick={rejectSubmission} disabled={rejecting || !rejectionRemarks.trim()} className="w-fit rounded-md bg-red-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">{rejecting ? "Rejecting…" : "Confirm Reject"}</button></div> : null}
     </div>
   );
 }

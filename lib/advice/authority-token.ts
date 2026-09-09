@@ -23,10 +23,12 @@ export function generateAuthorityToken(): { token: string; expiresAt: Date } {
  * them.
  */
 export function authorityActionError(advice: {
+  status?: string;
   authorityApprovedAt: Date | null;
   authorityRejectedAt: Date | null;
   authorityTokenExpiresAt: Date | null;
 }): string | null {
+  if (advice.status === "REJECTED") return "This submission has been permanently rejected.";
   if (advice.authorityApprovedAt) {
     return "This Payment Advice has already been recommended.";
   }

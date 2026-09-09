@@ -122,6 +122,13 @@ describe("buildTabCondition", () => {
     expect(extractBoundParams(buildTabCondition("sent_back"))).not.toContain("APPROVED");
   });
 
+  it("isolates permanently rejected rows in their own tab", () => {
+    expect(extractBoundParams(buildTabCondition("rejected"))).toContain("REJECTED");
+    for (const tab of ADMIN_TABS.filter((candidate) => !["rejected", "all"].includes(candidate))) {
+      expect(extractBoundParams(buildTabCondition(tab))).not.toContain("REJECTED");
+    }
+  });
+
   it("'advance_payment' uses the same underlying condition as 'awaiting_finance', just also requiring is_advance = true", () => {
     const advanceParams = extractBoundParams(buildTabCondition("advance_payment"));
     expect(advanceParams).toContain("SUBMITTED");

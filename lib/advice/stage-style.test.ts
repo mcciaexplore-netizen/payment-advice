@@ -12,7 +12,7 @@ describe("pipeline stage presentation", () => {
   it("uses concise labels while retaining text for every color-coded stage", () => {
     expect(PIPELINE_STAGE_ORDER.map((stage) => STAGE_STYLE[stage].shortLabel)).toEqual([
       "Submitted", "Recommended", "Advance", "In Process", "Verified",
-      "Partial Paid", "Paid", "Paid", "Sent Back",
+      "Partial Paid", "Paid", "Paid", "Sent Back", "Rejected",
     ]);
     for (const stage of PIPELINE_STAGE_ORDER) {
       expect(STAGE_STYLE[stage].badge).toContain("text-");

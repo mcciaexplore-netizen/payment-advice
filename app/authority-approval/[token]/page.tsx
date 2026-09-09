@@ -39,7 +39,7 @@ export default async function AuthorityApprovalPage({
     );
   }
 
-  const alreadyActioned = !!advice.authorityApprovedAt || !!advice.authorityRejectedAt;
+  const alreadyActioned = advice.status === "REJECTED" || !!advice.authorityApprovedAt || !!advice.authorityRejectedAt;
   const actionError = authorityActionError(advice);
 
   if (actionError && !alreadyActioned) {
@@ -115,6 +115,10 @@ export default async function AuthorityApprovalPage({
         approvedAt={advice.authorityApprovedAt?.toISOString() ?? null}
         rejectedAt={advice.authorityRejectedAt?.toISOString() ?? null}
         rejectedRemarks={advice.authorityRemarks}
+        finallyRejected={advice.status === "REJECTED"}
+        finalRejectedAt={advice.rejectedAt?.toISOString() ?? null}
+        finalRejectionRemarks={advice.rejectionRemarks}
+        allowFinalReject={authority?.authorityName.trim().toUpperCase() !== "DG"}
         submittedByName={advice.submittedByName}
         fields={{
           payeeName: advice.payeeName,

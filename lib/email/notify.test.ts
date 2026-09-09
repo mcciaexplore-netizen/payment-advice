@@ -27,6 +27,7 @@ import {
   notifySentBack,
   notifySubmissionConfirmation,
   notifySubmissionRecommended,
+  notifySubmissionRejected,
   notifyVerified,
 } from "./notify";
 
@@ -61,6 +62,11 @@ const submissionRecommendedData = {
   payeeName: "Acme Supplies",
   amount: "1,250.00",
   formDate: "30/07/2026",
+};
+const submissionRejectedData = {
+  displayNo: "MCCIA/2026-27/0055", documentLabel: "Payment Advice",
+  submittedByName: "Sonal", rejectedBy: "Finance Admin", remarks: "Accidental duplicate",
+  payeeName: "Duplicate Vendor", amount: "1,000.00",
 };
 
 const verifiedData = {
@@ -237,6 +243,14 @@ describe("lib/email/notify.ts", () => {
           html: expect.stringContaining("recommended by <strong>Ganesh Mate</strong>"),
         }),
       );
+    });
+
+    it("notifySubmissionRejected explains final rejection and permanent reference retention", async () => {
+      await notifySubmissionRejected(submissionRejectedData, "submitter@example.com");
+      expect(mocks.gmailSendMail).toHaveBeenCalledWith(expect.objectContaining({
+        to: "submitter@example.com", subject: "Payment Advice MCCIA/2026-27/0055 Rejected",
+        html: expect.stringMatching(/Accidental duplicate[\s\S]*will never be reused/),
+      }));
     });
 
     it("notifyPaymentDone sends to the submitter with the correct subject", async () => {

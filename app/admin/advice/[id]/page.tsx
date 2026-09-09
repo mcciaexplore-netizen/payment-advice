@@ -361,6 +361,7 @@ export default async function AdviceDetailPage({
               ) : null}
             </div>
           ) : null}
+          {advice.status === "REJECTED" ? <div className="rounded-md border border-red-400 bg-red-50 p-4 text-sm text-red-950"><p className="font-medium">Rejected by {advice.rejectedBy ?? "—"}</p><p className="mt-1 text-xs">{advice.rejectedAt ? formatDateTime(advice.rejectedAt) : "—"}</p><p className="mt-3 whitespace-pre-wrap"><span className="font-medium">Remarks:</span> {advice.rejectionRemarks ?? "—"}</p><p className="mt-3 text-xs">Permanently closed; reference number retained.</p></div> : null}
           <AdviceActions
             adviceId={advice.id}
             status={advice.status as Status}

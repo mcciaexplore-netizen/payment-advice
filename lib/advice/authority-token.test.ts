@@ -34,6 +34,10 @@ describe("authorityActionError", () => {
     expect(authorityActionError({ ...base, authorityTokenExpiresAt: null })).toBeNull();
   });
 
+  it("blocks every old recommendation action after permanent rejection", () => {
+    expect(authorityActionError({ ...base, status: "REJECTED" })).toMatch(/permanently rejected/);
+  });
+
   it("blocks a second action once already recommended", () => {
     expect(authorityActionError({ ...base, authorityApprovedAt: new Date() })).toMatch(
       /already been recommended/,

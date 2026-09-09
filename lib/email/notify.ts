@@ -9,6 +9,7 @@ import {
   type SentBackEmailData,
   type SubmissionConfirmationEmailData,
   type SubmissionRecommendedEmailData,
+  type SubmissionRejectedEmailData,
   type VerifiedEmailData,
   renderAuthorityApprovalEmail,
   renderPaymentDoneEmail,
@@ -16,6 +17,7 @@ import {
   renderSentBackEmail,
   renderSubmissionConfirmationEmail,
   renderSubmissionRecommendedEmail,
+  renderSubmissionRejectedEmail,
   renderVerifiedEmail,
 } from "@/lib/email/templates";
 
@@ -227,6 +229,12 @@ export async function notifySubmissionRecommended(
 ) {
   const message = renderSubmissionRecommendedEmail(data);
   await send("submission recommended", to, message, adviceId);
+  return message;
+}
+
+export async function notifySubmissionRejected(data: SubmissionRejectedEmailData, to: string, adviceId?: string) {
+  const message = renderSubmissionRejectedEmail(data);
+  await send("submission rejected", to, message, adviceId);
   return message;
 }
 

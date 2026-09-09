@@ -24,7 +24,7 @@ import { pipelineStageFor } from "@/lib/advice/pipeline-stage";
 import { STAGE_FOR_TAB, STAGE_STYLE } from "@/lib/advice/stage-style";
 import { SentBackIndicators } from "@/components/admin/SentBackIndicators";
 import { sentBackStatus } from "@/lib/advice/send-back-status";
-import { formatDateOnly } from "@/lib/date-time";
+import { formatDateOnly, formatIstDate } from "@/lib/date-time";
 
 type SearchParamsRecord = Record<string, string | string[] | undefined>;
 
@@ -109,6 +109,7 @@ export default async function AdminListPage({
     fullyPaymentSettledCount,
     paymentDoneCount,
     sentBackCount,
+    rejectedCount,
   ] = await Promise.all([
     db
       .select({
@@ -127,6 +128,9 @@ export default async function AdminListPage({
         adminRemarks: paymentAdvices.adminRemarks,
         sentBackAt: paymentAdvices.sentBackAt,
         editTokenExpiresAt: paymentAdvices.editTokenExpiresAt,
+        rejectedAt: paymentAdvices.rejectedAt,
+        rejectedBy: paymentAdvices.rejectedBy,
+        rejectionRemarks: paymentAdvices.rejectionRemarks,
         // Everything pipelineStageFor() needs to derive the real per-row
         // stage for the Status badge — see the Part 1 fix in AGENT_HANDOFF.md.
         authorityApprovedAt: paymentAdvices.authorityApprovedAt,
@@ -184,6 +188,8 @@ export default async function AdminListPage({
       .select({ count: count(), sum: sum(paymentAdvices.amount) })
       .from(paymentAdvices)
       .where(and(baseWhere, buildTabCondition("sent_back"))),
+    db.select({ count: count(), sum: sum(paymentAdvices.amount) }).from(paymentAdvices)
+      .where(and(baseWhere, buildTabCondition("rejected"))),
   ]);
 
   const totalCount = totalsRow[0]?.count ?? 0;
@@ -285,6 +291,7 @@ export default async function AdminListPage({
           count={sentBackCount[0]?.count ?? 0}
           searchParams={sp}
         />
+        <TabLink label="Rejected" tab="rejected" activeTab={tab} count={rejectedCount[0]?.count ?? 0} searchParams={sp} />
         <TabLink label="All" tab="all" activeTab={tab} count={null} searchParams={sp} />
         <StageLegend />
       </div>
@@ -300,6 +307,7 @@ export default async function AdminListPage({
               <option value="">All</option>
               <option value="SUBMITTED">Submitted</option>
               <option value="SENT_BACK">Sent Back</option>
+              <option value="REJECTED">Rejected</option>
               <option value="APPROVED">Approved</option>
             </select>
           </FilterField>
@@ -351,14 +359,15 @@ export default async function AdminListPage({
               <th className="px-4 py-3"><SortHeader label="Submitted By" column="submittedByName" searchParams={sp} currentSort={sort} currentDir={dir} /></th>
               <th className="px-4 py-3"><SortHeader label="Department" column="submittedByDepartment" searchParams={sp} currentSort={sort} currentDir={dir} /></th>
               <th className="px-4 py-3"><SortHeader label="Status" column="status" searchParams={sp} currentSort={sort} currentDir={dir} /></th>
-              {tab === "sent_back" ? <th className="px-4 py-3">Remarks</th> : null}
+              {tab === "sent_back" || tab === "rejected" ? <th className="px-4 py-3">{tab === "rejected" ? "Rejected By / When" : "Remarks"}</th> : null}
+              {tab === "rejected" ? <th className="px-4 py-3">Remarks</th> : null}
               <th className="px-4 py-3">Actions</th>
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={tab === "sent_back" ? 10 : 9} className="px-4 py-8 text-center text-gray-500">
+                <td colSpan={tab === "rejected" ? 11 : tab === "sent_back" ? 10 : 9} className="px-4 py-8 text-center text-gray-500">
                   No submissions match these filters.
                 </td>
               </tr>
@@ -374,7 +383,7 @@ export default async function AdminListPage({
                 <Fragment key={row.id}>
                 {typeLabel !== previousTypeLabel ? (
                   <tr className="border-y border-gray-200 bg-[#0b1f3a]/5">
-                    <td colSpan={tab === "sent_back" ? 10 : 9} className="px-4 py-2 text-xs font-semibold uppercase tracking-wide text-[#0b1f3a]">
+                    <td colSpan={tab === "rejected" ? 11 : tab === "sent_back" ? 10 : 9} className="px-4 py-2 text-xs font-semibold uppercase tracking-wide text-[#0b1f3a]">
                       {typeLabel}
                     </td>
                   </tr>
@@ -423,6 +432,8 @@ export default async function AdminListPage({
                       {row.adminRemarks ?? "—"}
                     </td>
                   ) : null}
+                  {tab === "rejected" ? <td className="px-4 py-3"><div>{row.rejectedBy ?? "—"}</div><div className="text-xs text-gray-500">{row.rejectedAt ? formatIstDate(row.rejectedAt) : "—"}</div></td> : null}
+                  {tab === "rejected" ? <td className="max-w-[260px] whitespace-pre-wrap px-4 py-3">{row.rejectionRemarks ?? "—"}</td> : null}
                   <td className="whitespace-nowrap px-4 py-3">
                     <Link href={`/admin/advice/${row.id}`} className="font-medium text-[#0b1f3a] hover:underline">
                       View

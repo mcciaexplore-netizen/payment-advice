@@ -18,6 +18,7 @@ describe("pipelineStageFor", () => {
     [{ status: "APPROVED" }, "Fully Payment Settled"],
     [{ status: "APPROVED", paymentMode: "CASH" }, "Payment Done"],
     [{ status: "SENT_BACK" }, "Sent Back"],
+    [{ status: "REJECTED" }, "Rejected"],
   ] as const)("derives a pipeline stage", (changes, expected) => {
     expect(pipelineStageFor({ ...base, ...changes })).toBe(expected);
   });

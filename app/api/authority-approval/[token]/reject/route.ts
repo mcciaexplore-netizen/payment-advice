@@ -21,6 +21,7 @@ export async function POST(
   const [advice] = await db
     .select({
       id: paymentAdvices.id,
+      status: paymentAdvices.status,
       serialNo: paymentAdvices.serialNo,
       cashVoucherNo: paymentAdvices.cashVoucherNo,
       isAdvance: paymentAdvices.isAdvance,

@@ -80,7 +80,10 @@ export type DocType = z.infer<typeof docTypeSchema>;
 export const paymentModeSchema = z.enum(["NEFT", "CASH"]);
 export type PaymentMode = z.infer<typeof paymentModeSchema>;
 
-export const statusSchema = z.enum(["SUBMITTED", "SENT_BACK", "APPROVED"]);
+export const statusSchema = z.enum(["SUBMITTED", "SENT_BACK", "REJECTED", "APPROVED"]);
+export const rejectSubmissionSchema = z.object({
+  remarks: z.string().trim().min(1, "Remarks are required"),
+});
 export type Status = z.infer<typeof statusSchema>;
 
 /**

@@ -38,6 +38,9 @@ const COLUMNS: { header: string; key: string; width: number; numFmt?: string }[]
   { header: "Serial No.", key: "serialNo", width: 22 },
   { header: "Financial Year", key: "financialYear", width: 14 },
   { header: "Status", key: "status", width: 12 },
+  { header: "Rejected On", key: "rejectedOn", width: 14, numFmt: DATE_FORMAT },
+  { header: "Rejected By", key: "rejectedBy", width: 20 },
+  { header: "Rejection Remarks", key: "rejectionRemarks", width: 36 },
   { header: "Form Date", key: "formDate", width: 12, numFmt: DATE_FORMAT },
   { header: "Submitted On", key: "submittedOn", width: 14, numFmt: DATE_FORMAT },
   { header: "Approved On", key: "approvedOn", width: 14, numFmt: DATE_FORMAT },
@@ -103,14 +106,17 @@ export async function GET(req: NextRequest) {
   // XML, where column-level numFmt silently fell back to a mismatched
   // built-in format (or none at all for numeric columns). Setting it on each
   // cell after addRow is what actually produces a correct <numFmt> in the file.
-  const dateColumnKeys = ["formDate", "submittedOn", "approvedOn", "billDate", "poDate", "deliveryChallanDate"];
+  const dateColumnKeys = ["formDate", "submittedOn", "approvedOn", "rejectedOn", "billDate", "poDate", "deliveryChallanDate"];
   const numberColumnKeys = ["amount", "billPassedFor"];
 
   for (const { advice, authorityName } of rows) {
     const row = sheet.addRow({
       serialNo: advice.serialNo,
       financialYear: advice.financialYear,
-      status: advice.status,
+      status: advice.status === "REJECTED" ? "Rejected" : advice.status,
+      rejectedOn: timestampToIstExcelDate(advice.rejectedAt),
+      rejectedBy: advice.rejectedBy ?? "",
+      rejectionRemarks: advice.rejectionRemarks ?? "",
       formDate: dateOnlyToExcelDate(advice.formDate),
       submittedOn: timestampToIstExcelDate(advice.submittedAt),
       approvedOn: timestampToIstExcelDate(advice.approvedAt),

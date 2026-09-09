@@ -46,6 +46,9 @@ export async function POST(
       { status: 409 },
     );
   }
+  if (advice.status === "REJECTED") {
+    return NextResponse.json({ error: "A rejected submission is permanently closed." }, { status: 409 });
+  }
   // NEFT's multi-part payment model (see AGENT_HANDOFF.md) can leave real
   // money already paid out (a partial payment) while status is still
   // SUBMITTED — sending that back for resubmission would let the

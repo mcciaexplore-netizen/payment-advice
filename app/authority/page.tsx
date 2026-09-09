@@ -74,7 +74,7 @@ export default async function TeamDashboard({ searchParams }: { searchParams: Pr
       : authorityScope;
   const scopeWhere = view === "my-submissions" ? ownSubmissions : isAuthority
     ? and(authorityScope, view === "history"
-      ? or(isNotNull(paymentAdvices.authorityApprovedAt), isNotNull(paymentAdvices.authorityRejectedAt))
+      ? or(isNotNull(paymentAdvices.authorityApprovedAt), isNotNull(paymentAdvices.authorityRejectedAt), eq(paymentAdvices.status, "REJECTED"))
       : and(eq(paymentAdvices.status, "SUBMITTED"), isNull(paymentAdvices.authorityApprovedAt), isNull(paymentAdvices.authorityRejectedAt)))
     : teamScope;
   const requestedStage = isAdminTab(params.stage) && params.stage !== "all" ? params.stage : undefined;
@@ -93,6 +93,8 @@ export default async function TeamDashboard({ searchParams }: { searchParams: Pr
     financeReceivedAt: paymentAdvices.financeReceivedAt, verifiedAt: paymentAdvices.verifiedAt,
     paymentDoneAt: paymentAdvices.paymentDoneAt, totalPaid: paymentAdvices.totalPaid, revisionCount: paymentAdvices.revisionCount,
     updatedAt: paymentAdvices.updatedAt, sentBackAt: paymentAdvices.sentBackAt,
+    finalRejectedAt: paymentAdvices.rejectedAt, finalRejectedBy: paymentAdvices.rejectedBy,
+    finalRejectionRemarks: paymentAdvices.rejectionRemarks,
   }).from(paymentAdvices).where(where).orderBy(desc(paymentAdvices.submittedAt)),
     showSummary ? Promise.all(PIPELINE_SUMMARY_STAGES.map(async ({ tab }) => {
       const [result] = await db.select({ count: count(), sum: sum(paymentAdvices.amount) })
@@ -153,7 +155,7 @@ export default async function TeamDashboard({ searchParams }: { searchParams: Pr
         <td className="p-3"><div className="font-medium">{row.payeeName}</div><div className="mt-1 max-w-xs text-xs text-gray-600">{row.nature}</div>{isAuthority && view === "pending" && row.revisionCount >= 1 ? <div className="mt-2 max-w-sm rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs text-amber-900"><strong>Resubmission — revision {row.revisionCount}</strong>{row.adminRemarks ? <div className="mt-1">Previous remarks: {row.adminRemarks}</div> : null}</div> : null}</td>
         <td className="p-3 whitespace-nowrap">₹ {Number(row.amount).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
         <td className="p-3 whitespace-nowrap">{view !== "my-submissions" ? <div>{row.submittedBy}</div> : null}<div className="text-xs text-gray-500">{date(row.submittedAt)}</div></td>
-        <td className="p-3">{isAuthority && view === "pending" ? <div className="flex flex-col items-start gap-2"><StageBadge stage="Waiting on Authority" /><StageAgingIndicator advice={row} /><ViewLink adviceId={row.id} from="pending" /></div> : isAuthority && view === "history" ? <div className="text-xs"><StageBadge stage={row.approvedAt ? "Awaiting Finance Review" : "Sent Back"} /><div className="mt-1 text-gray-500">{date(row.approvedAt ?? row.rejectedAt!)}</div>{row.authorityRemarks ? <div className="mt-1 max-w-xs text-gray-600">{row.authorityRemarks}</div> : null}</div> : <div className="text-xs"><StageBadge stage={pipelineStageFor(row)} /><div><StageAgingIndicator advice={row} /></div>{row.adminRemarks ? <div className="mt-2 max-w-xs rounded bg-amber-50 px-2 py-1 text-amber-800">Sent-back remarks: {row.adminRemarks}</div> : null}</div>}</td>
+        <td className="p-3">{isAuthority && view === "pending" ? <div className="flex flex-col items-start gap-2"><StageBadge stage="Waiting on Authority" /><StageAgingIndicator advice={row} /><ViewLink adviceId={row.id} from="pending" /></div> : isAuthority && view === "history" ? <div className="text-xs"><StageBadge stage={row.status === "REJECTED" ? "Rejected" : row.approvedAt ? "Awaiting Finance Review" : "Sent Back"} /><div className="mt-1 text-gray-500">{date(row.finalRejectedAt ?? row.approvedAt ?? row.rejectedAt!)}</div>{(row.finalRejectionRemarks ?? row.authorityRemarks) ? <div className="mt-1 max-w-xs text-gray-600">{row.finalRejectionRemarks ?? row.authorityRemarks}</div> : null}</div> : <div className="text-xs"><StageBadge stage={pipelineStageFor(row)} /><div><StageAgingIndicator advice={row} /></div>{row.adminRemarks ? <div className="mt-2 max-w-xs rounded bg-amber-50 px-2 py-1 text-amber-800">Sent-back remarks: {row.adminRemarks}</div> : null}</div>}</td>
         {view === "my-submissions" ? <td className="p-3"><a href={submissionPdfHref(row)} download className="inline-flex whitespace-nowrap rounded-md border border-[#0b1f3a] px-3 py-2 text-xs font-medium text-[#0b1f3a] hover:bg-[#0b1f3a]/5">Download PDF</a></td> : null}
         {isAuthority && view === "history" ? <td className="p-3"><ViewLink adviceId={row.id} from="history" /></td> : null}
       </tr>)}</tbody>

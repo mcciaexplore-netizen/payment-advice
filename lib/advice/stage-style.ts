@@ -90,10 +90,17 @@ export const STAGE_STYLE: Record<PipelineStage, StageStyle> = {
   },
   "Sent Back": {
     shortLabel: "Sent Back",
-    badge: "bg-red-100 text-red-700 border-red-300",
-    tabActive: "bg-red-600 text-white border-red-600",
-    tabInactive: "bg-red-50 text-red-600 border-red-300 hover:border-red-500",
-    dot: "bg-red-600",
+    badge: "bg-amber-100 text-amber-800 border-amber-300",
+    tabActive: "bg-amber-600 text-white border-amber-600",
+    tabInactive: "bg-amber-50 text-amber-700 border-amber-300 hover:border-amber-500",
+    dot: "bg-amber-600",
+  },
+  "Rejected": {
+    shortLabel: "Rejected",
+    badge: "bg-red-100 text-red-950 border-red-400",
+    tabActive: "bg-red-900 text-white border-red-900",
+    tabInactive: "bg-red-50 text-red-950 border-red-400 hover:border-red-900",
+    dot: "bg-red-900",
   },
 };
 
@@ -110,6 +117,7 @@ export const PIPELINE_STAGE_ORDER: PipelineStage[] = [
   "Fully Payment Settled",
   "Payment Done",
   "Sent Back",
+  "Rejected",
 ];
 
 /** Maps each real pipeline tab (every AdminTab except "all", which has no
@@ -126,4 +134,5 @@ export const STAGE_FOR_TAB: Record<Exclude<AdminTab, "all">, PipelineStage> = {
   fully_payment_settled: "Fully Payment Settled",
   payment_done: "Payment Done",
   sent_back: "Sent Back",
+  rejected: "Rejected",
 };

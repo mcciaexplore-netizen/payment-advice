@@ -15,6 +15,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const { id } = await params;
   const [advice] = await db.select({
     id: paymentAdvices.id,
+    status: paymentAdvices.status,
     serialNo: paymentAdvices.serialNo,
     cashVoucherNo: paymentAdvices.cashVoucherNo,
     isAdvance: paymentAdvices.isAdvance,

@@ -25,9 +25,11 @@ export type PipelineStage =
   | "Partial Payment Done"
   | "Fully Payment Settled"
   | "Payment Done"
+  | "Rejected"
   | "Sent Back";
 
 export function pipelineStageFor(advice: PipelineStageAdvice): PipelineStage {
+  if (advice.status === "REJECTED") return "Rejected";
   if (advice.status === "SENT_BACK") return "Sent Back";
   if (advice.status === "APPROVED") {
     return advice.paymentMode === "CASH" ? "Payment Done" : "Fully Payment Settled";

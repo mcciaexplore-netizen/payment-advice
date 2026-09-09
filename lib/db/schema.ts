@@ -156,7 +156,7 @@ export const paymentAdvices = pgTable("payment_advices", {
   id: uuid("id").primaryKey().defaultRandom(),
   serialNo: text("serial_no").notNull().unique(),
   financialYear: text("financial_year").notNull(),
-  status: text("status").notNull(), // 'SUBMITTED' | 'SENT_BACK' | 'APPROVED'
+  status: text("status").notNull(), // 'SUBMITTED' | 'SENT_BACK' | 'REJECTED' | 'APPROVED'
 
   // Header
   formDate: date("form_date").notNull(),
@@ -268,6 +268,9 @@ export const paymentAdvices = pgTable("payment_advices", {
     withTimezone: true,
   }),
   revisionCount: integer("revision_count").default(0).notNull(),
+  rejectedAt: timestamp("rejected_at", { withTimezone: true }),
+  rejectedBy: text("rejected_by"),
+  rejectionRemarks: text("rejection_remarks"),
 
   // Recommending Authority recommendation — the specific authority chosen on the
   // form must recommend before Admin can. Derived state, not a status enum

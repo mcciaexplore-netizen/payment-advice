@@ -67,6 +67,7 @@ export default async function AuthorityAdviceDetailPage({
   ]);
 
   const isPending = advice.status === "SUBMITTED" && !advice.authorityApprovedAt && !advice.authorityRejectedAt;
+  const isDg = authority?.authorityName.trim().toUpperCase() === "DG";
   const fallbackHref = from === "history" ? "/authority?view=history" : "/authority";
 
   return (
@@ -156,7 +157,7 @@ export default async function AuthorityAdviceDetailPage({
           </Section>
 
           <Section title={isPending ? "Decision" : "Decision Record"}>
-            {isPending ? <AuthorityQueueActions adviceId={advice.id} /> : <DecisionRecord advice={advice} />}
+            {isPending && !isDg ? <AuthorityQueueActions adviceId={advice.id} /> : isDg ? <p className="text-sm text-gray-500">DG Executive Dashboard is read-only.</p> : <DecisionRecord advice={advice} />}
           </Section>
         </aside>
       </div>
@@ -164,13 +165,15 @@ export default async function AuthorityAdviceDetailPage({
   );
 }
 
-function DecisionStatus({ advice }: { advice: { authorityApprovedAt: Date | null; authorityRejectedAt: Date | null } }) {
+function DecisionStatus({ advice }: { advice: { status: string; rejectedAt: Date | null; authorityApprovedAt: Date | null; authorityRejectedAt: Date | null } }) {
+  if (advice.status === "REJECTED") return <span className="rounded-full border border-red-400 bg-red-100 px-3 py-1 text-sm font-medium text-red-950">Rejected</span>;
   if (advice.authorityApprovedAt) return <span className="rounded-full bg-[#2e8b57]/10 px-3 py-1 text-sm font-medium text-[#1f6b41]">Recommended</span>;
   if (advice.authorityRejectedAt) return <span className="rounded-full bg-amber-100 px-3 py-1 text-sm font-medium text-amber-800">Sent Back</span>;
   return <span className="rounded-full bg-[#e8a33d]/15 px-3 py-1 text-sm font-medium text-[#8a5a12]">Pending My Recommendation</span>;
 }
 
-function DecisionRecord({ advice }: { advice: { authorityApprovedAt: Date | null; authorityRejectedAt: Date | null; authorityRemarks: string | null } }) {
+function DecisionRecord({ advice }: { advice: { status: string; rejectedAt: Date | null; rejectionRemarks: string | null; authorityApprovedAt: Date | null; authorityRejectedAt: Date | null; authorityRemarks: string | null } }) {
+  if (advice.status === "REJECTED") return <div className="text-sm"><p className="font-medium text-red-950">Rejected {formatDateTime(advice.rejectedAt)}</p><p className="mt-3 whitespace-pre-wrap text-gray-600">Remarks: {advice.rejectionRemarks}</p><p className="mt-3 text-xs text-gray-500">This record is permanently closed and read-only.</p></div>;
   return <div className="text-sm">
     <p className="font-medium text-[#0b1f3a]">{advice.authorityApprovedAt ? `Recommended ${formatDateTime(advice.authorityApprovedAt)}` : `Sent back ${formatDateTime(advice.authorityRejectedAt)}`}</p>
     {advice.authorityRemarks ? <p className="mt-3 whitespace-pre-wrap text-gray-600">Remarks: {advice.authorityRemarks}</p> : null}

@@ -111,8 +111,8 @@ export function buildAdminListOrderBy(tab: AdminTab, sort?: string, dir?: string
   const direction = dir === "asc" ? asc : desc;
   const withinGroup = sort === "serialNo"
     ? direction(displayedReference)
-    : tab === "sent_back" && !isSortColumn(sort)
-      ? asc(paymentAdvices.sentBackAt)
+    : (tab === "sent_back" || tab === "rejected") && !isSortColumn(sort)
+      ? asc(tab === "rejected" ? paymentAdvices.rejectedAt : paymentAdvices.sentBackAt)
       : buildOrderBy(sort, dir);
   return [asc(typeGroup), withinGroup, desc(paymentAdvices.createdAt)] as const;
 }
@@ -173,6 +173,7 @@ export const ADMIN_TABS = [
   "fully_payment_settled",
   "payment_done",
   "sent_back",
+  "rejected",
   "all",
 ] as const;
 export type AdminTab = (typeof ADMIN_TABS)[number];
@@ -224,6 +225,9 @@ export function buildTabCondition(tab: AdminTab): SQL | undefined {
   }
   if (tab === "sent_back") {
     return eq(paymentAdvices.status, "SENT_BACK");
+  }
+  if (tab === "rejected") {
+    return eq(paymentAdvices.status, "REJECTED");
   }
   return undefined;
 }
