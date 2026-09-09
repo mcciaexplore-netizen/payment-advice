@@ -26,6 +26,7 @@ import {
   notifyPaymentEntry,
   notifySentBack,
   notifySubmissionConfirmation,
+  notifySubmissionRecommended,
   notifyVerified,
 } from "./notify";
 
@@ -50,6 +51,16 @@ const sentBackData = {
   payeeName: "Acme Supplies",
   amount: "850.00",
   editLink: "https://example.test/edit/token",
+};
+
+const submissionRecommendedData = {
+  displayNo: "MCCIA/2026-27/0004",
+  documentLabel: "Payment Advice",
+  submittedByName: "Priya Sharma",
+  recommendedBy: "Ganesh Mate",
+  payeeName: "Acme Supplies",
+  amount: "1,250.00",
+  formDate: "30/07/2026",
 };
 
 const verifiedData = {
@@ -136,6 +147,7 @@ describe("lib/email/notify.ts", () => {
     it("every notify function stays in preview mode by default", async () => {
       await notifyVerified(verifiedData, "submitter@example.com");
       await notifyAuthorityApproval(authorityApprovalData, "authority@example.com");
+      await notifySubmissionRecommended(submissionRecommendedData, "submitter@example.com");
       expect(mocks.gmailSendMail).not.toHaveBeenCalled();
       expect(mocks.resendSend).not.toHaveBeenCalled();
     });
@@ -212,6 +224,17 @@ describe("lib/email/notify.ts", () => {
         expect.objectContaining({
           to: "submitter@example.com",
           subject: "Payment Advice MCCIA/2026-27/0003 Verified",
+        }),
+      );
+    });
+
+    it("notifySubmissionRecommended sends the MCCIA HTML email to the submitter", async () => {
+      await notifySubmissionRecommended(submissionRecommendedData, "submitter@example.com");
+      expect(mocks.gmailSendMail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          to: "submitter@example.com",
+          subject: "Payment Advice MCCIA/2026-27/0004 Recommended — Forwarded to Finance",
+          html: expect.stringContaining("recommended by <strong>Ganesh Mate</strong>"),
         }),
       );
     });

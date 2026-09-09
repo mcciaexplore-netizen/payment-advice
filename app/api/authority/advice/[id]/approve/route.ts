@@ -13,7 +13,22 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const session = await getAdminSession();
   if (!session || !hasRole(session, "AUTHORITY") || !session.recommendingAuthorityId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { id } = await params;
-  const [advice] = await db.select({ id: paymentAdvices.id, authorityApprovedAt: paymentAdvices.authorityApprovedAt, authorityRejectedAt: paymentAdvices.authorityRejectedAt, authorityTokenExpiresAt: paymentAdvices.authorityTokenExpiresAt }).from(paymentAdvices).where(and(eq(paymentAdvices.id, id), eq(paymentAdvices.recommendingAuthorityId, session.recommendingAuthorityId))).limit(1);
+  const [advice] = await db.select({
+    id: paymentAdvices.id,
+    serialNo: paymentAdvices.serialNo,
+    cashVoucherNo: paymentAdvices.cashVoucherNo,
+    isAdvance: paymentAdvices.isAdvance,
+    advanceNo: paymentAdvices.advanceNo,
+    paymentMode: paymentAdvices.paymentMode,
+    submittedByName: paymentAdvices.submittedByName,
+    submittedByEmail: paymentAdvices.submittedByEmail,
+    payeeName: paymentAdvices.payeeName,
+    amount: paymentAdvices.amount,
+    formDate: paymentAdvices.formDate,
+    authorityApprovedAt: paymentAdvices.authorityApprovedAt,
+    authorityRejectedAt: paymentAdvices.authorityRejectedAt,
+    authorityTokenExpiresAt: paymentAdvices.authorityTokenExpiresAt,
+  }).from(paymentAdvices).where(and(eq(paymentAdvices.id, id), eq(paymentAdvices.recommendingAuthorityId, session.recommendingAuthorityId))).limit(1);
   if (!advice) return NextResponse.json({ error: "Not found" }, { status: 404 });
   const actionError = authorityActionError(advice);
   if (actionError) return NextResponse.json({ error: actionError }, { status: 409 });

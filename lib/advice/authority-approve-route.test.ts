@@ -14,16 +14,31 @@ const mocks = vi.hoisted(() => {
   const transaction = vi.fn(async (cb: (tx: unknown) => Promise<void>) =>
     cb({ update: txUpdate, insert: txInsert }),
   );
-  return { limit, select, txSet, txUpdate, txValues, txInsert, transaction };
+  const notifySubmissionRecommended = vi.fn();
+  return { limit, select, txSet, txUpdate, txValues, txInsert, transaction, notifySubmissionRecommended };
 });
 
 vi.mock("@/lib/db", () => ({ db: { select: mocks.select, transaction: mocks.transaction } }));
+vi.mock("@/lib/email/notify", () => ({
+  notifySubmissionRecommended: mocks.notifySubmissionRecommended,
+  notifySentBack: vi.fn(),
+}));
 
 import { POST } from "../../app/api/authority-approval/[token]/approve/route";
 
 const ADVICE_ID = "11111111-1111-4111-8111-111111111111";
 const pending = {
   id: ADVICE_ID,
+  serialNo: "MCCIA/2026-27/0004",
+  cashVoucherNo: null,
+  isAdvance: false,
+  advanceNo: null,
+  paymentMode: "NEFT",
+  submittedByName: "Priya Sharma",
+  submittedByEmail: "priya@example.com",
+  payeeName: "Acme Supplies",
+  amount: "1250.00",
+  formDate: "2026-07-30",
   authorityApprovedAt: null,
   authorityRejectedAt: null,
   authorityTokenExpiresAt: null,
@@ -88,6 +103,19 @@ describe("POST /api/authority-approval/[token]/approve", () => {
     expect(mocks.txInsert).toHaveBeenCalledWith(expect.anything());
     expect(mocks.txValues).toHaveBeenCalledWith(
       expect.objectContaining({ action: "AUTHORITY_APPROVED", actor: "Asha Rao" }),
+    );
+    expect(mocks.notifySubmissionRecommended).toHaveBeenCalledWith(
+      expect.objectContaining({
+        displayNo: "MCCIA/2026-27/0004",
+        documentLabel: "Payment Advice",
+        submittedByName: "Priya Sharma",
+        recommendedBy: "Asha Rao",
+        payeeName: "Acme Supplies",
+        amount: "1,250.00",
+        formDate: "2026-07-30",
+      }),
+      "priya@example.com",
+      ADVICE_ID,
     );
   });
 });

@@ -20,6 +20,16 @@ export async function POST(
   const [advice] = await db
     .select({
       id: paymentAdvices.id,
+      serialNo: paymentAdvices.serialNo,
+      cashVoucherNo: paymentAdvices.cashVoucherNo,
+      isAdvance: paymentAdvices.isAdvance,
+      advanceNo: paymentAdvices.advanceNo,
+      paymentMode: paymentAdvices.paymentMode,
+      submittedByName: paymentAdvices.submittedByName,
+      submittedByEmail: paymentAdvices.submittedByEmail,
+      payeeName: paymentAdvices.payeeName,
+      amount: paymentAdvices.amount,
+      formDate: paymentAdvices.formDate,
       authorityApprovedAt: paymentAdvices.authorityApprovedAt,
       authorityRejectedAt: paymentAdvices.authorityRejectedAt,
       authorityTokenExpiresAt: paymentAdvices.authorityTokenExpiresAt,

@@ -8,12 +8,14 @@ import {
   type PaymentEntryEmailData,
   type SentBackEmailData,
   type SubmissionConfirmationEmailData,
+  type SubmissionRecommendedEmailData,
   type VerifiedEmailData,
   renderAuthorityApprovalEmail,
   renderPaymentDoneEmail,
   renderPaymentEntryEmail,
   renderSentBackEmail,
   renderSubmissionConfirmationEmail,
+  renderSubmissionRecommendedEmail,
   renderVerifiedEmail,
 } from "@/lib/email/templates";
 
@@ -215,6 +217,16 @@ export async function notifySubmissionConfirmation(
 ) {
   const message = renderSubmissionConfirmationEmail(data);
   await send("submission confirmation", to, message, adviceId);
+  return message;
+}
+
+export async function notifySubmissionRecommended(
+  data: SubmissionRecommendedEmailData,
+  to: string,
+  adviceId?: string,
+) {
+  const message = renderSubmissionRecommendedEmail(data);
+  await send("submission recommended", to, message, adviceId);
   return message;
 }
 
