@@ -2792,4 +2792,58 @@ Live-tested: logged in as her at `/team/login`, confirmed Team Submissions
 shows "45 submissions in MSME HELPLINE" (same scope, same data Aishwarya
 sees), header shows "Aarya Tayade" and the "+ New Submission" link.
 
+2026-09-10 — Claude — Part A of a 4-part vendor-matching task (B/C/D on
+hold pending human confirmation — see below): fixed the root cause behind
+the 2026-09-09 free-text vendor audit's 3 "typed the exact vendor name but
+`vendor_id` stayed NULL" cases (ATRONIX INDIA, Curious Catalyst, Suyog
+Mangesh Bagul). `components/form/VendorTypeahead.tsx` only ever called
+`onSelectVendor` from the suggestion button's `onClick` — unlike
+`StaffNameTypeahead`, it had no "typing the exact name counts as a
+selection too" effect, so an unclicked exact match silently stayed
+unlinked. Added the same exact-match `useEffect` pattern, guarded by a new
+`hasTypedRef` that only becomes true inside the field's own `onChange` —
+this specifically prevents the new effect from firing on an `/edit/[token]`
+resubmit's prefilled value (which can legitimately already equal a vendor's
+exact name) the instant results load on mount, which would otherwise
+silently overwrite that historical snapshot's `payeeAddress`/`payeeGstin`/etc.
+with the vendor's current live data. `applyVendor()` itself is unchanged —
+same unconditional-overwrite semantics as the existing click path, since
+this is a deliberate-selection guard, not a per-field clobber guard.
+
+Live-tested against the real dev server + real Neon DB using a throwaway
+vendor (`ZZZ THROWAWAY TEST VENDOR XYZ`, with a distinctive address, so an
+auto-fill would be externally visible — the real 660 imported vendors are
+name-only with every other field NULL, discovered mid-testing, so they
+can't prove auto-fill by themselves): (1) typing the vendor's name
+character-for-character with no click correctly set `vendorId` and
+auto-filled its address; (2) clicking a suggestion still works exactly as
+before; (3) typing a genuinely new, non-matching name does not spuriously
+trigger any fill; (4) a throwaway `SENT_BACK` row whose snapshot `payeeName`
+exactly matched the throwaway vendor's name, loaded via a real
+`/edit/[token]` GET, kept its original (deliberately different) snapshot
+`payeeAddress` untouched on mount — confirming the resubmit-clobber risk is
+actually closed, not just reasoned about. All throwaway data (1 vendor, 1
+advice row) deleted after. TypeScript, ESLint, full Vitest suite (420
+passed, 7 skipped), and production build all clean.
+
+**Part B/C reports delivered to the human, execution on hold pending
+explicit confirmation — do not link any historical row or create any
+vendor record without it.** Re-confirmed the 2026-09-09 audit fresh against
+today's data (NEFT total grew 98→126, free-text 41→47 since yesterday; no
+NULL vendor_id/free-text share is shrinking — still climbing). Full
+per-tier findings and the exact proposed SQL live in this session's chat
+report, not copied into this file to avoid a second, driftable copy — if
+you're picking this up cold, ask the human for that report rather than
+re-deriving it, since it includes exact row/vendor UUIDs. One correction
+to the original audit's data surfaced during re-confirmation: "Suyog
+Mangesh Bagul" (mixed case, `vendor_id` NULL) and "SUYOG MANGESH BAGUL"
+(all caps, already correctly linked) are two *different* rows, not one —
+only the mixed-case row needs Part B's proposed fix. One new weak-match
+candidate surfaced since yesterday (not yet decided, flagged Tier 3 like
+ANIRUDDHA BRAHMA): "Nikhil Jain" (a real Authority's own self-payee
+submission, 2026-09-10) loosely matches an existing vendor "NIKHIL JAIN ADV
+FOR EXPENSES," but the two look like different real-world purposes (a
+specific XLRI program installment vs. a general expense-advance account) —
+recommended leaving unlinked, same reasoning as ANIRUDDHA BRAHMA.
+
 *End of handoff file. Both agents: read §0 again before starting work.*

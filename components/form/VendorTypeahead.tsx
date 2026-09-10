@@ -31,6 +31,15 @@ export function VendorTypeahead({
   const [open, setOpen] = useState(false);
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const containerRef = useRef<HTMLDivElement>(null);
+  // Only true once the person has actually typed in this field this
+  // session — guards the exact-match effect below from firing on an
+  // /edit/[token] resubmit's prefilled value (which can legitimately equal
+  // an existing vendor's name already) the moment results happen to load.
+  // Without this, mounting with a prefilled match would silently overwrite
+  // the historical snapshot fields (payeeAddress, payeeGstin, etc.) with
+  // the vendor's current live data — correct for a deliberate selection,
+  // wrong for an untouched prefill.
+  const hasTypedRef = useRef(false);
 
   const trimmedValue = value.trim();
   const queryTooShort = trimmedValue.length < 2;
@@ -59,6 +68,20 @@ export function VendorTypeahead({
     };
   }, [debouncedQuery]);
 
+  // Detect an exact match even when the submitter never opens/clicks the
+  // dropdown (types the full company name and moves on) — mirrors
+  // StaffNameTypeahead's identical "typing the exact name counts the same
+  // as clicking it" behavior, so vendor matching works the same way staff
+  // and authority matching already do.
+  useEffect(() => {
+    if (!hasTypedRef.current) return;
+    const exact = results.find(
+      (r) => r.companyName.trim().toLowerCase() === trimmedValue.toLowerCase(),
+    );
+    if (exact) onSelectVendor(exact);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- onSelectVendor identity is not meant to retrigger this; only the value/results should.
+  }, [results, trimmedValue]);
+
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
       if (
@@ -81,6 +104,7 @@ export function VendorTypeahead({
         autoComplete="off"
         placeholder="Start typing to search saved payees, or type a new name"
         onChange={(e) => {
+          hasTypedRef.current = true;
           onChange(e.target.value);
           setOpen(true);
         }}
