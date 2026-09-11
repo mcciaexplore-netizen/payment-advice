@@ -3,6 +3,7 @@ import { and, count, ilike } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { vendors } from "@/lib/db/schema";
 import { VendorActiveToggle } from "@/components/admin/VendorActiveToggle";
+import { vendorPageHref } from "@/lib/admin/vendor-pagination";
 
 const PAGE_SIZE = 25;
 
@@ -95,8 +96,24 @@ export default async function VendorsPage({
         </table>
       </div>
 
-      <div className="text-sm text-gray-600">
-        Page {page} of {totalPages}
+      <div className="flex items-center justify-between text-sm text-gray-600">
+        <span>Page {page} of {totalPages}</span>
+        <div className="flex gap-2">
+          <Link
+            href={vendorPageHref(page - 1, q)}
+            aria-disabled={page <= 1}
+            className={`rounded-md border border-gray-300 px-3 py-1.5 ${page <= 1 ? "pointer-events-none opacity-40" : "hover:bg-gray-50"}`}
+          >
+            Previous
+          </Link>
+          <Link
+            href={vendorPageHref(page + 1, q)}
+            aria-disabled={page >= totalPages}
+            className={`rounded-md border border-gray-300 px-3 py-1.5 ${page >= totalPages ? "pointer-events-none opacity-40" : "hover:bg-gray-50"}`}
+          >
+            Next
+          </Link>
+        </div>
       </div>
     </div>
   );

@@ -2846,4 +2846,6 @@ FOR EXPENSES," but the two look like different real-world purposes (a
 specific XLRI program installment vs. a general expense-advance account) —
 recommended leaving unlinked, same reasoning as ANIRUDDHA BRAHMA.
 
+2026-09-11 — Codex — Fixed the Finance Admin Vendors list pagination gap. The page already queried with `page`, `limit`, and `offset` and displayed `Page X of Y`, but rendered no navigation controls at all. Added accessible Previous/Next controls with correct first/last-page disabled states and preservation/encoding of the active company-name search. Added `lib/admin/vendor-pagination.ts` plus three unit tests. Read-only authenticated live render against real vendor data confirmed `/admin/vendors?page=2` returns 200, displays `Page 2 of 27`, and links correctly to pages 1 and 3; no vendor data was changed.
+
 *End of handoff file. Both agents: read §0 again before starting work.*
