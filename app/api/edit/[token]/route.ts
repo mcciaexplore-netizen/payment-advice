@@ -237,16 +237,6 @@ export async function POST(
             values.paymentMode === "NEFT" && !values.isAdvance
               ? values.gstAmount!.toFixed(2)
               : null,
-          gstSettled: false,
-          gstSettledBy: null,
-          gstSettledAt: null,
-          // The submission content (including Basic/GST) may have changed,
-          // so Finance must perform a fresh post-verification calculation.
-          // Historical calculator saves remain visible in audit_log.
-          arrearsAmount: null,
-          arrearsTdsPercent: null,
-          currentTdsPercent: null,
-          payableAmount: null,
           natureOfExpenditure: values.isAdvance
             ? values.purposeOfAdvance ?? ""
             : values.paymentMode === "CASH"
