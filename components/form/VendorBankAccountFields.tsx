@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { bankNameForIfsc } from "@/lib/form/ifsc-bank-lookup";
 
 export type VendorBankAccount = {
   id: string;
@@ -99,7 +100,18 @@ function VendorBankAccountFieldsForVendor({
               className="mt-0.5 accent-[#0b1f3a]"
             />
             <span>
-              A/c ending in {account.bankAccountNo.slice(-4)}, IFSC {account.bankIfsc}
+              A/c ending {account.bankAccountNo.slice(-4)}
+              {" — "}
+              {(() => {
+                // Same offline IFSC-prefix decode used for Bank Name
+                // auto-fill — derived at render time, never stored, so a
+                // future correction to the lookup table applies here too
+                // with nothing to backfill. Falls back to the raw IFSC for
+                // a code the table doesn't recognize, rather than hiding
+                // it — a submitter can still tell accounts apart by IFSC.
+                const derivedBankName = bankNameForIfsc(account.bankIfsc);
+                return derivedBankName ? `${derivedBankName} (${account.bankIfsc})` : account.bankIfsc;
+              })()}
               {account.lastUsedAt
                 ? ` — last used ${new Date(account.lastUsedAt).toLocaleDateString("en-IN")}`
                 : ""}

@@ -3109,4 +3109,85 @@ migration's shape/dedup constraint. TypeScript, ESLint, full Vitest suite
 **Not merged to `main`** — branch pushed to origin, awaiting explicit human
 review/approval before any merge, per the brief.
 
+*(Update, same day: the human reviewed live — asked for one real
+multi-account demo vendor created through the actual submission pipeline
+and left in place for them to click through, which was done and then
+deleted once they confirmed. They then approved and this branch was merged
+to `main` at `ec5f939`, verified clean post-merge, and pushed. The
+`vendor-bank-accounts` table, backfill, capture-on-submit, and UI described
+above are now live on `main`.)*
+
+2026-09-15 — Claude — Added an offline IFSC -> Bank Name lookup, on its own
+branch `ifsc-bank-name-lookup` (off `main` at `ec5f939`, the just-merged
+vendor-bank-accounts tip — **not merged, no merge instruction given this
+time**). Checked branch state first: `feature/vendor-review-queue` has
+uncommitted WIP from a concurrent session (`app/admin/vendor-review/` and
+related files, plus live edits to `app/admin/layout.tsx`/`page.tsx`
+appearing between two consecutive `git status` checks — Codex appears to be
+actively working in this shared directory) — left entirely untouched, no
+overlap with this task's files.
+
+**Lookup table** (`lib/form/ifsc-bank-lookup.ts`, 148 entries): sourced from
+`razorpay/ifsc` (github.com/razorpay/ifsc, `src/banknames.json`), an
+actively-maintained open dataset generated from NPCI's own bank master
+data — fetched directly, then every single code in this table was
+individually grepped against that fetched file to confirm it's real before
+inclusion, not typed from memory. Trimmed from that project's ~1,500
+entries (which also lists hundreds of tiny local cooperative banks) down to
+public/private/foreign scheduled banks, small finance banks, payments
+banks, and the cooperative + regional-rural banks large enough to be
+genuine payees — weighted toward Maharashtra/Pune given this app's actual
+vendor base. A handful of pre-2020-merger codes (Vijaya Bank, Dena Bank,
+Oriental Bank of Commerce, etc.) are deliberately kept since those IFSCs
+can still appear on existing accounts. Zero network calls at runtime —
+`bankNameForIfsc()` is a pure function, matches on the first 4 characters,
+returns `undefined` (never throws) for anything too short or unrecognized.
+
+**Wired in two places**, both deriving at call/render time rather than
+storing anything:
+- `components/form/PaymentAdviceForm.tsx`: new effect on the shared
+  `bankIfsc` field (the same field Payment Advice and Advance Payment
+  both register, when NEFT is selected) reuses the existing
+  `resolveSourceFieldAutoFill` "only react on an actual source-value
+  change, never fight the user" helper already used for Advance's
+  Payee Name/Email auto-fill — same file, no new logic needed, just a new
+  call site. Fires on every keystroke (naturally covers "on blur or once
+  4+ characters," more eagerly). No verify-note shown here (unlike the
+  vendor bank-account auto-fill) — decoding a fixed public code structure
+  is materially lower-risk than trusting a prior person's entry, per the
+  brief. Note: Advance Payment doesn't currently render a Bank Name input
+  at all (`{!isAdvance ? <Field label="Bank Name">... : null}`), so this
+  only has a visible effect on the regular Payment Advice form today — the
+  effect still fires for Advance too (same shared `bankIfsc` field) and
+  would populate Bank Name immediately if that field is ever added there.
+- `components/form/VendorBankAccountFields.tsx`: the multi-account picker's
+  option label now shows `A/c ending #### — {Bank Name} (IFSC)`, falling
+  back to the raw IFSC alone when the prefix isn't recognized. Derived
+  inline at render time from the same lookup, nothing new stored — a
+  future correction to the table applies here automatically.
+
+**Live-tested** against the real dev server: 4 real, well-known IFSC codes
+(HDFC0001234 -> HDFC Bank, SBIN0000001 -> State Bank of India,
+ICIC0000104 -> ICICI Bank, UTIB0001436 -> Axis Bank) all auto-filled
+correctly; a deliberately invalid prefix (`ZZZZ0001234`) left Bank Name
+blank with no error (the one `[role="alert"]` element that did appear was
+confirmed unrelated — a pre-existing "Select a recommending authority"
+message from a field this quick test hadn't filled, not caused by this
+feature). Confirmed the field stays editable after auto-fill (manually
+overwrote it, value stuck). Confirmed the vendor picker's derived-bank-name
+display using a throwaway vendor + two real submissions through the actual
+pipeline (`MCCIA/2026-27/0159`/`0160`) — picker correctly showed "State
+Bank of India (SBIN0000001)" and "HDFC Bank (HDFC0001234)" — all throwaway
+data deleted immediately after (this was a narrow rendering check, not the
+"leave in place for human review" demo from the previous task).
+
+New `lib/form/ifsc-bank-lookup.test.ts` (8 tests: known-code resolution,
+4-character-minimum matching, case-insensitivity, graceful undefined for
+too-short/unrecognized input, table has no malformed entries, count is in
+the expected range). TypeScript, ESLint, full Vitest suite (439 passed, 7
+skipped), and production build all clean.
+
+**Not merged to `main`** — pushed to `origin/ifsc-bank-name-lookup`,
+awaiting human review.
+
 *End of handoff file. Both agents: read §0 again before starting work.*

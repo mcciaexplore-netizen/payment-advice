@@ -17,6 +17,7 @@ import { CashVoucherItemsField } from "@/components/form/CashVoucherItemsField";
 import { storeSubmissionSummary } from "@/lib/submission-summary";
 import { resolveAutoFillEmail } from "@/lib/form/staff-email-autofill";
 import { resolveSourceFieldAutoFill } from "@/lib/form/source-field-autofill";
+import { bankNameForIfsc } from "@/lib/form/ifsc-bank-lookup";
 import {
   safeUploadFileName,
   type UploadedAttachment,
@@ -138,6 +139,7 @@ export function PaymentAdviceForm({
   const submittedByEmail = useWatch({ control, name: "submittedByEmail" }) ?? "";
   const submittedByDepartmentOption = useWatch({ control, name: "submittedByDepartmentOption" });
   const recommendingAuthorityId = useWatch({ control, name: "recommendingAuthorityId" }) ?? "";
+  const bankIfsc = useWatch({ control, name: "bankIfsc" }) ?? "";
   const watchedCashVoucherItems = useWatch({ control, name: "cashVoucherItems" });
   const cashVoucherItems = useMemo(
     () => watchedCashVoucherItems ?? [],
@@ -242,6 +244,32 @@ export function PaymentAdviceForm({
       lastAutoFilledPayeeEmailRef.current = null;
     }
   }, [isAdvance, isCashVoucher, submittedByEmail, getValues, setValue]);
+
+  // Bank Name from IFSC — an IFSC's first 4 characters always identify the
+  // bank, so this is a pure offline decode (lib/form/ifsc-bank-lookup.ts),
+  // not a guess about someone else's prior entry the way the vendor
+  // bank-account auto-fill is. Lower risk, so no "please verify" note here
+  // — it just fills in quietly and stays editable. Same "only react on an
+  // actual source-value change, never fight the user" pattern as the two
+  // effects above; re-evaluates on every keystroke of the IFSC field, so it
+  // naturally fires as soon as 4+ characters are typed, not just on blur.
+  const lastAutoFilledBankNameRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const derivedBankName = bankNameForIfsc(bankIfsc) ?? "";
+    const action = resolveSourceFieldAutoFill(
+      derivedBankName,
+      getValues("bankName") ?? "",
+      lastAutoFilledBankNameRef.current,
+    );
+    if (action.type === "fill") {
+      setValue("bankName", action.value);
+      lastAutoFilledBankNameRef.current = action.value;
+    } else if (action.type === "clear") {
+      setValue("bankName", "");
+      lastAutoFilledBankNameRef.current = null;
+    }
+  }, [bankIfsc, getValues, setValue]);
 
   // Mirrors applyVendor's "fill only what's on file" pattern below, plus
   // RecommendingAuthorityField's "only react when the matched identity
