@@ -233,17 +233,17 @@ export interface PaymentEntryEmailData {
   remarks: string;
   isFinal: boolean;
   totalPaid: string | number;
-  billPassedFor: string | number;
+  payableAmount: string | number;
   remaining: string | number;
   formDate: string;
 }
 
-const PAYMENT_ENTRY_TEMPLATE = shell("#2E8B57", `<tr><td style="padding:32px;"><p style="margin:0 0 4px;font-size:13px;color:#2E8B57;text-transform:uppercase;letter-spacing:.5px;font-weight:600;">{{status_label}}</p><h1 style="margin:0 0 20px;font-family:Georgia,'Times New Roman',serif;font-size:22px;color:#0B1F3A;">{{display_no}}</h1><p style="margin:0 0 20px;font-size:15px;line-height:1.6;color:#1F2937;">Dear {{submitted_by_name}}, a payment of <strong>₹ {{entry_amount}}</strong> has been recorded against your {{document_label}} {{display_no}}.{{status_sentence}}</p>${details([["Payee", "{{payee_name}}"], ["This Payment", "₹ {{entry_amount}}"], ["Remarks", "{{remarks}}"], ["Paid So Far", "₹ {{total_paid}} of ₹ {{bill_passed_for}}"], ["Balance Remaining", "₹ {{remaining}}"], ["Date", "{{form_date}}"]])}</td></tr>`);
+const PAYMENT_ENTRY_TEMPLATE = shell("#2E8B57", `<tr><td style="padding:32px;"><p style="margin:0 0 4px;font-size:13px;color:#2E8B57;text-transform:uppercase;letter-spacing:.5px;font-weight:600;">{{status_label}}</p><h1 style="margin:0 0 20px;font-family:Georgia,'Times New Roman',serif;font-size:22px;color:#0B1F3A;">{{display_no}}</h1><p style="margin:0 0 20px;font-size:15px;line-height:1.6;color:#1F2937;">Dear {{submitted_by_name}}, a payment of <strong>₹ {{entry_amount}}</strong> has been recorded against your {{document_label}} {{display_no}}.{{status_sentence}}</p>${details([["Payee", "{{payee_name}}"], ["This Payment", "₹ {{entry_amount}}"], ["Remarks", "{{remarks}}"], ["Paid So Far", "₹ {{total_paid}} of ₹ {{payable_amount}}"], ["Payable Amount", "₹ {{payable_amount}}"], ["Balance Remaining", "₹ {{remaining}}"], ["Date", "{{form_date}}"]])}</td></tr>`);
 
 export function renderPaymentEntryEmail(data: PaymentEntryEmailData) {
   const statusLabel = data.isFinal ? "Payment Complete" : "Partial Payment Recorded";
   const statusSentence = data.isFinal
-    ? " This is the final payment — the full billed amount has now been settled."
+    ? " This is the final payment — the full payable amount has now been settled."
     : " This is a partial payment; ₹ {{remaining}} remains to be paid.";
   return {
     subject: `${data.documentLabel} ${data.displayNo} — ${statusLabel}`,
@@ -257,7 +257,7 @@ export function renderPaymentEntryEmail(data: PaymentEntryEmailData) {
       entry_amount: data.entryAmount,
       remarks: data.remarks,
       total_paid: data.totalPaid,
-      bill_passed_for: data.billPassedFor,
+      payable_amount: data.payableAmount,
       remaining: data.remaining,
       form_date: formatDateOnly(data.formDate),
     }),

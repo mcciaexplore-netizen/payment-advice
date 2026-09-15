@@ -42,6 +42,8 @@ const verified = {
   formDate: "2026-07-28",
   paymentMode: "NEFT",
   billPassedFor: "1200.00",
+  payableAmount: null,
+  isAdvance: false,
   verifiedAt: new Date(),
   paymentDoneAt: null,
 };
@@ -152,6 +154,24 @@ describe("POST /api/admin/advice/[id]/payment-done", () => {
       expect.objectContaining({ documentLabel: "Cash Payment Voucher" }),
       verified.submittedByEmail,
       ADVICE_ID,
+    );
+  });
+
+  it("uses payable_amount for a Cash-routed Advance without writing the retired bill_passed_for field", async () => {
+    mocks.limit.mockResolvedValueOnce([{
+      ...verified,
+      paymentMode: "CASH",
+      isAdvance: true,
+      advanceNo: "ADV/MCCIA/2026-27/0001",
+      billPassedFor: null,
+      payableAmount: "900.00",
+    }]);
+    const res = await POST(req(), { params: Promise.resolve({ id: ADVICE_ID }) });
+    expect(res.status).toBe(200);
+    const setArg = (mocks.txSet.mock.calls as unknown as [Record<string, unknown>][]) [0][0];
+    expect(setArg.billPassedFor).toBeUndefined();
+    expect(mocks.txValues).toHaveBeenCalledWith(
+      expect.objectContaining({ details: expect.objectContaining({ payableAmount: 900 }) }),
     );
   });
 

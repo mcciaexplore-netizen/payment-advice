@@ -3,7 +3,7 @@ import { eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { paymentAdvices, paymentEntries, auditLog } from "@/lib/db/schema";
 import { paymentEntrySchema } from "@/lib/validation/payment-advice";
-import { billPassedForLabelFor, displayNoFor, documentLabelFor } from "@/lib/advice/document-identity";
+import { displayNoFor, documentLabelFor } from "@/lib/advice/document-identity";
 import { getAdminSession } from "@/lib/admin-session";
 import { notifyPaymentEntry } from "@/lib/email/notify";
 
@@ -23,7 +23,7 @@ type TxResult =
       ok: true;
       totalPaid: string;
       remaining: string;
-      billPassedFor: string;
+      payableAmount: string;
       isFinal: boolean;
       paidAt: Date;
     };
@@ -34,10 +34,8 @@ type TxResult =
  * POST .../payment-done route is completely untouched and still handles
  * Cash's one-shot terminal action exactly as before.
  *
- * Every entry is capped against `bill_passed_for` minus the sum of all
- * prior entries — never the raw Basic+GST Total — since bill_passed_for is
- * already the field where Finance confirms the actual payable amount
- * before finalizing payment. The cap check happens inside a
+ * Every entry is capped against `payable_amount` minus the sum of all
+ * prior entries — never the raw Basic+GST Total. The cap check happens inside a
  * `SELECT ... FOR UPDATE`-locked transaction (same pattern lib/serial.ts
  * uses for gapless numbering) so two concurrent "Record a Payment" submits
  * against the same advice can never both pass a stale remaining-balance
@@ -45,7 +43,7 @@ type TxResult =
  *
  * `total_paid` is a cached running total (not a live SUM()), updated
  * atomically in the same transaction as the insert. The entry that brings
- * total_paid to (or past) bill_passed_for performs the same
+ * total_paid to payable_amount performs the same
  * status/approved_at/approved_by_name dual-write the old single Payment
  * Done action used to — partial entries never touch those fields.
  */
@@ -104,14 +102,15 @@ export async function POST(
   const paidBy = session.fullName;
   const now = new Date();
   const amountPaise = Math.round(parsed.data.amount * 100);
+  const remarks = parsed.data.remarks ?? "";
 
   const result: TxResult = await db.transaction(async (tx) => {
     const rows = await tx.execute<{
-      bill_passed_for: string | null;
+      payable_amount: string | null;
       total_paid: string;
       status: string;
     }>(sql`
-      select bill_passed_for, total_paid, status
+      select payable_amount, total_paid, status
       from payment_advices
       where id = ${id}
       for update
@@ -123,17 +122,24 @@ export async function POST(
     if (row.status === "APPROVED") {
       return { ok: false, status: 409, error: "This advice is already fully settled." };
     }
-    if (!row.bill_passed_for) {
+    if (row.status !== "SUBMITTED") {
+      return {
+        ok: false,
+        status: 409,
+        error: "Payments can only be recorded against an active submission.",
+      };
+    }
+    if (!row.payable_amount) {
       return {
         ok: false,
         status: 400,
-        error: `${billPassedForLabelFor(advice.isAdvance)} must be saved before recording a payment.`,
+        error: "Save the Arrears/TDS payable calculation before recording a payment.",
       };
     }
 
-    const billPassedForPaise = Math.round(Number(row.bill_passed_for) * 100);
+    const payableAmountPaise = Math.round(Number(row.payable_amount) * 100);
     const totalPaidPaise = Math.round(Number(row.total_paid) * 100);
-    const remainingPaise = billPassedForPaise - totalPaidPaise;
+    const remainingPaise = payableAmountPaise - totalPaidPaise;
     if (amountPaise > remainingPaise) {
       return {
         ok: false,
@@ -144,12 +150,12 @@ export async function POST(
 
     const newTotalPaidPaise = totalPaidPaise + amountPaise;
     const newTotalPaid = (newTotalPaidPaise / 100).toFixed(2);
-    const isFinal = newTotalPaidPaise >= billPassedForPaise;
+    const isFinal = newTotalPaidPaise >= payableAmountPaise;
 
     await tx.insert(paymentEntries).values({
       paymentAdviceId: id,
       amount: parsed.data.amount.toFixed(2),
-      remarks: parsed.data.remarks,
+      remarks,
       paidAt: now,
       paidBy,
     });
@@ -172,9 +178,9 @@ export async function POST(
       ipAddress: clientIp(req),
       details: {
         amount: parsed.data.amount,
-        remarks: parsed.data.remarks,
+        remarks,
         totalPaid: newTotalPaid,
-        billPassedFor: row.bill_passed_for,
+        payableAmount: row.payable_amount,
         isFinal,
       },
     });
@@ -182,8 +188,8 @@ export async function POST(
     return {
       ok: true,
       totalPaid: newTotalPaid,
-      remaining: ((billPassedForPaise - newTotalPaidPaise) / 100).toFixed(2),
-      billPassedFor: row.bill_passed_for,
+      remaining: ((payableAmountPaise - newTotalPaidPaise) / 100).toFixed(2),
+      payableAmount: row.payable_amount,
       isFinal,
       paidAt: now,
     };
@@ -206,10 +212,10 @@ export async function POST(
       documentLabel: documentLabelFor("NEFT", advice.isAdvance),
       payeeName: advice.payeeName,
       entryAmount: money(parsed.data.amount),
-      remarks: parsed.data.remarks,
+      remarks,
       isFinal: result.isFinal,
       totalPaid: money(Number(result.totalPaid)),
-      billPassedFor: money(Number(result.billPassedFor)),
+      payableAmount: money(Number(result.payableAmount)),
       remaining: money(Number(result.remaining)),
       formDate: advice.formDate,
     },

@@ -62,8 +62,8 @@ const verifiedNeft = {
   verifiedAt: new Date(),
 };
 
-function lockedRow(overrides: Partial<{ bill_passed_for: string | null; total_paid: string; status: string }> = {}) {
-  return { rows: [{ bill_passed_for: "1000.00", total_paid: "0.00", status: "SUBMITTED", ...overrides }] };
+function lockedRow(overrides: Partial<{ payable_amount: string | null; total_paid: string; status: string }> = {}) {
+  return { rows: [{ payable_amount: "1000.00", total_paid: "0.00", status: "SUBMITTED", ...overrides }] };
 }
 
 function req(body?: unknown) {
@@ -120,13 +120,24 @@ describe("POST /api/admin/advice/[id]/payment-entries", () => {
     expect(mocks.transaction).not.toHaveBeenCalled();
   });
 
-  it("400s when remarks are missing", async () => {
+  it("accepts a payment with no remarks and stores an empty compatibility value", async () => {
     mocks.limit.mockResolvedValueOnce([verifiedNeft]);
-    const res = await POST(req({ amount: 100, remarks: "" }), {
+    mocks.txExecute.mockResolvedValueOnce(lockedRow());
+    const res = await POST(req({ amount: 100 }), {
       params: Promise.resolve({ id: ADVICE_ID }),
     });
-    expect(res.status).toBe(400);
-    expect(mocks.transaction).not.toHaveBeenCalled();
+    expect(res.status).toBe(200);
+    expect(mocks.txInsertValues).toHaveBeenCalledWith(expect.objectContaining({
+      paymentAdviceId: ADVICE_ID,
+      amount: "100.00",
+      remarks: "",
+      paidBy: "Sunil Salunke",
+    }));
+    expect(mocks.notifyPaymentEntry).toHaveBeenCalledWith(
+      expect.objectContaining({ remarks: "" }),
+      verifiedNeft.submittedByEmail,
+      ADVICE_ID,
+    );
   });
 
   it("400s when amount is not positive", async () => {
@@ -158,9 +169,19 @@ describe("POST /api/admin/advice/[id]/payment-entries", () => {
     expect(mocks.txInsert).not.toHaveBeenCalled();
   });
 
-  it("400s when bill_passed_for was never saved", async () => {
+  it("409s if the submission is Sent Back rather than active", async () => {
     mocks.limit.mockResolvedValueOnce([verifiedNeft]);
-    mocks.txExecute.mockResolvedValueOnce(lockedRow({ bill_passed_for: null }));
+    mocks.txExecute.mockResolvedValueOnce(lockedRow({ status: "SENT_BACK" }));
+    const res = await POST(req({ amount: 100, remarks: "must not pay" }), {
+      params: Promise.resolve({ id: ADVICE_ID }),
+    });
+    expect(res.status).toBe(409);
+    expect(mocks.txInsert).not.toHaveBeenCalled();
+  });
+
+  it("400s when payable_amount was never saved", async () => {
+    mocks.limit.mockResolvedValueOnce([verifiedNeft]);
+    mocks.txExecute.mockResolvedValueOnce(lockedRow({ payable_amount: null }));
     const res = await POST(req({ amount: 100, remarks: "test" }), {
       params: Promise.resolve({ id: ADVICE_ID }),
     });
@@ -168,9 +189,9 @@ describe("POST /api/admin/advice/[id]/payment-entries", () => {
     expect(mocks.txInsert).not.toHaveBeenCalled();
   });
 
-  it("400s when the amount exceeds the remaining balance (bill_passed_for minus prior entries, not the raw Total)", async () => {
+  it("400s when the amount exceeds the remaining balance (payable_amount minus prior entries, not the raw Total)", async () => {
     mocks.limit.mockResolvedValueOnce([verifiedNeft]);
-    mocks.txExecute.mockResolvedValueOnce(lockedRow({ bill_passed_for: "1000.00", total_paid: "800.00" }));
+    mocks.txExecute.mockResolvedValueOnce(lockedRow({ payable_amount: "1000.00", total_paid: "800.00" }));
     const res = await POST(req({ amount: 300, remarks: "too much" }), {
       params: Promise.resolve({ id: ADVICE_ID }),
     });
@@ -182,7 +203,7 @@ describe("POST /api/admin/advice/[id]/payment-entries", () => {
 
   it("records a partial payment: updates total_paid, does NOT dual-write status/approvedAt/approvedByName, and emails isFinal:false", async () => {
     mocks.limit.mockResolvedValueOnce([verifiedNeft]);
-    mocks.txExecute.mockResolvedValueOnce(lockedRow({ bill_passed_for: "1000.00", total_paid: "0.00" }));
+    mocks.txExecute.mockResolvedValueOnce(lockedRow({ payable_amount: "1000.00", total_paid: "0.00" }));
     const res = await POST(req({ amount: 400, remarks: "Basic Amount paid now" }), {
       params: Promise.resolve({ id: ADVICE_ID }),
     });
@@ -219,7 +240,7 @@ describe("POST /api/admin/advice/[id]/payment-entries", () => {
 
   it("records the final payment: dual-writes status/approvedAt/approvedByName and emails isFinal:true", async () => {
     mocks.limit.mockResolvedValueOnce([verifiedNeft]);
-    mocks.txExecute.mockResolvedValueOnce(lockedRow({ bill_passed_for: "1000.00", total_paid: "600.00" }));
+    mocks.txExecute.mockResolvedValueOnce(lockedRow({ payable_amount: "1000.00", total_paid: "600.00" }));
     const res = await POST(req({ amount: 400, remarks: "GST portion recovered, paying now" }), {
       params: Promise.resolve({ id: ADVICE_ID }),
     });

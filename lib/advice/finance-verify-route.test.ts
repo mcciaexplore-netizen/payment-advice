@@ -88,7 +88,7 @@ describe("POST /api/admin/advice/[id]/verify", () => {
     expect(mocks.transaction).not.toHaveBeenCalled();
   });
 
-  it("auto-attributes verifiedBy from the logged-in session (no picker, no body), writes an audit entry with the verifier as actor, and emails the submitter with the NEFT document label", async () => {
+  it("verifies with no Bill Passed For/payable gate, auto-attributes the session, audits, and emails the submitter", async () => {
     mocks.limit.mockResolvedValueOnce([receivedNeft]);
     const res = await POST(req(), { params: Promise.resolve({ id: ADVICE_ID }) });
     expect(res.status).toBe(200);

@@ -190,6 +190,20 @@ export const paymentAdvices = pgTable("payment_advices", {
   // check) uses, unchanged.
   basicAmount: numeric("basic_amount", { precision: 14, scale: 2 }),
   gstAmount: numeric("gst_amount", { precision: 14, scale: 2 }),
+  // A single independent confirmation flag for regular NEFT GST recovery.
+  // This deliberately does not affect the main payable/payment lifecycle;
+  // Advance and Cash submissions never expose or set it.
+  gstSettled: boolean("gst_settled").default(false).notNull(),
+  gstSettledBy: text("gst_settled_by"),
+  gstSettledAt: timestamp("gst_settled_at", { withTimezone: true }),
+  // Finance's post-verification Arrears/TDS calculation. Nullable so
+  // historical rows (and Cash Vouchers, which never use this calculator)
+  // remain valid without a backfill. `payable_amount` is the immutable cap
+  // used by NEFT payment_entries once the first payment is recorded.
+  arrearsAmount: numeric("arrears_amount", { precision: 14, scale: 2 }),
+  arrearsTdsPercent: numeric("arrears_tds_percent", { precision: 5, scale: 2 }),
+  currentTdsPercent: numeric("current_tds_percent", { precision: 5, scale: 2 }),
+  payableAmount: numeric("payable_amount", { precision: 14, scale: 2 }),
   // Running total of payment_entries recorded against this advice — cached,
   // not derived via SUM() at render time (same reasoning as every other
   // derived-vs-cached decision in this schema: avoids an aggregate query on
@@ -410,6 +424,8 @@ export const paymentEntries = pgTable("payment_entries", {
     .notNull()
     .references(() => paymentAdvices.id, { onDelete: "cascade" }),
   amount: numeric("amount", { precision: 14, scale: 2 }).notNull(),
+  // Optional in the UI/API. Kept NOT NULL for backward schema stability;
+  // an omitted remark is stored as the empty string.
   remarks: text("remarks").notNull(),
   paidAt: timestamp("paid_at", { withTimezone: true }).notNull().defaultNow(),
   // Auto-attributed from the logged-in admin session, same snapshot-not-FK
