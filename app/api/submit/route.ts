@@ -32,6 +32,7 @@ import {
 import { verifyUploadedAttachments } from "@/lib/attachments/verify-uploaded";
 import { validateCashVoucherBillUploads } from "@/lib/attachments/cash-voucher-bills";
 import { isActiveVendor } from "@/lib/advice/vendor-check";
+import { captureVendorBankAccount } from "@/lib/advice/vendor-bank-accounts";
 import { todayInIst } from "@/lib/date-time";
 
 export const runtime = "nodejs";
@@ -190,6 +191,17 @@ export async function POST(req: NextRequest) {
           submittedAt: now,
         })
         .returning();
+
+      if (values.paymentMode === "NEFT" && !values.isAdvance) {
+        await captureVendorBankAccount(tx, {
+          vendorId: values.vendorId!,
+          bankAccountNo: values.bankAccountNo!,
+          bankIfsc: values.bankIfsc!,
+          beneficiaryName: values.beneficiaryName!,
+          sourceAdviceId: advice.id,
+          usedAt: now,
+        });
+      }
 
       await tx.insert(attachments).values(
         attachmentRecords.map((a) => ({

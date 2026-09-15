@@ -93,6 +93,37 @@ export const vendors = pgTable("vendors", {
   updatedAt: timestamp("updated_at", { withTimezone: true }),
 });
 
+/** A vendor can legitimately have more than one valid bank account (different
+ * branches, a bank change over time) — a proper one-to-many table, not
+ * single bank columns on `vendors`. Column names/types deliberately mirror
+ * `payment_advices.bank_account_no`/`bank_ifsc`/`beneficiary_name` exactly
+ * (same `text`, not re-typed) so values can move between the two without
+ * conversion. Deduplicated on (vendor, account, IFSC) — the same
+ * beneficiary name typo'd two different ways against an otherwise-identical
+ * account is still one bank account, not two rows; `beneficiaryName` here
+ * just reflects whichever submission most recently used it. `sourceAdviceId`
+ * is traceability only (which submission first captured this combination),
+ * not a hard requirement — nullable so a future admin-entered account
+ * doesn't need a fabricated advice to point at. */
+export const vendorBankAccounts = pgTable(
+  "vendor_bank_accounts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    vendorId: uuid("vendor_id")
+      .notNull()
+      .references(() => vendors.id),
+    bankAccountNo: text("bank_account_no").notNull(),
+    bankIfsc: text("bank_ifsc").notNull(),
+    beneficiaryName: text("beneficiary_name").notNull(),
+    sourceAdviceId: uuid("source_advice_id").references(() => paymentAdvices.id),
+    lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [unique().on(table.vendorId, table.bankAccountNo, table.bankIfsc)],
+);
+
 /** The pool of actual recommending officers (people, or the shared "DG" entity) — not
  * departments. Assigned per staff member via staff_authority_options, not
  * implied by which department a submitter belongs to. */

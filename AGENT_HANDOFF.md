@@ -3021,4 +3021,92 @@ schema errors on a real request. TypeScript, ESLint, full Vitest suite (427
 passed, 7 skipped — the GST-related test files are now correctly on the WIP
 branch, not main), and production build all clean on `main`.
 
+2026-09-15 — Claude — Built vendor bank-account memory on its own branch,
+`vendor-bank-accounts` (off `main` at `8cd27e1`, **not merged — awaiting
+explicit human approval per the brief**). Checked `main`, `dev`,
+`gst-settlement-payable-calculator-wip`, and the vendor-restriction work
+already on `main` first — no collision, since this branch is the first to
+touch the Bank Details fields on the Payee section.
+
+**Schema**: new `vendor_bank_accounts` table (migration `0021_illegal_legion`,
+applied to the shared dev DB), column names/types matching
+`payment_advices.bank_account_no`/`bank_ifsc`/`beneficiary_name` exactly.
+Deduplicated via `unique(vendor_id, bank_account_no, bank_ifsc)`.
+`source_advice_id` nullable (traceability only).
+
+**Backfill** (`scripts/backfill-vendor-bank-accounts.ts`, kept as a
+permanent script): 99 source rows (NEFT, non-advance, vendor_id set, bank
+details present) → 58 raw distinct combinations. Surfaced to the human
+before writing anything, per the brief's own "ask if this looks like data
+noise" clause — 3 of those 58 turned out to be typos, not real second
+accounts: KHAANE PE's "Account No. : 919010001820467" (label typed into the
+field) and "909010001820467" (digit transposition) are both really its one
+real account; Vehemence's "Vehemence" (vendor's own name typed into the
+account field) isn't a real account at all. Human confirmed the real values
+directly (KHAANE PE: `919010001820467`, exact beneficiary name "KHAANE PE";
+Vehemence: `920020058254777` / `UTIB0001436` from a shared bank-details
+image) and separately asked to exclude MSEDCL's 3 genuinely-distinct
+regional billing accounts from this backfill entirely ("keep bank details
+optional for this vendor") — MSEDCL starts at zero known accounts, same as
+any vendor with no history; nothing prevents it from accumulating multiple
+again going forward through ordinary use, since no per-vendor opt-out
+mechanism was requested or built. Net: **52 rows inserted, zero vendors
+with more than one account** after the 3 corrections/exclusions — meaning
+the "multiple accounts" UI path has no real backfilled example and needed a
+manually created live test (below).
+
+**Capture going forward** (`lib/advice/vendor-bank-accounts.ts`,
+`captureVendorBankAccount()`): wired into both `/api/submit` and
+`/api/edit/[token]`, inside the same transaction as the advice write.
+Inserts only if the (vendor, account, IFSC) combination is new; otherwise
+refreshes `last_used_at` only — `beneficiary_name` is deliberately never
+overwritten on a repeat match, so a later spelling drift/typo can't clobber
+an already-correct name (same reasoning the backfill's KHAANE PE correction
+relied on).
+
+**UI** (`components/form/VendorBankAccountFields.tsx`, new public
+`GET /api/vendors/[id]/bank-accounts`): renders above Bank Details on the
+regular Payment Advice form only (never Advance, which has no vendor
+typeahead — payee is always the submitter there). Zero accounts → renders
+nothing. Exactly one → auto-fills all three fields and shows "these bank
+details were auto-filled from a previous submission for this vendor —
+please verify they're correct before submitting"; fields stay editable.
+More than one → **never auto-fills**; lists every account ("A/c ending in
+####, IFSC ..., last used ...") plus an explicit "None of these — enter
+new bank details," and nothing fills in until an option is actively picked.
+The verify note only follows picking a real option, not manual entry,
+per the acceptance criteria's precise wording (the descriptive prose
+elsewhere was slightly looser on this point — deferred to the acceptance
+criteria as the tie-breaker). Internally keyed by `vendorId` so switching
+vendors remounts fresh state instead of needing a manual reset-in-effect
+(the latter trips this repo's `react-hooks/set-state-in-effect` lint rule).
+
+**Live-tested end-to-end against the real dev server + shared DB**: zero
+accounts (a never-submitted-against vendor) → confirmed empty response,
+no note. One account (KHAANE PE, post-backfill) → confirmed via direct API
+call. Multiple accounts → **created a real test case through the actual
+submission pipeline**, not simulated: a throwaway vendor, one real NEFT
+submission with bank set A (confirmed zero-accounts state beforehand,
+successful 200), a second real submission with bank set B (confirmed the
+one-account auto-fill note appeared beforehand, then overwrote it and
+submitted, 200) — then a third form load confirmed the picker showed both
+real accounts (most-recently-used first), confirmed the fields stayed
+**empty before any pick** (the core "never silently guess" rule), confirmed
+picking an option auto-filled it and showed the verify note, and confirmed
+picking "None of these" cleared the fields and hid the note. All throwaway
+data (vendor, 2 advices, their attachments/blobs, audit_log rows, and the
+`vendor_bank_accounts` rows) deleted afterward.
+
+`lib/advice/edit-resubmit-attachment-collision.test.ts`'s DB mock updated
+(`tx.insert(...).values(...)` now also returns an `onConflictDoUpdate`
+stub) since `captureVendorBankAccount`'s upsert runs inside that route's
+transaction too; fixed a resulting `tsc` typing regression in the same
+mock rather than loosening it silently. New
+`lib/db/migrations/vendor-bank-accounts-migration.test.ts` covers the
+migration's shape/dedup constraint. TypeScript, ESLint, full Vitest suite
+(431 passed, 7 skipped), and production build all clean.
+
+**Not merged to `main`** — branch pushed to origin, awaiting explicit human
+review/approval before any merge, per the brief.
+
 *End of handoff file. Both agents: read §0 again before starting work.*
