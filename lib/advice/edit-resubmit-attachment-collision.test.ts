@@ -69,6 +69,7 @@ function buildFormData() {
     submittedByDepartmentOption: "OTHERS",
     branch: "SB Road Office",
     recommendingAuthorityId: AUTHORITY_ID,
+    vendorId: "33333333-3333-4333-8333-333333333333",
     payeeName: "Acme Supplies",
     payeeAddress: "Pune",
     billNo: "INV-101",
@@ -104,6 +105,7 @@ describe("POST /api/edit/[token] — direct-upload replacement", () => {
     vi.clearAllMocks();
     mocks.where
       .mockImplementationOnce(() => queryResult([advice]))
+      .mockImplementationOnce(() => queryResult([{ isActive: true }]))
       .mockImplementationOnce(() => queryResult([
         { id: "a1", paymentAdviceId: ADVICE_ID, docType: "TAX_INVOICE", blobPathname: OLD_PATH },
         { id: "a2", paymentAdviceId: ADVICE_ID, docType: "APPROVAL_BUDGET", blobPathname: "old-approval.pdf" },

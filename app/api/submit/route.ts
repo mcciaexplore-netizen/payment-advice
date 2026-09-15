@@ -31,6 +31,7 @@ import {
 } from "@/lib/attachments/client-upload";
 import { verifyUploadedAttachments } from "@/lib/attachments/verify-uploaded";
 import { validateCashVoucherBillUploads } from "@/lib/attachments/cash-voucher-bills";
+import { isActiveVendor } from "@/lib/advice/vendor-check";
 import { todayInIst } from "@/lib/date-time";
 
 export const runtime = "nodejs";
@@ -51,6 +52,17 @@ export async function POST(req: NextRequest) {
     );
   }
   const values = parsed.data;
+
+  // Zod only checked vendorId is a UUID-shaped string; confirm it's an
+  // actual, currently-active vendor before writing anything — closes the
+  // direct-API-bypass path where a caller skips the typeahead entirely and
+  // posts an arbitrary or stale id.
+  if (values.paymentMode === "NEFT" && !values.isAdvance && !(await isActiveVendor(values.vendorId!))) {
+    return NextResponse.json(
+      { error: "Select a vendor from the list — free-text payee names are no longer accepted" },
+      { status: 400 },
+    );
+  }
 
   const attachmentResult = parseUploadedAttachments(formData.get("uploadedAttachments"));
   if ("error" in attachmentResult) {

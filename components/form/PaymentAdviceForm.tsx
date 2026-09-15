@@ -519,7 +519,7 @@ export function PaymentAdviceForm({
               help={
                 isAdvance
                   ? "Auto-filled from Your Name above — an advance is paid to you, the requester. Edit if needed."
-                  : "Search for an existing payee, or type a new name if this is their first payment."
+                  : "Search for an existing payee and select them from the list. Can't find this vendor? Contact Accounts department for listing."
               }
             >
               {isAdvance ? (
@@ -530,6 +530,7 @@ export function PaymentAdviceForm({
                   value={payeeName}
                   onChange={(v) => setValue("payeeName", v)}
                   onSelectVendor={applyVendor}
+                  onClearVendor={() => setValue("vendorId", undefined)}
                   hasError={!!errors.payeeName}
                 />
               )}

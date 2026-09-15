@@ -32,6 +32,7 @@ import {
 } from "@/lib/attachments/client-upload";
 import { verifyUploadedAttachments } from "@/lib/attachments/verify-uploaded";
 import { validateCashVoucherBillUploads } from "@/lib/attachments/cash-voucher-bills";
+import { isActiveVendor } from "@/lib/advice/vendor-check";
 import { todayInIst } from "@/lib/date-time";
 
 export const runtime = "nodejs";
@@ -75,6 +76,15 @@ export async function POST(
     );
   }
   const values = parsed.data;
+
+  // Same active-vendor guard as /api/submit — a resubmission can just as
+  // easily arrive via a direct API call with a bypassed/stale vendorId.
+  if (values.paymentMode === "NEFT" && !values.isAdvance && !(await isActiveVendor(values.vendorId!))) {
+    return NextResponse.json(
+      { error: "Select a vendor from the list — free-text payee names are no longer accepted" },
+      { status: 400 },
+    );
+  }
 
   const attachmentResult = parseUploadedAttachments(formData.get("uploadedAttachments"));
   if ("error" in attachmentResult) {
@@ -227,6 +237,16 @@ export async function POST(
             values.paymentMode === "NEFT" && !values.isAdvance
               ? values.gstAmount!.toFixed(2)
               : null,
+          gstSettled: false,
+          gstSettledBy: null,
+          gstSettledAt: null,
+          // The submission content (including Basic/GST) may have changed,
+          // so Finance must perform a fresh post-verification calculation.
+          // Historical calculator saves remain visible in audit_log.
+          arrearsAmount: null,
+          arrearsTdsPercent: null,
+          currentTdsPercent: null,
+          payableAmount: null,
           natureOfExpenditure: values.isAdvance
             ? values.purposeOfAdvance ?? ""
             : values.paymentMode === "CASH"

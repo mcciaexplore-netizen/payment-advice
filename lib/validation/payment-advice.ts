@@ -301,6 +301,19 @@ export const paymentAdviceFormSchema = z
     // details on file as staff, and the fields stay visible/editable on the
     // form in case they want to supply them anyway, just not required.
     if (data.paymentMode === "NEFT" && !data.isAdvance) {
+      // A regular Payment Advice must name a real vendor selected from the
+      // list — free-text payee names are no longer accepted here (Advance
+      // Payment is unaffected: payee is always the submitter there, via a
+      // plain editable field, never this typeahead). This only enforces
+      // presence; that the id actually belongs to a real, active vendor is
+      // checked server-side against the database, since Zod alone can't.
+      if (!data.vendorId) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["payeeName"],
+          message: "Select a vendor from the list — free-text payee names are no longer accepted",
+        });
+      }
       if (!data.enclosures) {
         ctx.addIssue({
           code: "custom",
@@ -515,8 +528,29 @@ export const paymentEntrySchema = z.object({
     .number()
     .positive("Payment amount must be greater than 0")
     .multipleOf(0.01, "Payment amount can have at most 2 decimal places"),
-  remarks: requiredTrimmed("Remarks are required for every payment entry"),
+  remarks: optionalTrimmed(),
 });
+
+const tdsPercentSchema = z.union([
+  z.literal(0),
+  z.literal(1),
+  z.literal(2),
+  z.literal(5),
+  z.literal(10),
+  z.literal(31.2),
+]);
+
+export const payableCalculatorSchema = z.object({
+  arrearsAmount: z
+    .number()
+    .nonnegative("Arrears amount cannot be negative")
+    .multipleOf(0.01, "Arrears amount can have at most 2 decimal places")
+    .nullable()
+    .optional(),
+  currentTdsPercent: tdsPercentSchema,
+});
+
+export const gstSettlementSchema = z.object({ settled: z.literal(true) });
 
 export const sendBackSchema = z.object({
   adminRemarks: requiredTrimmed("Remarks are required to send an entry back"),

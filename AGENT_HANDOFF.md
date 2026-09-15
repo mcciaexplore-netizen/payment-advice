@@ -47,7 +47,14 @@ Design system: Navy `#0B1F3A`, Forest green `#2E8B57`, Amber `#E8A33D`. Headings
 
 ## 3. Current State (update this every session)
 
-**Last updated:** 9 September 2026, by Codex (submitter notification after recommendation)
+**Last updated:** 11 September 2026, by Codex (shared-rate Arrears/TDS calculator)
+
+### Completed locally — Arrears/TDS Payable Calculator + GST Settlement Tracker (Codex, 2026-09-11; pending commit/deployment)
+- Finance's active Payment Advice/Advance workflow no longer uses `bill_passed_for`: after Verification it shows Basic, regular-NEFT GST/Total, optional Arrears, TDS, and the persisted Payable Amount that caps all later payment entries. Regular Cash Voucher deliberately retains its existing Bill Passed For and one-shot payment behavior. The calculation and payment-entry writes remain transaction/row-lock protected, and the calculator becomes read-only after the first payment.
+- The calculator was simplified after review to **one Current TDS radio group** (`0/1/2/5/10/31.2%`). That one selected rate is applied to both Basic and optional Arrears. The UI now shows Current TDS Amount, conditionally shows Arrears TDS Amount when Arrears was entered, always shows Total TDS Amount, and computes `Payable = Basic - Total TDS`. The old `arrears_tds_percent` database field remains only as a synchronized compatibility mirror of `current_tds_percent`; neither the client nor server accepts a second independently selectable rate.
+- Regular NEFT with GST now has an independent post-verification GST Settlement Tracker (amount + required remarks + permanent history), backed by additive `gst_settlements`; it remains actionable after the main payable amount is fully settled. Advance continues to hide GST/Total and never receives the tracker.
+- Additive migration `0021_melted_network.sql` contains the nullable calculator columns and `gst_settlements`. **It has not been applied to production.** Historical `bill_passed_for` values are untouched.
+- Isolated live test (local PostgreSQL, no production mutation): Basic ₹10,000 + Arrears ₹20,000 + shared 10% returned and rendered Current TDS ₹1,000, Arrears TDS ₹2,000, Total TDS ₹3,000, Payable ₹7,000. DB read-back was `20000.00 | 10.00 | 10.00 | 7000.00`; rendered HTML had exactly six radios in one `current-tds-*` group and zero `arrears-tds-*` radios. Full verification: `tsc --noEmit` clean, ESLint clean, Vitest **66/66 files, 438 passed, 7 intentionally skipped**, and production build passed (the first sandboxed Turbopack attempt was environment-blocked from binding its worker port; the unchanged escalated rerun passed).
 
 ### Shipped — Submitter email after Authority recommendation (Codex, 2026-09-09)
 - Added one shared MCCIA-branded HTML email telling the submitter that their Payment Advice, Cash Payment Voucher, or Advance Payment was recommended by the named Recommending Authority and forwarded to Finance. It includes the correct reference number, payee, amount, IST-formatted Form Date, and current stage; the subject is `{document type} {reference} Recommended — Forwarded to Finance`.
@@ -893,6 +900,8 @@ Requested because every `admin_users` password (Sunil's, Abha's, the ALL account
 
 Status legend: 🔴 unverified / high risk · 🟡 unverified / lower risk · 🟢 verified
 
+- 🔴 **Production compatibility decision required before migration 0021/deployment:** read-only production audit found one existing open partial Payment Advice, `MCCIA/2026-27/0001`, with `bill_passed_for = 5040.00`, `total_paid = 4800.00`, and one payment entry, but naturally no new `payable_amount`. The new lock-after-first-payment safeguard would correctly prevent recalculation yet leave its remaining ₹240 without a cap. Proposed compatibility migration: for existing rows that already have `payment_entries`, copy their existing `bill_passed_for` into `payable_amount` once, while leaving `bill_passed_for` itself untouched. The human has not yet confirmed this data migration; do not apply 0021 or deploy the calculator until they do.
+
 - 🟢 **Submitter Branch migration applied 2026-09-07:** additive migration `0018_swift_grey_gargoyle.sql` is now applied to the configured production database. No historical rows were backfilled or rewritten; historical Branch remains null by design. No test submission/reference number was created.
 
 - 🔴 **The Purchase Order/Delivery Challan attachment fix (2026-09-05) is committed locally but not yet pushed/deployed — Satish Joshi's real stuck resubmission (`MCCIA/2026-27/0018`) cannot succeed until it reaches production.** Confirm with the human before pushing to `main`, per this session's standing caution around concurrent work in this repo. Once deployed, Satish (or whoever tells him) needs to know he can now go back to his edit link and retry — his edit token is still valid (expires 2026-09-19).
@@ -1030,6 +1039,15 @@ Append one entry per session, newest at the top. Keep entries short — this is 
 (Note: this header was accidentally dropped in an earlier edit and restored 2026-08-01 by Claude Code — no content was lost, only the heading line.)
 
 ```
+2026-09-11 — Codex — Completed the uncommitted Payment Advice/Advance
+Arrears/TDS calculator and regular-NEFT GST tracker work, then simplified
+the calculator to one shared Current TDS selection for Basic and Arrears.
+Added the Total TDS line and verified the required 20,000/10,000/10% worked
+example live against an isolated local DB (1,000 + 2,000 = 3,000 TDS,
+7,000 payable). tsc, ESLint, 438 tests (7 skipped), and build pass. Migration
+0021 remains unapplied to production and the existing partial-payment
+compatibility backfill still awaits the human's explicit confirmation.
+
 2026-09-05 — Claude Code — Checked recommending_authorities first per
 instruction, found a clean existing "Satish Joshi" row, reused it (no
 duplicate created). Created his admin_users AUTHORITY login linked to it,
@@ -2847,5 +2865,106 @@ specific XLRI program installment vs. a general expense-advance account) —
 recommended leaving unlinked, same reasoning as ANIRUDDHA BRAHMA.
 
 2026-09-11 — Codex — Fixed the Finance Admin Vendors list pagination gap. The page already queried with `page`, `limit`, and `offset` and displayed `Page X of Y`, but rendered no navigation controls at all. Added accessible Previous/Next controls with correct first/last-page disabled states and preservation/encoding of the active company-name search. Added `lib/admin/vendor-pagination.ts` plus three unit tests. Read-only authenticated live render against real vendor data confirmed `/admin/vendors?page=2` returns 200, displays `Page 2 of 27`, and links correctly to pages 1 and 3; no vendor data was changed.
+
+2026-09-15 — Claude — Shipped the go-forward vendor-dropdown-only restriction
+for the regular Payment Advice (NEFT) form (Cash Voucher has no Payee
+section; Advance's payee is always the submitter via a plain field — neither
+is affected). Free-text payee names are no longer accepted; a real, active
+vendor must be selected.
+
+**Step 1 — fresh audit (numbers only, not reused from the 2026-09-10
+snapshot, which was already a day stale last time):** NEFT total 126→**143**
+since 2026-09-10, free-text 47→**51** (**35.7%**). Full tiered breakdown
+(exact-match-but-unlinked, suffix-variant, weak/questionable, duplicate
+pairs, genuinely-new) re-confirmed against today's DB — see this session's
+chat report for the complete per-name table; not duplicated here to avoid a
+second, driftable copy of the same data the 2026-09-10 entry already
+describes the shape of.
+
+**Step 2 — recurring genuinely-new vendors created before the restriction
+shipped, so real repeat submitters aren't immediately locked out:** 6 new
+name-only `vendors` rows (matching the existing "name populated, rest blank"
+import convention) — Supriya Bhandari and Associates (×4 historical uses),
+Ganesh Mate (×3 — new since 2026-09-10's audit), CA Rahul Subhashrao
+Kulkarni (×2), Khane Pe (×2), Sagar M. Gayke (×2), Tlpglobus Solutions Pvt
+Ltd. (×2). Confirmed none pre-existed (case-insensitive check) before
+creating. This is a superset of the unexecuted 2026-09-10 Part C proposal
+(same 5 names plus Ganesh Mate) — that proposal is now effectively absorbed
+into this step for those 5; Ganesh Mate is new.
+
+**Step 3 — restriction implementation:**
+- `lib/validation/payment-advice.ts`: added a `superRefine` check requiring
+  `vendorId` whenever `paymentMode === "NEFT" && !isAdvance` (the existing,
+  already-used discriminator for "this is the regular Payment Advice form,
+  not Cash Voucher or Advance") — same block that already requires
+  enclosures/bank details there.
+- New `lib/advice/vendor-check.ts` (`isActiveVendor(vendorId)`): the DB-level
+  half Zod can't do — confirms the id is a real, currently-active vendor.
+  Called in both `/api/submit` and `/api/edit/[token]`, right after parsing
+  and before any attachment/DB work, returning a clean 400 with the exact
+  message `"Select a vendor from the list — free-text payee names are no
+  longer accepted"` rather than a raw FK-constraint crash.
+- `components/form/VendorTypeahead.tsx`: the "no results" dropdown state
+  (previously silent/empty) now shows `"Can't find this vendor? Contact
+  Accounts department for listing."`. Also closed a related gap surfaced
+  while implementing this: selecting a vendor then continuing to edit the
+  text afterward previously left a stale `vendorId` pointing at a vendor
+  whose name no longer matched the displayed text — added a
+  `selectedNameRef`-tracked effect that calls a new `onClearVendor` prop
+  when the text diverges from whichever vendor was last selected (seeded
+  from the field's mount-time value, so an `/edit/[token]` prefill's
+  already-correct selection isn't spuriously cleared on load).
+- Field help text updated to match (`"Search for an existing payee and
+  select them from the list. Can't find this vendor? Contact Accounts
+  department for listing."`).
+- `/admin/vendors` "New Vendor" is untouched — still the only way a new
+  vendor enters the system going forward.
+
+**Live-tested / verified — with one real environmental blocker, disclosed
+rather than glossed over:**
+- Direct API bypass: `POST /api/submit` with no `vendorId` and with a random
+  nonexistent `vendorId` both correctly returned `400` with the exact
+  contact-Accounts message, before any attachment or DB work ran.
+- Client UI: typing a genuinely non-matching name shows the contact-Accounts
+  message in the dropdown. Typing "Khane Pe" (one of the 6 just-created
+  vendors) character-for-character correctly auto-selected it (Part A's
+  2026-09-10 fix), the whole form passed client-side validation with no
+  error state, and the submit button proceeded to actually POST — confirming
+  the new vendor is genuinely selectable end-to-end on the client side.
+- **Could not confirm a full successful DB write for a valid-vendor
+  submission**, and could not live-test `/edit/[token]` at all: this local
+  dev environment currently 500s on *any* `payment_advices` read or write
+  (`column "gst_settled" does not exist`) because Codex's uncommitted GST
+  Settlement Tracker / Payable Calculator schema changes (migration `0021`,
+  currently `lib/db/migrations/0021_noisy_multiple_man.sql`) are sitting in
+  `lib/db/schema.ts` on disk without that migration having been applied to
+  the actual database. This is **pre-existing and unrelated to this
+  session's work** — confirmed by tracing the actual Postgres error back to
+  `app/api/edit/[token]/route.ts`'s existing advice-lookup `SELECT`, and
+  separately to `/api/submit`'s insert, neither of which this session
+  touched. One indirect but real signal this session's fix is still
+  correct: the "Khane Pe" submission attempt was NOT blocked by the new
+  vendor check (no "select a vendor" error) — it sailed through to the
+  insert stage and only then hit the unrelated `gst_settled` error,
+  confirming the valid-vendor path passes the new gate. **Whoever picks up
+  the GST/Payable Calculator work should apply migration 0021 before doing
+  any further local testing that touches `payment_advices`** — right now
+  every `/edit/[token]` request and every `/api/submit` call fails in this
+  environment.
+- `lib/advice/edit-resubmit-attachment-collision.test.ts`'s mocked-DB test
+  exercises the real `/api/edit/[token]` handler (including the new vendor
+  check) unaffected by the real-DB issue above — updated its fixture to
+  include a `vendorId` and its mock queue to include the new vendor-lookup
+  query; still passes.
+- TypeScript, ESLint, full Vitest suite (444 passed, 7 skipped), and
+  production build all clean.
+
+**Step 4 — historical cleanup remains a separate, unexecuted task,** exactly
+as scoped on 2026-09-10: the Tier 1 (exact-match, e.g. ATRONIX INDIA)/Tier 2
+(suffix-variant, e.g. Omkar Enterprises → OMKAR ENTERPRISES -CR) `vendor_id`
+backfill SQL, and the Tier 4 duplicate-pair (VIKAS K & CO. / VIKAS K& CO.;
+Vandana Milind Dandekar / VANDANA DANDEKAR) new-vendor-creation proposal, are
+both still proposed-only — nothing in `payment_advices` was touched this
+session. Resume that separately once explicitly confirmed.
 
 *End of handoff file. Both agents: read §0 again before starting work.*

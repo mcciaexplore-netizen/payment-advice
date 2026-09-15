@@ -118,6 +118,7 @@ const baseNeftSubmission = {
   submittedByDepartment: "ADMIN",
   branch: "SB Road Office" as const,
   recommendingAuthorityId: "11111111-1111-4111-8111-111111111111",
+  vendorId: "44444444-4444-4444-8444-444444444444",
   payeeName: "Acme Supplies",
   payeeAddress: "Pune",
   billNo: "INV-1",
@@ -136,6 +137,29 @@ const baseNeftSubmission = {
   enclosures: "Tax invoice and approval letter",
   specialRemarks: "Process against the attached invoice",
 };
+
+describe("Vendor selection required for a regular Payment Advice", () => {
+  it("rejects a regular Payment Advice with no vendorId (free-text payee is no longer accepted)", () => {
+    const noVendor: Record<string, unknown> = { ...baseNeftSubmission };
+    delete noVendor.vendorId;
+    const result = paymentAdviceFormSchema.safeParse(noVendor);
+    expect(result.success).toBe(false);
+    if (!result.success) expect(result.error.issues.some((issue) => issue.path[0] === "payeeName")).toBe(true);
+  });
+
+  it("accepts a regular Payment Advice with a vendorId", () => {
+    expect(paymentAdviceFormSchema.safeParse(baseNeftSubmission).success).toBe(true);
+  });
+
+  it("does not require vendorId for an Advance Payment (payee is always the submitter there)", () => {
+    const result = paymentAdviceFormSchema.safeParse(baseAdvanceNeftSubmission);
+    expect(result.success).toBe(true);
+  });
+
+  it("does not require vendorId for a Cash Voucher (no vendor typeahead exists there)", () => {
+    expect(paymentAdviceFormSchema.safeParse(baseCashSubmission).success).toBe(true);
+  });
+});
 
 describe("NEFT Basic/GST split validation", () => {
   it("accepts a NEFT submission when basicAmount + gstAmount equals amount", () => {

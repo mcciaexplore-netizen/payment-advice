@@ -19,12 +19,20 @@ export function VendorTypeahead({
   value,
   onChange,
   onSelectVendor,
+  onClearVendor,
   hasError,
 }: {
   id?: string;
   value: string;
   onChange: (value: string) => void;
   onSelectVendor: (vendor: VendorSearchResult) => void;
+  /** Called when the field's text diverges from the vendor that was last
+   * selected (by click or exact-typed-match) — e.g. the person picks a
+   * vendor, then keeps typing and changes the name. Without this, vendorId
+   * would silently keep pointing at the old vendor while the displayed
+   * text no longer matches it, defeating the point of requiring a real
+   * selection at all. */
+  onClearVendor: () => void;
   hasError?: boolean;
 }) {
   const [results, setResults] = useState<VendorSearchResult[]>([]);
@@ -40,6 +48,14 @@ export function VendorTypeahead({
   // the vendor's current live data — correct for a deliberate selection,
   // wrong for an untouched prefill.
   const hasTypedRef = useRef(false);
+  // Name of the vendor last selected (by click or exact-typed-match), so a
+  // further edit that moves the text away from it can clear the stale
+  // vendorId rather than silently leaving it pointing at the wrong vendor.
+  // Seeded from whatever text is present on mount (an /edit/[token] resubmit
+  // prefill included) — if that prefill already carries a real vendorId, an
+  // edit away from it should clear it exactly the same as a fresh selection
+  // would; if it doesn't, there's no vendorId to clear either way.
+  const selectedNameRef = useRef<string | null>(value.trim() || null);
 
   const trimmedValue = value.trim();
   const queryTooShort = trimmedValue.length < 2;
@@ -78,9 +94,24 @@ export function VendorTypeahead({
     const exact = results.find(
       (r) => r.companyName.trim().toLowerCase() === trimmedValue.toLowerCase(),
     );
-    if (exact) onSelectVendor(exact);
+    if (exact) {
+      selectedNameRef.current = exact.companyName;
+      onSelectVendor(exact);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- onSelectVendor identity is not meant to retrigger this; only the value/results should.
   }, [results, trimmedValue]);
+
+  // If the text moves away from whichever vendor was last selected (typed
+  // further, edited, deleted), the previous selection no longer applies —
+  // clear it instead of leaving a stale vendorId pointing at mismatched text.
+  useEffect(() => {
+    if (!hasTypedRef.current || selectedNameRef.current === null) return;
+    if (trimmedValue.toLowerCase() !== selectedNameRef.current.toLowerCase()) {
+      selectedNameRef.current = null;
+      onClearVendor();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- onClearVendor identity is not meant to retrigger this; only the value should.
+  }, [trimmedValue]);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -102,7 +133,7 @@ export function VendorTypeahead({
         hasError={hasError}
         value={value}
         autoComplete="off"
-        placeholder="Start typing to search saved payees, or type a new name"
+        placeholder="Start typing to search saved payees"
         onChange={(e) => {
           hasTypedRef.current = true;
           onChange(e.target.value);
@@ -112,16 +143,21 @@ export function VendorTypeahead({
           if (visibleResults.length > 0) setOpen(true);
         }}
       />
-      {open && !queryTooShort && (loading || visibleResults.length > 0) && (
+      {open && !queryTooShort && (
         <div className="absolute z-20 mt-1 w-full max-h-64 overflow-auto rounded-md border border-gray-200 bg-white shadow-lg">
           {loading ? (
             <div className="px-3 py-2 text-sm text-gray-500">Searching…</div>
+          ) : visibleResults.length === 0 ? (
+            <div className="px-3 py-2 text-sm text-gray-600">
+              Can&apos;t find this vendor? Contact Accounts department for listing.
+            </div>
           ) : (
             visibleResults.map((vendor) => (
               <button
                 type="button"
                 key={vendor.id}
                 onClick={() => {
+                  selectedNameRef.current = vendor.companyName;
                   onSelectVendor(vendor);
                   setOpen(false);
                 }}
