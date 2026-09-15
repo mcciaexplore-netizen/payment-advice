@@ -8,6 +8,7 @@ import { upload } from "@vercel/blob/client";
 import { Field } from "@/components/ui/Field";
 import { Input, Select, Textarea } from "@/components/ui/Input";
 import { VendorTypeahead, VendorSearchResult } from "@/components/form/VendorTypeahead";
+import { VendorBankAccountFields } from "@/components/form/VendorBankAccountFields";
 import { StaffNameTypeahead, StaffSearchResult } from "@/components/form/StaffNameTypeahead";
 import { RecommendingAuthorityField } from "@/components/form/RecommendingAuthorityField";
 import { FileUploadSlot } from "@/components/form/FileUploadSlot";
@@ -132,6 +133,7 @@ export function PaymentAdviceForm({
 
   const paymentMode = useWatch({ control, name: "paymentMode" });
   const payeeName = useWatch({ control, name: "payeeName" }) ?? "";
+  const vendorId = useWatch({ control, name: "vendorId" });
   const submittedByName = useWatch({ control, name: "submittedByName" }) ?? "";
   const submittedByEmail = useWatch({ control, name: "submittedByEmail" }) ?? "";
   const submittedByDepartmentOption = useWatch({ control, name: "submittedByDepartmentOption" });
@@ -276,6 +278,16 @@ export function PaymentAdviceForm({
     if (vendor.email) setValue("payeeEmail", vendor.email);
     if (vendor.gstin) setValue("payeeGstin", vendor.gstin);
     if (vendor.udyamNumber) setValue("payeeUdyamNumber", vendor.udyamNumber);
+  }
+
+  // Fired by VendorBankAccountFields — either a known account was applied
+  // (auto-filled, or the submitter picked one of several) or `null` for an
+  // explicit "None of these" manual-entry choice, which clears the fields
+  // the same way a genuinely new vendor with no history on file would.
+  function applyVendorBankAccount(account: { bankAccountNo: string; bankIfsc: string; beneficiaryName: string } | null) {
+    setValue("bankAccountNo", account?.bankAccountNo ?? "");
+    setValue("bankIfsc", account?.bankIfsc ?? "");
+    setValue("beneficiaryName", account?.beneficiaryName ?? "");
   }
 
   async function onSubmit(values: PaymentAdviceFormValues) {
@@ -743,7 +755,9 @@ export function PaymentAdviceForm({
                   Optional for an advance — Finance already has your bank details on file. Fill these
                   in only if you want to provide them here as well.
                 </p>
-              ) : null}
+              ) : (
+                <VendorBankAccountFields vendorId={vendorId} onApply={applyVendorBankAccount} />
+              )}
               <Field
                 label="Bank A/c No."
                 required={!isAdvance}
