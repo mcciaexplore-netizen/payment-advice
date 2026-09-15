@@ -27,7 +27,8 @@ const mocks = vi.hoisted(() => {
   // chains .onConflictDoUpdate(...) — every values() call needs to return
   // something with that method, even the ones (attachments, cashVoucherItems,
   // etc.) that never call it.
-  const txValues = vi.fn(() => ({ onConflictDoUpdate: vi.fn() }));
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- matches values()'s real call shape (arbitrary insert payloads) without fighting the mock's inferred generic.
+  const txValues = vi.fn<(...args: any[]) => any>(() => ({ onConflictDoUpdate: vi.fn() }));
   const txInsert = vi.fn(() => ({ values: txValues }));
   const txDelete = vi.fn(() => ({ where: vi.fn() }));
   const txUpdate = vi.fn(() => ({ set: vi.fn(() => ({ where: vi.fn() })) }));
