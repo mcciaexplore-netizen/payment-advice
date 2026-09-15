@@ -900,7 +900,7 @@ Requested because every `admin_users` password (Sunil's, Abha's, the ALL account
 
 Status legend: 🔴 unverified / high risk · 🟡 unverified / lower risk · 🟢 verified
 
-- 🔴 **URGENT — Codex: your GST Settlement Tracker / Payable Calculator schema change is currently blocking everyone's local testing of `payment_advices`, 2026-09-15.** `lib/db/schema.ts` on disk (uncommitted) references columns (`gst_settled`, `arrears_amount`, `current_tds_percent`, `payable_amount`, etc.) that migration `0021` (`lib/db/migrations/0021_noisy_multiple_man.sql`, also uncommitted) hasn't actually been applied to the shared local dev database yet. Right now, in this environment, **every single `payment_advices` read or write fails**: `column "gst_settled" does not exist` (Postgres error `42703`). Confirmed independently while live-testing an unrelated vendor-restriction feature — traced the exact failure to `app/api/edit/[token]/route.ts`'s plain advice-lookup `SELECT` and separately to `/api/submit`'s insert, neither of which that session's work touched. This will block anyone (human or agent) who tries to submit, edit, or view a Payment Advice locally until resolved. **Please do one of, and confirm which, before anyone else runs local tests against `payment_advices`:** (1) apply migration `0021` to the local dev database now, so the schema matches what your code expects — note the existing item just below about a production-compatibility decision (`bill_passed_for`/`payable_amount` backfill for the one open partial-payment row) that's still outstanding for *production*, but that doesn't block applying it *locally* to unblock testing; or (2) if this work isn't ready to apply yet, commit your current progress to its own branch so it stops sitting as an unapplied local-only change blocking everyone else.
+- 🟢 **RESOLVED 2026-09-15 by Claude — the GST Settlement Tracker / Payable Calculator local-DB blocker flagged earlier today.** Codex: your uncommitted work is safe and unchanged, now on branch `gst-settlement-payable-calculator-wip` (pushed to origin), not lost — `main`'s working tree just no longer carries it uncommitted. See the full session-log entry below for what happened, including a mistake I made and fixed in the same session (my own earlier commit had accidentally swept some of this branch's content onto `main`, which I've since corrected). Apply migration `0021` on that branch (or wherever you continue this work) when you're ready — the production-compatibility decision on `bill_passed_for`/`payable_amount` backfill (next item below) is still outstanding and unrelated to this local-unblock.
 
 - 🔴 **Production compatibility decision required before migration 0021/deployment:** read-only production audit found one existing open partial Payment Advice, `MCCIA/2026-27/0001`, with `bill_passed_for = 5040.00`, `total_paid = 4800.00`, and one payment entry, but naturally no new `payable_amount`. The new lock-after-first-payment safeguard would correctly prevent recalculation yet leave its remaining ₹240 without a cap. Proposed compatibility migration: for existing rows that already have `payment_entries`, copy their existing `bill_passed_for` into `payable_amount` once, while leaving `bill_passed_for` itself untouched. The human has not yet confirmed this data migration; do not apply 0021 or deploy the calculator until they do.
 
@@ -2968,5 +2968,57 @@ backfill SQL, and the Tier 4 duplicate-pair (VIKAS K & CO. / VIKAS K& CO.;
 Vandana Milind Dandekar / VANDANA DANDEKAR) new-vendor-creation proposal, are
 both still proposed-only — nothing in `payment_advices` was touched this
 session. Resume that separately once explicitly confirmed.
+
+2026-09-15 — Claude — Resolved the urgent local-DB blocker this session
+flagged earlier today (see §4's now-🟢 entry). The human asked directly to
+either apply migration `0021` or branch off Codex's uncommitted GST
+Settlement Tracker / Payable Calculator work. Chose branching: applying
+`0021` outright wasn't safe to do unilaterally, since Codex's own note (the
+"Production compatibility decision required" item, still open) explicitly
+says not to apply it until the human confirms a `payable_amount` backfill
+decision for one existing open partial-payment row — that gate is about
+data correctness, not just locally-vs-production, so I didn't treat "local
+only" as a loophole around it.
+
+Created `gst-settlement-payable-calculator-wip`, committed all 23 of Codex's
+modified/new files there (schema.ts, the new GST/Payable Calculator
+components, routes, tests, migration `0021` and its snapshot — my own
+unrelated leftover debug files in `scripts/` were correctly left out), and
+pushed it to origin. Switched `main` back to a clean tree with no GST
+columns referenced, confirmed a live `payment_advices` read/write actually
+works again.
+
+**Then found and fixed my own mistake from earlier today:** my
+vendor-restriction commit (`8186618`) had staged whole files
+(`lib/validation/payment-advice.ts`, `app/api/edit/[token]/route.ts`)
+without diffing carefully enough against just my own change — Codex's
+concurrent uncommitted edits to those same two files (making
+`paymentEntrySchema.remarks` optional, adding `payableCalculatorSchema`/
+`gstSettlementSchema`, and adding `gstSettled`/`arrearsAmount`/
+`payableAmount`-etc. fields to the edit-resubmit update payload) got swept
+in alongside my own vendorId change and silently committed to `main`. This
+only became visible once the branch-off correctly removed `schema.ts`'s
+matching columns, which made those two files fail `tsc`. Fixed by removing
+exactly the swept-in content from both files on `main` (commit `12f7866`),
+confirmed nothing was lost — both files' committed content is already
+present on the WIP branch via shared git history (it branched off *after*
+my accidental commit, so it inherited the correct version before my
+`12f7866` cleanup). `main`'s vendor-restriction feature (this session's
+prior work) is untouched by any of this.
+
+**Lesson for future sessions in this shared-working-directory repo:**
+`git add <file>` stages the file's *entire* current content, not just your
+own logical change — when another agent's uncommitted edits are sitting in
+the same file you're touching, diff your own change first (`git diff
+<file>`) before staging, don't just trust that a file "looks like yours"
+because you're the one who opened it.
+
+**Verified clean after both the unblock and the correction:** a live
+`db.select().from(paymentAdvices)` succeeded (163 rows), a direct
+`/api/submit` bypass attempt (no `vendorId`) still correctly 400s with the
+vendor-restriction message, dev server log showed no `gst_settled` or other
+schema errors on a real request. TypeScript, ESLint, full Vitest suite (427
+passed, 7 skipped — the GST-related test files are now correctly on the WIP
+branch, not main), and production build all clean on `main`.
 
 *End of handoff file. Both agents: read §0 again before starting work.*
