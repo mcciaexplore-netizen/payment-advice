@@ -756,7 +756,11 @@ export function PaymentAdviceForm({
                   in only if you want to provide them here as well.
                 </p>
               ) : (
-                <VendorBankAccountFields vendorId={vendorId} onApply={applyVendorBankAccount} />
+                <VendorBankAccountFields
+                  vendorId={vendorId}
+                  submitterEmail={submittedByEmail}
+                  onApply={applyVendorBankAccount}
+                />
               )}
               <Field
                 label="Bank A/c No."

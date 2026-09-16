@@ -39,3 +39,18 @@ export async function captureVendorBankAccount(
       set: { lastUsedAt: input.usedAt },
     });
 }
+
+/** True if a bank account with the given `restrictedToEmails` (the raw
+ * column value — null/empty means unrestricted) may be shown to a
+ * submitter who typed `submitterEmail`. Matching is case-insensitive since
+ * "Your Email" is free-typed, not selected from a canonical list. Used by
+ * GET /api/vendors/[id]/bank-accounts — the ONLY place restricted rows are
+ * ever filtered; never fetch every account and hide some client-side. */
+export function isBankAccountVisibleToEmail(
+  restrictedToEmails: string[] | null,
+  submitterEmail: string,
+): boolean {
+  if (!restrictedToEmails || restrictedToEmails.length === 0) return true;
+  const normalized = submitterEmail.trim().toLowerCase();
+  return restrictedToEmails.some((allowed) => allowed.toLowerCase() === normalized);
+}
