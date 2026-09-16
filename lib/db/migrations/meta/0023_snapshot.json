@@ -1,6 +1,6 @@
 {
-  "id": "34f42c1f-29dc-4d96-ab3b-520926dd3910",
-  "prevId": "94b1e553-54d7-47c1-9a5b-f37551f44b17",
+  "id": "c1bb1f5c-77bc-4e6c-9e82-f286cd9bcaaf",
+  "prevId": "b2b0cc69-695c-4ceb-9bde-9c6ed3dd80b7",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -637,6 +637,49 @@
         },
         "gst_amount": {
           "name": "gst_amount",
+          "type": "numeric(14, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "gst_settled": {
+          "name": "gst_settled",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "gst_settled_by": {
+          "name": "gst_settled_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "gst_settled_at": {
+          "name": "gst_settled_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "arrears_amount": {
+          "name": "arrears_amount",
+          "type": "numeric(14, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "arrears_tds_percent": {
+          "name": "arrears_tds_percent",
+          "type": "numeric(5, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "current_tds_percent": {
+          "name": "current_tds_percent",
+          "type": "numeric(5, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "payable_amount": {
+          "name": "payable_amount",
           "type": "numeric(14, 2)",
           "primaryKey": false,
           "notNull": false
@@ -1381,6 +1424,12 @@
         "last_used_at": {
           "name": "last_used_at",
           "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "restricted_to_emails": {
+          "name": "restricted_to_emails",
+          "type": "text[]",
           "primaryKey": false,
           "notNull": false
         },

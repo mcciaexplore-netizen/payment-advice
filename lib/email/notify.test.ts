@@ -97,7 +97,7 @@ const paymentEntryData = {
   remarks: "Basic Amount paid now",
   isFinal: false,
   totalPaid: "400.00",
-  billPassedFor: "1,000.00",
+  payableAmount: "1,000.00",
   remaining: "600.00",
   formDate: "01/08/2026",
 };

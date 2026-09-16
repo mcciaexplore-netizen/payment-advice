@@ -25,10 +25,9 @@ function clientIp(req: NextRequest): string | null {
  * authorization wall" decision for this whole feature, the UI only shows
  * this button to whichever role owns that submission's payment mode (or the
  * ALL-role account); any signed-in Admin session can still call this route
- * directly. Requires "Bill passed for Rs." to already be saved, same
- * validation Sanction used to enforce — that requirement isn't specific to
- * the old Sanction UI, it's a real business rule (never finalize a payment
- * without a passed amount), so it moved here rather than being dropped.
+ * directly. Regular Cash Voucher retains its existing Bill Passed For
+ * requirement unchanged. A Cash-routed Advance instead requires the new
+ * persisted payable calculation; it never writes the retired field.
  *
  * Dual-writes the legacy `status`/`approved_at`/`approved_by_name` fields
  * exactly as Sanction used to (human-confirmed judgment call, see
@@ -61,6 +60,7 @@ export async function POST(
       formDate: paymentAdvices.formDate,
       paymentMode: paymentAdvices.paymentMode,
       billPassedFor: paymentAdvices.billPassedFor,
+      payableAmount: paymentAdvices.payableAmount,
       verifiedAt: paymentAdvices.verifiedAt,
       paymentDoneAt: paymentAdvices.paymentDoneAt,
     })
@@ -81,15 +81,22 @@ export async function POST(
   }
 
   const body = await req.json().catch(() => null);
-  const billPassedForInput =
-    typeof (body as { billPassedFor?: unknown })?.billPassedFor === "number"
+  const billPassedForInput = advice.isAdvance
+    ? advice.payableAmount
+      ? Number(advice.payableAmount)
+      : undefined
+    : typeof (body as { billPassedFor?: unknown })?.billPassedFor === "number"
       ? (body as { billPassedFor: number }).billPassedFor
       : advice.billPassedFor
         ? Number(advice.billPassedFor)
         : undefined;
   if (billPassedForInput === undefined) {
     return NextResponse.json(
-      { error: `${billPassedForLabelFor(advice.isAdvance)} must be filled before marking Payment Done.` },
+      {
+        error: advice.isAdvance
+          ? "Save the Arrears/TDS payable calculation before marking Payment Done."
+          : `${billPassedForLabelFor(false)} must be filled before marking Payment Done.`,
+      },
       { status: 400 },
     );
   }
@@ -109,7 +116,7 @@ export async function POST(
       .set({
         paymentDoneAt: now,
         paymentDoneBy,
-        billPassedFor: amountCheck.data.toFixed(2),
+        ...(!advice.isAdvance ? { billPassedFor: amountCheck.data.toFixed(2) } : {}),
         status: "APPROVED",
         approvedAt: now,
         approvedByName: paymentDoneBy,
@@ -122,7 +129,9 @@ export async function POST(
       action: "PAYMENT_DONE",
       actor: paymentDoneBy,
       ipAddress: clientIp(req),
-      details: { paymentDoneBy, billPassedFor: amountCheck.data },
+      details: advice.isAdvance
+        ? { paymentDoneBy, payableAmount: amountCheck.data }
+        : { paymentDoneBy, billPassedFor: amountCheck.data },
     });
   });
 

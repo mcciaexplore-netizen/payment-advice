@@ -17,7 +17,7 @@ import { NameCorrectionAction } from "@/components/admin/NameCorrectionAction";
 import { SentBackIndicators } from "@/components/admin/SentBackIndicators";
 import { PaymentMode, Status, SANCTIONER_NAMES } from "@/lib/validation/payment-advice";
 import { getAdminSession } from "@/lib/admin-session";
-import { billPassedForLabelFor, displayNoFor, documentLabelFor } from "@/lib/advice/document-identity";
+import { displayNoFor, documentLabelFor } from "@/lib/advice/document-identity";
 import { pipelineStageFor } from "@/lib/advice/pipeline-stage";
 import { formatDateOnly, formatIstDateTime } from "@/lib/date-time";
 import { AttachmentPreview, InlineAttachmentPreview } from "@/components/ui/AttachmentPreview";
@@ -185,7 +185,6 @@ export default async function AdviceDetailPage({
             ) : (
               <Row label="Amount Rs." value={formatAmount(advice.amount)} />
             )}
-            <Row label={billPassedForLabelFor(advice.isAdvance)} value={formatAmount(advice.billPassedFor)} />
           </Section>
 
           <Section title="Narrative">
@@ -366,6 +365,11 @@ export default async function AdviceDetailPage({
             adviceId={advice.id}
             status={advice.status as Status}
             initialBillPassedFor={advice.billPassedFor}
+            basicAmount={advice.isAdvance ? advice.amount : advice.basicAmount}
+            gstAmount={advice.gstAmount}
+            initialArrearsAmount={advice.arrearsAmount}
+            initialCurrentTdsPercent={advice.currentTdsPercent}
+            initialPayableAmount={advice.payableAmount}
             initialEditToken={advice.editToken}
             paymentMode={advice.paymentMode as "NEFT" | "CASH"}
             isAdvance={advice.isAdvance}
@@ -388,6 +392,9 @@ export default async function AdviceDetailPage({
               paidAt: entry.paidAt.toISOString(),
               paidBy: entry.paidBy,
             }))}
+            gstSettled={advice.gstSettled}
+            gstSettledBy={advice.gstSettledBy}
+            gstSettledAt={advice.gstSettledAt?.toISOString() ?? null}
             currentUserFullName={session?.fullName ?? "Unknown"}
             currentUserRoles={session?.roles ?? ["ALL"]}
           />

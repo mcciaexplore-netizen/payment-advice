@@ -528,8 +528,29 @@ export const paymentEntrySchema = z.object({
     .number()
     .positive("Payment amount must be greater than 0")
     .multipleOf(0.01, "Payment amount can have at most 2 decimal places"),
-  remarks: requiredTrimmed("Remarks are required for every payment entry"),
+  remarks: optionalTrimmed(),
 });
+
+const tdsPercentSchema = z.union([
+  z.literal(0),
+  z.literal(1),
+  z.literal(2),
+  z.literal(5),
+  z.literal(10),
+  z.literal(31.2),
+]);
+
+export const payableCalculatorSchema = z.object({
+  arrearsAmount: z
+    .number()
+    .nonnegative("Arrears amount cannot be negative")
+    .multipleOf(0.01, "Arrears amount can have at most 2 decimal places")
+    .nullable()
+    .optional(),
+  currentTdsPercent: tdsPercentSchema,
+});
+
+export const gstSettlementSchema = z.object({ settled: z.literal(true) });
 
 export const sendBackSchema = z.object({
   adminRemarks: requiredTrimmed("Remarks are required to send an entry back"),

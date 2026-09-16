@@ -6,6 +6,8 @@ import { Status } from "@/lib/validation/payment-advice";
 import { AdminRole } from "@/lib/auth";
 import { billPassedForLabelFor } from "@/lib/advice/document-identity";
 import { formatIstDate } from "@/lib/date-time";
+import { PayableCalculator } from "@/components/admin/PayableCalculator";
+import { GstSettlementTracker } from "@/components/admin/GstSettlementTracker";
 
 const ROLE_LABELS: Record<AdminRole, string> = {
   PAYMENT_ADVICE: "a Payment Advice",
@@ -61,7 +63,7 @@ function PaymentEntriesList({ entries }: { entries: PaymentEntryDisplay[] }) {
                 {formatDateTime(entry.paidAt)} · {entry.paidBy}
               </span>
             </div>
-            <p className="mt-1 text-gray-600">{entry.remarks}</p>
+            {entry.remarks ? <p className="mt-1 text-gray-600">{entry.remarks}</p> : null}
           </li>
         ))}
       </ul>
@@ -73,6 +75,11 @@ export function AdviceActions({
   adviceId,
   status,
   initialBillPassedFor,
+  basicAmount,
+  gstAmount,
+  initialArrearsAmount,
+  initialCurrentTdsPercent,
+  initialPayableAmount,
   initialEditToken,
   paymentMode,
   isAdvance,
@@ -89,12 +96,20 @@ export function AdviceActions({
   paymentDoneBy,
   totalPaid,
   paymentEntries,
+  gstSettled,
+  gstSettledBy,
+  gstSettledAt,
   currentUserFullName,
   currentUserRoles,
 }: {
   adviceId: string;
   status: Status;
   initialBillPassedFor: string | null;
+  basicAmount: string | null;
+  gstAmount: string | null;
+  initialArrearsAmount: string | null;
+  initialCurrentTdsPercent: string | null;
+  initialPayableAmount: string | null;
   initialEditToken: string | null;
   paymentMode: "NEFT" | "CASH";
   isAdvance: boolean;
@@ -113,12 +128,15 @@ export function AdviceActions({
   totalPaid: string;
   /** NEFT only — Cash never has payment_entries rows. */
   paymentEntries: PaymentEntryDisplay[];
+  gstSettled: boolean;
+  gstSettledBy: string | null;
+  gstSettledAt: string | null;
   currentUserFullName: string;
   currentUserRoles: AdminRole[];
 }) {
   const router = useRouter();
-  // Same underlying billPassedFor field/column, just conditional label text
-  // for advances — "Amount Sanctioned" instead of "Bill passed for Rs.".
+  // Retained only for regular Cash Voucher, whose existing one-shot payment
+  // flow is explicitly out of scope and remains unchanged.
   const billPassedForLabel = billPassedForLabelFor(isAdvance);
   const [authorityLinkCopied, setAuthorityLinkCopied] = useState(false);
 
@@ -162,11 +180,8 @@ export function AdviceActions({
   const [editToken, setEditToken] = useState(initialEditToken);
   const [copied, setCopied] = useState(false);
 
-  // Locked once ≥1 payment has been recorded (NEFT) — see
-  // POST /api/admin/advice/[id]/route.ts. Cash's totalPaid is always
-  // "0.00", so this is always false for Cash.
-  const billPassedForLocked = paymentMode === "NEFT" && Number(totalPaid) > 0;
   const hasPaymentEntries = paymentMode === "NEFT" && paymentEntries.length > 0;
+  const canManagePayments = ownsSubmissionType(currentUserRoles, paymentMode);
 
   async function saveBillPassedFor() {
     setBillPassedForError(null);
@@ -312,7 +327,7 @@ export function AdviceActions({
   if (status === "REJECTED") return <div className="rounded-md border border-red-400 bg-red-50 p-4 text-sm text-red-950">This submission is permanently rejected. Its reference number remains assigned and will not be reused.</div>;
 
   if (status === "APPROVED") {
-    if (paymentMode === "CASH") {
+    if (paymentMode === "CASH" && !isAdvance) {
       // Unchanged — Cash's single one-shot terminal action.
       const doneAt = paymentDoneAt ?? sanctionedAt;
       const doneBy = paymentDoneBy ?? sanctionedBy;
@@ -338,31 +353,10 @@ export function AdviceActions({
       );
     }
 
-    // NEFT terminal state — Fully Payment Settled, reached via the payment
-    // entry that brought total_paid to (or past) bill_passed_for.
-    return (
-      <div className="flex flex-col gap-4 rounded-md border border-gray-200 p-4">
-        <div>
-          <p className="text-sm font-medium text-[#0b1f3a]">
-            {billPassedForLabel} {initialBillPassedFor ?? "—"}
-          </p>
-          <p className="text-sm text-gray-600">
-            Fully Payment Settled — ₹ {formatMoney(totalPaid)} paid.
-          </p>
-        </div>
-        <PaymentEntriesList entries={paymentEntries} />
-        <a
-          href={`/api/admin/advice/${adviceId}/pdf`}
-          className="inline-block w-fit rounded-md bg-[#0b1f3a] px-4 py-2 text-sm font-medium text-white hover:bg-[#0b1f3a]/90"
-        >
-          Download Payment Advice PDF
-        </a>
-      </div>
-    );
   }
 
   const remaining =
-    initialBillPassedFor != null ? Number(initialBillPassedFor) - Number(totalPaid) : null;
+    initialPayableAmount != null ? Number(initialPayableAmount) - Number(totalPaid) : null;
 
   return (
     <div className="flex flex-col gap-6 rounded-md border border-gray-200 p-4">
@@ -382,39 +376,30 @@ export function AdviceActions({
         </a>
       )}
 
-      <div className="flex flex-col gap-2">
+      {paymentMode === "CASH" && !isAdvance ? <div className="flex flex-col gap-2">
         <label className="text-sm font-medium text-[#0b1f3a]">{billPassedForLabel}</label>
-        {billPassedForLocked ? (
-          <p className="text-sm text-gray-600">
-            ₹ {formatMoney(initialBillPassedFor ?? "0")} — locked, a payment has already been
-            recorded against this advice.
-          </p>
-        ) : (
-          <>
-            <div className="flex items-center gap-2">
-              <input
-                type="number"
-                step="0.01"
-                min="0.01"
-                value={billPassedFor}
-                onChange={(e) => setBillPassedFor(e.target.value)}
-                className="admin-filter-input w-40"
-              />
-              <button
-                type="button"
-                onClick={saveBillPassedFor}
-                disabled={savingBillPassedFor || !billPassedFor}
-                className="rounded-md border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-50 disabled:opacity-50"
-              >
-                {savingBillPassedFor ? "Saving…" : "Save"}
-              </button>
-            </div>
-            {billPassedForError ? (
-              <p className="text-sm font-medium text-[#b3261e]">{billPassedForError}</p>
-            ) : null}
-          </>
-        )}
-      </div>
+        <div className="flex items-center gap-2">
+          <input
+            type="number"
+            step="0.01"
+            min="0.01"
+            value={billPassedFor}
+            onChange={(e) => setBillPassedFor(e.target.value)}
+            className="admin-filter-input w-40"
+          />
+          <button
+            type="button"
+            onClick={saveBillPassedFor}
+            disabled={savingBillPassedFor || !billPassedFor}
+            className="rounded-md border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-50 disabled:opacity-50"
+          >
+            {savingBillPassedFor ? "Saving…" : "Save"}
+          </button>
+        </div>
+        {billPassedForError ? (
+          <p className="text-sm font-medium text-[#b3261e]">{billPassedForError}</p>
+        ) : null}
+      </div> : null}
 
       {editToken ? (
         <div className="rounded-md bg-gray-50 p-3 text-sm">
@@ -499,10 +484,35 @@ export function AdviceActions({
         </div>
       ) : null}
 
+      {verifiedAt && (paymentMode === "NEFT" || isAdvance) ? (
+        <PayableCalculator
+          adviceId={adviceId}
+          basicAmount={basicAmount}
+          gstAmount={gstAmount}
+          isAdvance={isAdvance}
+          initialArrearsAmount={initialArrearsAmount}
+          initialCurrentTdsPercent={initialCurrentTdsPercent}
+          initialPayableAmount={initialPayableAmount}
+          locked={hasPaymentEntries || status === "APPROVED"}
+          canEdit={canManagePayments && status === "SUBMITTED"}
+        />
+      ) : null}
+
+      {verifiedAt && paymentMode === "NEFT" && !isAdvance && Number(gstAmount ?? 0) > 0 ? (
+        <GstSettlementTracker
+          adviceId={adviceId}
+          gstAmount={gstAmount ?? "0"}
+          gstSettled={gstSettled}
+          gstSettledBy={gstSettledBy}
+          gstSettledAt={gstSettledAt}
+          canEdit={canManagePayments && (status === "SUBMITTED" || status === "APPROVED")}
+        />
+      ) : null}
+
       {/* "Ready for Payment" is automatic the moment verifiedAt is set — no
           click required. Cash: unchanged single "Mark Payment Done" action.
           NEFT: multi-part "Record a Payment" (see AGENT_HANDOFF.md). */}
-      {verifiedAt && paymentMode === "CASH" && !paymentDoneAt ? (
+      {verifiedAt && status === "SUBMITTED" && paymentMode === "CASH" && !paymentDoneAt ? (
         <div className="flex flex-col gap-3 rounded-md border border-[#2e8b57]/30 bg-[#2e8b57]/5 p-4 text-sm">
           <p className="font-medium text-[#1e5c39]">Ready for Payment.</p>
           {ownsSubmissionType(currentUserRoles, paymentMode) ? (
@@ -510,9 +520,11 @@ export function AdviceActions({
               <p className="text-[#1e5c39]">
                 Will be recorded as paid by <span className="font-medium">{currentUserFullName}</span>.
               </p>
-              {!billPassedFor ? (
+              {!(isAdvance ? initialPayableAmount : billPassedFor) ? (
                 <p className="text-xs text-gray-500">
-                  &quot;{billPassedForLabel}&quot; above must be saved before marking Payment Done.
+                  {isAdvance
+                    ? "The payable calculation above must be saved before marking Payment Done."
+                    : `“${billPassedForLabel}” above must be saved before marking Payment Done.`}
                 </p>
               ) : null}
               {paymentDoneError ? (
@@ -521,7 +533,7 @@ export function AdviceActions({
               <button
                 type="button"
                 onClick={markPaymentDone}
-                disabled={markingPaymentDone || !billPassedFor}
+                disabled={markingPaymentDone || !(isAdvance ? initialPayableAmount : billPassedFor)}
                 className="w-fit rounded-md bg-[#2e8b57] px-4 py-2 text-sm font-medium text-white hover:bg-[#2e8b57]/90 disabled:opacity-50"
               >
                 {markingPaymentDone ? "Marking…" : "Mark Payment Done"}
@@ -536,15 +548,26 @@ export function AdviceActions({
         </div>
       ) : null}
 
+      {status === "APPROVED" && paymentMode === "CASH" && isAdvance ? (
+        <div className="rounded-md border border-[#2e8b57]/30 bg-[#2e8b57]/5 p-4 text-sm text-[#1e5c39]">
+          Payment Done{paymentDoneBy ? ` — ${paymentDoneBy}` : ""}
+          {paymentDoneAt ? ` on ${formatIstDate(paymentDoneAt)}` : ""}.
+        </div>
+      ) : null}
+
       {verifiedAt && paymentMode === "NEFT" ? (
         <div className="flex flex-col gap-4 rounded-md border border-[#2e8b57]/30 bg-[#2e8b57]/5 p-4 text-sm">
           <div>
             <p className="font-medium text-[#1e5c39]">
-              {Number(totalPaid) > 0 ? "Partial Payment Done." : "Ready for Payment."}
+              {status === "APPROVED"
+                ? "Fully Payment Settled."
+                : Number(totalPaid) > 0
+                  ? "Partial Payment Done."
+                  : "Ready for Payment."}
             </p>
             {remaining !== null ? (
               <p className="mt-1 text-[#1e5c39]">
-                Paid so far: ₹ {formatMoney(totalPaid)} of ₹ {formatMoney(initialBillPassedFor ?? "0")}{" "}
+                Paid so far: ₹ {formatMoney(totalPaid)} of ₹ {formatMoney(initialPayableAmount ?? "0")}{" "}
                 — ₹ {formatMoney(remaining)} remaining.
               </p>
             ) : null}
@@ -552,10 +575,10 @@ export function AdviceActions({
 
           <PaymentEntriesList entries={paymentEntries} />
 
-          {ownsSubmissionType(currentUserRoles, paymentMode) ? (
-            !billPassedFor ? (
+          {status === "SUBMITTED" && canManagePayments ? (
+            !initialPayableAmount ? (
               <p className="text-xs text-gray-500">
-                &quot;{billPassedForLabel}&quot; above must be saved before recording a payment.
+                The payable calculation above must be saved before recording a payment.
               </p>
             ) : (
               <div className="flex flex-col gap-2 rounded-md border border-[#2e8b57]/30 bg-white p-3">
@@ -575,7 +598,7 @@ export function AdviceActions({
                   />
                 </label>
                 <label className="text-sm font-medium text-[#0b1f3a]">
-                  Remarks <span className="text-xs font-normal text-[#b3261e]">Required</span>
+                  Remarks <span className="text-xs font-normal text-gray-500">Optional</span>
                   <textarea
                     value={entryRemarks}
                     onChange={(e) => setEntryRemarks(e.target.value)}
@@ -592,23 +615,23 @@ export function AdviceActions({
                 <button
                   type="button"
                   onClick={recordPayment}
-                  disabled={recordingPayment || !entryAmount || !entryRemarks.trim()}
+                  disabled={recordingPayment || !entryAmount}
                   className="w-fit rounded-md bg-[#2e8b57] px-4 py-2 text-sm font-medium text-white hover:bg-[#2e8b57]/90 disabled:opacity-50"
                 >
                   {recordingPayment ? "Recording…" : "Record Payment"}
                 </button>
               </div>
             )
-          ) : (
+          ) : status === "SUBMITTED" ? (
             <p className="text-xs text-gray-500">
               Only {ROLE_LABELS.PAYMENT_ADVICE} account (or an All-Access account) can record a
               payment.
             </p>
-          )}
+          ) : null}
         </div>
       ) : null}
 
-      <div className="flex gap-3">
+      {status !== "APPROVED" ? <div className="flex gap-3">
         {hasPaymentEntries ? (
           <p className="text-xs text-gray-500">
             Send Back is unavailable once a payment has been recorded against this advice.
@@ -622,7 +645,7 @@ export function AdviceActions({
             Send Back
           </button><button type="button" onClick={() => setShowReject((v) => !v)} className="rounded-md border border-red-500 px-4 py-2 text-sm font-medium text-red-950 hover:bg-red-50">Reject</button></>
         )}
-      </div>
+      </div> : null}
 
       {showSendBack && !hasPaymentEntries ? (
         <div className="flex flex-col gap-3 rounded-md border border-gray-300 bg-gray-50 p-4">

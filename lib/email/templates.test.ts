@@ -288,7 +288,7 @@ describe("renderPaymentEntryEmail", () => {
     entryAmount: "400.00",
     remarks: "Basic Amount paid now",
     totalPaid: "400.00",
-    billPassedFor: "1,000.00",
+    payableAmount: "1,000.00",
     remaining: "600.00",
     formDate: "01/08/2026",
   };
@@ -310,7 +310,7 @@ describe("renderPaymentEntryEmail", () => {
       isFinal: true,
     });
     expect(message.subject).toBe("Payment Advice MCCIA/2026-27/0050 — Payment Complete");
-    expect(message.html).toContain("full billed amount has now been settled");
+    expect(message.html).toContain("full payable amount has now been settled");
     expect(message.html).not.toContain("Partial Payment Recorded");
   });
 
