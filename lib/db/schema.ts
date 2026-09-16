@@ -117,6 +117,13 @@ export const vendorBankAccounts = pgTable(
     beneficiaryName: text("beneficiary_name").notNull(),
     sourceAdviceId: uuid("source_advice_id").references(() => paymentAdvices.id),
     lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+    // NULL/empty (the default for every account) = visible to everyone, as
+    // before. Populated = only a submitter whose typed "Your Email"
+    // case-insensitively matches one of these may see or use this specific
+    // account; everyone else must see this vendor as if it has zero
+    // accounts on file. Enforced in the GET /api/vendors/[id]/bank-accounts
+    // query itself, never filtered after the fact client-side.
+    restrictedToEmails: text("restricted_to_emails").array(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),

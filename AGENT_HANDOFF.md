@@ -47,7 +47,18 @@ Design system: Navy `#0B1F3A`, Forest green `#2E8B57`, Amber `#E8A33D`. Headings
 
 ## 3. Current State (update this every session)
 
-**Last updated:** 11 September 2026, by Codex (shared-rate Arrears/TDS calculator)
+**Last updated:** 16 September 2026, by Claude (per-account submitter restriction on vendor bank accounts)
+
+### Shipped (own branch, not merged) — Per-account submitter restriction on vendor bank accounts (Claude, 2026-09-16)
+- **The problem:** Prashant Girbane's (note the real spelling — no "h"; vendor row `PRASHANT GIRBANE`) saved bank account was visible/auto-fillable to any submitter who selected him as payee, even though only Ganesh Mate ever legitimately submits on his behalf. Built as a general, reusable capability — not a one-off hardcoded exception — since other individual payees with one designated submitter could come up again.
+- **Schema:** additive migration `0022_careful_venus.sql` adds `vendor_bank_accounts.restricted_to_emails` (nullable `text[]`, no default — NULL is implicitly "unrestricted," the same as every existing row). Applied to the shared dev DB.
+- **Enforcement (server-side, not client-side filtering):** `GET /api/vendors/[id]/bank-accounts` now accepts `?email=`, the submitter's typed "Your Email" (regular submitters aren't logged in — this is the only identity signal available). A row whose `restricted_to_emails` is non-empty is dropped entirely from the query response unless the caller's email case-insensitively matches one of the listed emails; the response shape for a disallowed caller is byte-for-byte identical to a vendor with zero bank-account history — nothing hints a restricted record was excluded. The matching logic itself is a pure, unit-tested function, `isBankAccountVisibleToEmail()` in `lib/advice/vendor-bank-accounts.ts` (new `lib/advice/vendor-bank-account-visibility.test.ts`, 9 tests).
+- **Form wiring:** `components/form/VendorBankAccountFields.tsx` now takes a `submitterEmail` prop (from `PaymentAdviceForm.tsx`'s already-watched `submittedByEmail`) and includes it in the fetch URL; the remount-via-key wrapper now keys on `vendorId:normalizedEmail` (not just `vendorId`) so editing the email after picking a vendor correctly refetches and re-decides zero/one/multiple, rather than leaving stale state from before the email was typed.
+- **Admin UI:** `/admin/vendors/[id]` (Finance Admin only, gated the same as every other `/admin` route) now has a "Saved Bank Accounts" section — new `components/admin/VendorBankAccountsAdmin.tsx`, backed by new `PATCH /api/admin/vendor-bank-accounts/[id]`. Add/remove restricted emails per account; an unrestricted account shows "Visible to everyone," a restricted one shows its allowed-email chips with a remove (×) button. Sending an empty list clears the restriction back to unrestricted (stored as `null`, not `[]`).
+- **Applied to this specific case:** sanity-checked `ganeshm@mcciapune.com` directly against `staff_members` first — exact match, "GANESH MATE," confirmed active. Found Prashant Girbane's vendor row and its one `vendor_bank_accounts` row (all 3 of his real submissions — `MCCIA/2026-27/0130`, `/0133`, `/0134` — were in fact submitted by Ganesh Mate, confirming the human's account of the situation exactly). Set `restricted_to_emails = ['ganeshm@mcciapune.com']` on that one row via a temporary one-off script (not kept — narrow single-row fix, unlike the earlier backfill script which stays permanent). Confirmed via direct query that it's the only non-null `restricted_to_emails` row in the table — no other vendor affected.
+- **Live-tested against the real dev server + real shared DB, both required cases:** `GET .../bank-accounts` with no `email` param, a random other email, and KHAANE PE (a different, unrestricted vendor) with an arbitrary email all confirmed unaffected/fully visible. Ganesh's exact email (and a mixed-case variant of it) correctly returned the one account; a random `someoneelse@mcciapune.com` correctly returned `{"accounts":[]}` — the API response itself was inspected directly (`curl`), not just the rendered UI, per the acceptance criteria's explicit requirement. A full Playwright run through the actual public form confirmed the same at the UI layer: Ganesh's email auto-fills the bank fields with the verify note shown; a random email leaves them blank with no note and no hint. The admin UI was also live-tested with a temporary locally-signed session JWT (never touching any real admin account's password, per this repo's standing rule) — add/remove of a throwaway restriction email round-tripped correctly through the real PATCH route, and the account was left in exactly its intended final state (`['ganeshm@mcciapune.com']`) afterward, verified by a direct DB read.
+- New `lib/db/migrations/vendor-bank-account-restrictions-migration.test.ts` (1 test, mirrors the existing migration-shape-test convention). TypeScript, ESLint, full Vitest suite (**447 passed, 7 skipped** — 9 new), and production build all clean.
+- **Not merged to `main`** — committed locally on `vendor-bank-account-restrictions` (off `main` at `ec5f939`); the push to `origin` was blocked by this session's own permission gate (pushing is a visible/shared-state action), so it's local-only pending the human's go-ahead to push (and, separately, to merge).
 
 ### Completed locally — Arrears/TDS Payable Calculator + GST Settlement Tracker (Codex, 2026-09-11; pending commit/deployment)
 - Finance's active Payment Advice/Advance workflow no longer uses `bill_passed_for`: after Verification it shows Basic, regular-NEFT GST/Total, optional Arrears, TDS, and the persisted Payable Amount that caps all later payment entries. Regular Cash Voucher deliberately retains its existing Bill Passed For and one-shot payment behavior. The calculation and payment-entry writes remain transaction/row-lock protected, and the calculator becomes read-only after the first payment.
@@ -900,6 +911,7 @@ Requested because every `admin_users` password (Sunil's, Abha's, the ALL account
 
 Status legend: 🔴 unverified / high risk · 🟡 unverified / lower risk · 🟢 verified
 
+- 🔴 **Per-account vendor bank-account submitter restriction (2026-09-16) is on branch `vendor-bank-account-restrictions`, NOT merged to `main`, NOT pushed to `origin` — this session's own push attempt was blocked by its permission gate.** Everything described in the "Shipped" entry above is real and verified locally (schema, server-side filtering, admin UI, tsc/lint/tests/build, plus live testing against the real dev server + real DB). The one real data change already made (Prashant Girbane's account restricted to `ganeshm@mcciapune.com`) is live on the shared dev DB regardless of branch/merge state, same reasoning as every other additive-migration-plus-data-change entry in this file — but the code implementing/enforcing it only exists on this unmerged, unpushed branch. **A human needs to explicitly say "push" and, separately, "merge" before either happens.**
 - 🟢 **RESOLVED 2026-09-15 by Claude — the GST Settlement Tracker / Payable Calculator local-DB blocker flagged earlier today.** Codex: your uncommitted work is safe and unchanged, now on branch `gst-settlement-payable-calculator-wip` (pushed to origin), not lost — `main`'s working tree just no longer carries it uncommitted. See the full session-log entry below for what happened, including a mistake I made and fixed in the same session (my own earlier commit had accidentally swept some of this branch's content onto `main`, which I've since corrected). Apply migration `0021` on that branch (or wherever you continue this work) when you're ready — the production-compatibility decision on `bill_passed_for`/`payable_amount` backfill (next item below) is still outstanding and unrelated to this local-unblock.
 
 - 🔴 **Production compatibility decision required before migration 0021/deployment:** read-only production audit found one existing open partial Payment Advice, `MCCIA/2026-27/0001`, with `bill_passed_for = 5040.00`, `total_paid = 4800.00`, and one payment entry, but naturally no new `payable_amount`. The new lock-after-first-payment safeguard would correctly prevent recalculation yet leave its remaining ₹240 without a cap. Proposed compatibility migration: for existing rows that already have `payment_entries`, copy their existing `bill_passed_for` into `payable_amount` once, while leaving `bill_passed_for` itself untouched. The human has not yet confirmed this data migration; do not apply 0021 or deploy the calculator until they do.
@@ -3108,5 +3120,77 @@ migration's shape/dedup constraint. TypeScript, ESLint, full Vitest suite
 
 **Not merged to `main`** — branch pushed to origin, awaiting explicit human
 review/approval before any merge, per the brief.
+
+2026-09-16 — Claude — Built a general, reusable per-account submitter
+restriction on vendor bank accounts, on its own branch
+`vendor-bank-account-restrictions` (off `main` at `ec5f939`, the tip
+untouched by the still-unmerged `ifsc-bank-name-lookup` branch — checked
+first, no collision). Applied immediately to the real case that prompted
+it: Prashant Girbane's (vendor row spelled `PRASHANT GIRBANE`, no "h" —
+worth knowing if searching for him again) one saved bank account should
+only be visible/usable by Ganesh Mate, who is in fact the submitter on all
+3 of his real historical submissions (`MCCIA/2026-27/0130`, `/0133`,
+`/0134`) — confirmed directly, not assumed.
+
+**Schema**: migration `0022_careful_venus.sql` adds
+`vendor_bank_accounts.restricted_to_emails` (nullable `text[]`, no
+default — every existing row is implicitly unrestricted). Applied to the
+shared dev DB.
+
+**Enforcement is server-side, not a client-side hide**: `GET
+/api/vendors/[id]/bank-accounts` now takes `?email=` (the submitter's
+typed "Your Email" — the only identity signal available, since regular
+submitters aren't logged in) and drops any row whose `restricted_to_emails`
+is non-empty unless the caller's email case-insensitively matches an entry.
+A disallowed caller's response is shaped identically to a vendor with zero
+bank-account history — no field, count, or flag hints a restricted record
+exists. The match logic is a pure function,
+`isBankAccountVisibleToEmail()` in `lib/advice/vendor-bank-accounts.ts`
+(new test file, 9 cases: null/empty = unrestricted, case-insensitivity on
+both sides, whitespace tolerance, multi-email lists, empty/blank submitted
+email against a real restriction).
+
+**Form**: `VendorBankAccountFields` now also takes `submitterEmail`
+(`PaymentAdviceForm.tsx`'s already-watched `submittedByEmail`) and includes
+it in the fetch; the existing remount-via-key pattern (from the original
+vendor-bank-accounts feature) now keys on `vendorId:normalizedEmail`
+instead of just `vendorId`, so changing the typed email after picking a
+vendor correctly refetches instead of leaving a stale zero/one/multiple
+decision from before the email existed.
+
+**Admin UI**: new "Saved Bank Accounts" section on `/admin/vendors/[id]`
+(`components/admin/VendorBankAccountsAdmin.tsx`, backed by new `PATCH
+/api/admin/vendor-bank-accounts/[id]`, gated by the same Finance-Admin-only
+`/api/admin/*` proxy rule as every other admin route — no new gating
+needed). Add/remove restriction emails per account; clearing the list
+restores unrestricted (`null`, not `[]`).
+
+**Live-tested against the real dev server + real shared DB**: direct
+`curl` against the API itself (not just the UI, per the brief's explicit
+requirement) confirmed Ganesh's email and a mixed-case variant both return
+the one account, a random `someoneelse@mcciapune.com` and no-email-at-all
+both return `{"accounts":[]}`, and an unrelated unrestricted vendor
+(KHAANE PE) stays fully visible regardless of email. A full Playwright run
+through the real public `/payment-advice` form confirmed the same at the
+UI layer end-to-end (auto-fill + verify note for Ganesh's email; completely
+blank fields, no note, no picker for a random email). The admin add/remove
+flow was live-tested too, using a temporary locally-signed session JWT
+(`createAdminSessionToken()` called directly from a script) rather than
+touching any real admin account's password — this repo's established rule
+against real-account password swaps for testing, applied without needing
+to ask. The account was left in exactly its intended final state
+afterward, confirmed by a direct DB read: `restricted_to_emails =
+['ganeshm@mcciapune.com']`, and it remains the only non-null
+`restricted_to_emails` row in the entire table.
+
+New `lib/db/migrations/vendor-bank-account-restrictions-migration.test.ts`
+(migration-shape test, same convention as the original vendor-bank-accounts
+migration test). TypeScript, ESLint, full Vitest suite (**447 passed, 7
+skipped**, 9 new), and production build all clean.
+
+**Not merged to `main`, and not even pushed to `origin`** — this session's
+`git push` was blocked by its own permission gate (a visible/shared-state
+action needing explicit confirmation). Committed locally as `ebc7da7`.
+Both pushing and merging need an explicit human go-ahead.
 
 *End of handoff file. Both agents: read §0 again before starting work.*

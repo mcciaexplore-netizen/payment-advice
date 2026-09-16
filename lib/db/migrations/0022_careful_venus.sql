@@ -1,0 +1,1 @@
+ALTER TABLE "vendor_bank_accounts" ADD COLUMN "restricted_to_emails" text[];

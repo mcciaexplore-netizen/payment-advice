@@ -24,14 +24,18 @@ type AppliedAccount = { bankAccountNo: string; bankIfsc: string; beneficiaryName
  *     explicit "None of these" manual-entry choice) and waits for the
  *     submitter to actively pick one before touching any field.
  *
- * Internally keyed by `vendorId` (below) so a change of vendor remounts a
- * fresh instance instead of needing to manually reset state inside an
- * effect. */
+ * Internally keyed by `vendorId` + the submitter's typed email (below) so a
+ * change of either remounts a fresh instance instead of needing to manually
+ * reset state inside an effect — a change of email matters because some
+ * accounts may be restricted to specific submitters (see
+ * `restrictedToEmails` in the schema and the GET route this fetches). */
 function VendorBankAccountFieldsForVendor({
   vendorId,
+  submitterEmail,
   onApply,
 }: {
   vendorId: string;
+  submitterEmail: string;
   onApply: (account: AppliedAccount | null) => void;
 }) {
   const [accounts, setAccounts] = useState<VendorBankAccount[]>([]);
@@ -39,14 +43,17 @@ function VendorBankAccountFieldsForVendor({
 
   useEffect(() => {
     let cancelled = false;
-    fetch(`/api/vendors/${vendorId}/bank-accounts`)
+    const url = `/api/vendors/${vendorId}/bank-accounts?email=${encodeURIComponent(submitterEmail)}`;
+    fetch(url)
       .then((res) => (res.ok ? res.json() : null))
       .then((data: { accounts?: VendorBankAccount[] } | null) => {
         if (cancelled || !data) return;
         const list = data.accounts ?? [];
         setAccounts(list);
         // Auto-fill only for the exactly-one case; multiple always waits
-        // for an explicit choice — never guess which one is right.
+        // for an explicit choice — never guess which one is right. Any
+        // account this submitter's email isn't allowed to see was already
+        // excluded server-side, so this list is exactly what they may act on.
         if (list.length === 1) {
           const only = list[0];
           onApply({
@@ -60,8 +67,8 @@ function VendorBankAccountFieldsForVendor({
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- onApply identity is not meant to retrigger this; vendorId is fixed for the lifetime of this instance (see the remount-via-key wrapper below).
-  }, [vendorId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- onApply identity is not meant to retrigger this; vendorId/submitterEmail are fixed for the lifetime of this instance (see the remount-via-key wrapper below).
+  }, [vendorId, submitterEmail]);
 
   if (accounts.length === 0) return null;
 
@@ -127,11 +134,21 @@ function VendorBankAccountFieldsForVendor({
 
 export function VendorBankAccountFields({
   vendorId,
+  submitterEmail,
   onApply,
 }: {
   vendorId: string | undefined;
+  submitterEmail: string;
   onApply: (account: AppliedAccount | null) => void;
 }) {
   if (!vendorId) return null;
-  return <VendorBankAccountFieldsForVendor key={vendorId} vendorId={vendorId} onApply={onApply} />;
+  const normalizedEmail = submitterEmail.trim().toLowerCase();
+  return (
+    <VendorBankAccountFieldsForVendor
+      key={`${vendorId}:${normalizedEmail}`}
+      vendorId={vendorId}
+      submitterEmail={normalizedEmail}
+      onApply={onApply}
+    />
+  );
 }
