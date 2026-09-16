@@ -1,4 +1,5 @@
-import { and, count, eq, sum } from "drizzle-orm";
+import Link from "next/link";
+import { and, count, eq, isNull, sum } from "drizzle-orm";
 import { getAdminSession } from "@/lib/admin-session";
 import { defaultPaymentModeForRoles } from "@/lib/admin/role-scope";
 import { buildTabCondition } from "@/lib/admin/filters";
@@ -28,7 +29,7 @@ export default async function AdminDashboardPage() {
   const roleScope = roleMode ? eq(paymentAdvices.paymentMode, roleMode) : undefined;
   const financialYear = financialYearFor(new Date());
 
-  const [stageRows, analyticsRows] = await Promise.all([
+  const [stageRows, analyticsRows, vendorReviewRows] = await Promise.all([
     Promise.all(PIPELINE_SUMMARY_STAGES.map(async ({ tab }) => {
       const [result] = await db.select({ count: count(), sum: sum(paymentAdvices.amount) })
         .from(paymentAdvices)
@@ -45,7 +46,18 @@ export default async function AdminDashboardPage() {
       isAdvance: paymentAdvices.isAdvance,
       paymentDoneAt: paymentAdvices.paymentDoneAt,
     }).from(paymentAdvices).where(and(roleScope, eq(paymentAdvices.financialYear, financialYear))),
+    db
+      .select({ count: count() })
+      .from(paymentAdvices)
+      .where(
+        and(
+          eq(paymentAdvices.paymentMode, "NEFT"),
+          eq(paymentAdvices.isAdvance, false),
+          isNull(paymentAdvices.vendorId),
+        ),
+      ),
   ]);
+  const vendorReviewCount = vendorReviewRows[0]?.count ?? 0;
 
   const now = new Date();
   const today = todayInIst(now);
@@ -111,6 +123,22 @@ export default async function AdminDashboardPage() {
         metrics={stageRows}
         hrefFor={(tab) => `/admin/submissions?tab=${tab}${roleMode ? `&paymentMode=${roleMode}` : ""}`}
       />
+
+      <section className="flex flex-col justify-between gap-4 rounded-lg border border-amber-300 bg-amber-50 p-5 sm:flex-row sm:items-center">
+        <div>
+          <h2 className="font-heading text-xl text-[#0b1f3a]">Vendor Review Queue</h2>
+          <p className="mt-1 text-sm text-amber-950">
+            {vendorReviewCount} historical Payment Advice submission{vendorReviewCount === 1 ? "" : "s"}
+            {" "}need{vendorReviewCount === 1 ? "s" : ""} a canonical vendor link.
+          </p>
+        </div>
+        <Link
+          href="/admin/vendor-review"
+          className="w-fit rounded-md bg-[#0b1f3a] px-4 py-2 text-sm font-medium text-white"
+        >
+          Review vendors
+        </Link>
+      </section>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Panel title="Submissions over time" subtitle="Weekly count · last 90 days">

@@ -3109,4 +3109,89 @@ migration's shape/dedup constraint. TypeScript, ESLint, full Vitest suite
 **Not merged to `main`** — branch pushed to origin, awaiting explicit human
 review/approval before any merge, per the brief.
 
+2026-09-15–16 — Codex — Re-ran the historical vendor-link audit against the
+current production database, built the permanent Finance Admin **Vendor
+Review Queue** on `feature/vendor-review-queue` (based on `main` at merge
+`ec5f939`, including vendor bank-account memory), and then executed only the
+specific production corrections individually approved by the human. The
+original Tier 1/2/4 proposal is now **29/29 complete**, Tier 5 is **17/17
+created and linked**, and human-confirmed Tier 3 row 0132 is linked. Four weak
+Tier 3 rows remain for Finance review.
+
+The authoritative, row-by-row audit and execution outcome are stored alongside this handoff as
+`VENDOR_MATCHING_AUDIT_2026-09-15.md` rather than left only in chat. Fresh
+counts: 172 submissions total; 154 regular non-Advance NEFT submissions; 51
+regular NEFT submissions with `vendor_id IS NULL`; 666 canonical vendors.
+Breakdown: Tier 1 exact = 18 rows; Tier 2 confident variant = 7; Tier 3
+weak/questionable = 5; Tier 4 duplicate pairs = 4 rows/two proposed new
+vendors; Tier 5 genuinely unmatched = 17. All 13 existing canonical vendors
+in the Tier 1/2 proposal have null canonical addresses, so those proposals
+preserve each historical `payee_address`. Tier 4's paired rows have identical
+addresses, proposed as the corresponding new vendor's canonical address.
+
+The approved snapshot exception is **vendor-only and action-specific**:
+Finance may rewrite historical `payment_advices.payee_name` and, when a
+canonical address exists, `payee_address`, while setting `vendor_id`. It does
+not relax any other historical-data rule. Reference numbers, amounts,
+workflow/payment fields, and serial counters are never changed. Every action
+must record old/new name and address, actor, IP, timestamp, vendor ID, and
+whether the vendor was created in `audit_log`. PDFs/Excel exports generated
+after a correction read current DB values; already downloaded/printed/emailed
+files cannot be retroactively changed and remain as they were.
+
+Queue implementation:
+- New Finance-only `/admin/vendor-review` page plus nav link and dashboard
+  count/card. It shows regular, non-Advance NEFT rows whose `vendor_id` is
+  still null, oldest first. Keeping the unresolved set visible means nothing
+  is auto-linked based on a fuzzy guess; a Finance user must make an explicit
+  row-level decision. Sunil/Abha/ALL have access through the existing
+  `hasFinanceRole` guard; Authority, Team, and DG sessions do not.
+- Each row can search/select a real active vendor via the existing
+  `VendorTypeahead`, or create one corrected canonical vendor with optional
+  address. The endpoint rejects non-Finance sessions, Cash/Advance rows,
+  already-linked rows, inactive/nonexistent vendors, invalid input, and a
+  create-name that already exists case-insensitively.
+- Resolution is one DB transaction with a row lock. It changes only
+  `vendor_id`, `payee_name`, and `payee_address`; deliberately does not touch
+  `updated_at`, because that timestamp participates in current-stage aging.
+  Creating a vendor uses a transaction-scoped advisory lock to prevent two
+  Finance users from creating the same spelling concurrently.
+- If the historical advice has complete bank details, its account is captured
+  into the just-shipped `vendor_bank_accounts` memory for the resolved vendor,
+  using the original submission timestamp. This avoids losing bank-memory
+  continuity merely because the vendor link was repaired later.
+
+Live write verification used a fully isolated local PostgreSQL database, not
+production: one synthetic row was linked to an existing vendor and one was
+corrected/created as a new vendor. Both returned 200; both kept their serial,
+amount, and workflow unchanged; both updated the displayed canonical
+name/address; both wrote the complete attributed audit entry; both captured
+bank memory. The resolved queue became empty and both admin details showed
+only the canonical values. The production Neon adapter was restored after
+this test. Focused tests: 12 passed (validation, route permissions/errors,
+and UI wiring). Final verification on the completed tree: TypeScript clean,
+ESLint clean, full Vitest **443 passed / 7 skipped**, and the optimized
+Next.js production build completed successfully with Webpack. Turbopack's
+default command cannot run inside this isolated Git worktree because its
+`node_modules` is intentionally symlinked to the main checkout and Turbopack
+rejects symlinks outside the project root; this is a worktree tooling
+constraint, not an application compilation failure.
+
+**Production execution, 2026-09-16:** every write used a guarded transaction
+with locked rows, exact precondition checks, and post-commit readback. All 29
+Tier 1/2/4 submissions now link to exact canonical vendor names. Tier 4
+created `VANDANA MILIND DANDEKAR` (`36e0ee49-...`) and `VIKAS K & CO.`
+(`92197c60-...`) with their pairs' shared historical addresses. The invoice
+proved `Hotel Ayodhya` was correct, so vendor `8d372e1a-...` was renamed from
+`HOTEL AYODHAYA` and row 0137 linked without changing its already-correct
+payee snapshot. The older July `KHAANE PE` (`a7bb1a1b-...`) was canonical;
+the unused September `Khane Pe` (`eb01dc99-...`) was deactivated, and 0004 /
+0097 were linked to the July record. A fresh duplicate/variant sweep found
+all 17 Tier 5 names clean; all 17 were created name-only and linked, producing
+17 `VENDOR_CREATED` plus 17 `VENDOR_LINKED` audit rows. Human confirmation
+linked 0132 to `VENTIVE HOSPITALITY PRIVATE LIMITED-CR-JW` (`8ebe7ea5-...`).
+Every correction logged actor/timestamp/old-new values/vendor IDs. Reference
+numbers, amounts, statuses, addresses (except canonical Tier 4 vendor-master
+addresses copied verbatim), and payment/workflow fields were untouched.
+
 *End of handoff file. Both agents: read §0 again before starting work.*
