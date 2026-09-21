@@ -222,13 +222,13 @@ export function PaymentAdviceDocument({ data }: { data: PaymentAdvicePdfData }) 
               <View style={styles.cellSubRow}>
                 <Text style={styles.cellLabel}>P. O. No. / Date :</Text>
                 <Text style={styles.cellValue}>
-                  {data.poNumber ?? "—"} {data.poDate ? `/ ${formatDateOnly(data.poDate)}` : ""}
+                  {data.poNumber ?? "-"} {data.poDate ? `/ ${formatDateOnly(data.poDate)}` : ""}
                 </Text>
               </View>
               <View>
                 <Text style={styles.cellLabel}>Del. Challan No. / Date :</Text>
                 <Text style={styles.cellValue}>
-                  {data.deliveryChallanNo ?? "—"}{" "}
+                  {data.deliveryChallanNo ?? "-"}{" "}
                   {data.deliveryChallanDate ? `/ ${formatDateOnly(data.deliveryChallanDate)}` : ""}
                 </Text>
               </View>
@@ -238,7 +238,7 @@ export function PaymentAdviceDocument({ data }: { data: PaymentAdvicePdfData }) 
           <View style={styles.tableRow}>
             <View style={styles.cell}>
               <Text style={styles.cellLabel}>E-mail ID :</Text>
-              <Text style={styles.cellValue}>{data.payeeEmail ?? "—"}</Text>
+              <Text style={styles.cellValue}>{data.payeeEmail ?? "-"}</Text>
             </View>
             <View style={styles.cell}>
               <View style={styles.cellSubRow}>

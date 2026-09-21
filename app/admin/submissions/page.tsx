@@ -259,7 +259,7 @@ export default async function AdminListPage({
           searchParams={sp}
         />
         <TabLink
-          label="Verified — Ready for Payment"
+          label="Verified - Ready for Payment"
           tab="verified_ready_payment"
           activeTab={tab}
           count={verifiedCount[0]?.count ?? 0}
@@ -436,11 +436,11 @@ export default async function AdminListPage({
                   </td>
                   {tab === "sent_back" ? (
                     <td className="max-w-[240px] truncate px-4 py-3" title={row.adminRemarks ?? ""}>
-                      {row.adminRemarks ?? "—"}
+                      {row.adminRemarks ?? "-"}
                     </td>
                   ) : null}
-                  {tab === "rejected" ? <td className="px-4 py-3"><div>{row.rejectedBy ?? "—"}</div><div className="text-xs text-gray-500">{row.rejectedAt ? formatIstDate(row.rejectedAt) : "—"}</div></td> : null}
-                  {tab === "rejected" ? <td className="max-w-[260px] whitespace-pre-wrap px-4 py-3">{row.rejectionRemarks ?? "—"}</td> : null}
+                  {tab === "rejected" ? <td className="px-4 py-3"><div>{row.rejectedBy ?? "-"}</div><div className="text-xs text-gray-500">{row.rejectedAt ? formatIstDate(row.rejectedAt) : "-"}</div></td> : null}
+                  {tab === "rejected" ? <td className="max-w-[260px] whitespace-pre-wrap px-4 py-3">{row.rejectionRemarks ?? "-"}</td> : null}
                   <td className="whitespace-nowrap px-4 py-3">
                     <Link href={`/admin/advice/${row.id}`} className="font-medium text-[#0b1f3a] hover:underline">
                       View

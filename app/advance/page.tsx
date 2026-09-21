@@ -33,7 +33,7 @@ export default async function AdvancePage() {
               Advance Payment Request
             </h1>
             <p className="text-sm text-gray-600">
-              Finance &amp; Accounts Department — Mahratta Chamber of Commerce,
+              Finance &amp; Accounts Department - Mahratta Chamber of Commerce,
               Industries and Agriculture
             </p>
           </div>
@@ -42,10 +42,10 @@ export default async function AdvancePage() {
       </header>
 
       <p className="rounded-md bg-[#0b1f3a]/5 px-4 py-3 text-sm text-[#0b1f3a]">
-        Use this form to request money in hand before you spend it — the
+        Use this form to request money in hand before you spend it - the
         advance is paid to you, the requester. Fields marked <b>Required</b>{" "}
         must be completed. After submitting, you&apos;ll get an advance
-        number and can download a summary — the finance team will review it
+        number and can download a summary - the finance team will review it
         and let you know if anything needs correcting.
       </p>
 

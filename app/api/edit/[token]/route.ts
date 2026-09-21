@@ -82,7 +82,7 @@ export async function POST(
   // easily arrive via a direct API call with a bypassed/stale vendorId.
   if (values.paymentMode === "NEFT" && !values.isAdvance && !(await isActiveVendor(values.vendorId!))) {
     return NextResponse.json(
-      { error: "Select a vendor from the list — free-text payee names are no longer accepted" },
+      { error: "Select a vendor from the list - free-text payee names are no longer accepted" },
       { status: 400 },
     );
   }

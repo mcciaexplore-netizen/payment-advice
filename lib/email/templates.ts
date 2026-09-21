@@ -118,7 +118,7 @@ export function renderAuthorityApprovalEmail(data: AuthorityApprovalEmailData) {
     : "";
   const template = AUTHORITY_APPROVAL_TEMPLATE.replace("{{resubmission_note}}", resubmissionNote);
   return {
-    subject: `${revisionCount >= 1 ? `[Resubmission — Revision ${revisionCount}] ` : ""}Recommendation Required: ${data.documentLabel} ${data.displayNo}`,
+    subject: `${revisionCount >= 1 ? `[Resubmission - Revision ${revisionCount}] ` : ""}Recommendation Required: ${data.documentLabel} ${data.displayNo}`,
     html: replaceTokens(template, {
       display_no: data.displayNo, document_label: data.documentLabel, authority_name: data.authorityName,
       submitted_by_name: data.submittedByName, payee_name: data.payeeName,
@@ -142,7 +142,7 @@ export function renderSentBackEmail(data: SentBackEmailData) {
 
 export function renderSubmissionRecommendedEmail(data: SubmissionRecommendedEmailData) {
   return {
-    subject: `${data.documentLabel} ${data.displayNo} Recommended — Forwarded to Finance`,
+    subject: `${data.documentLabel} ${data.displayNo} Recommended - Forwarded to Finance`,
     html: replaceTokens(SUBMISSION_RECOMMENDED_TEMPLATE, {
       display_no: data.displayNo,
       document_label: data.documentLabel,
@@ -206,7 +206,7 @@ const PAYMENT_DONE_TEMPLATE = shell("#2E8B57", `<tr><td style="padding:32px;"><p
 
 export function renderPaymentDoneEmail(data: PaymentDoneEmailData) {
   return {
-    subject: `${data.documentLabel} ${data.displayNo} — Payment Done`,
+    subject: `${data.documentLabel} ${data.displayNo} - Payment Done`,
     html: replaceTokens(PAYMENT_DONE_TEMPLATE, {
       display_no: data.displayNo, submitted_by_name: data.submittedByName,
       document_label: data.documentLabel, payee_name: data.payeeName,
@@ -243,10 +243,10 @@ const PAYMENT_ENTRY_TEMPLATE = shell("#2E8B57", `<tr><td style="padding:32px;"><
 export function renderPaymentEntryEmail(data: PaymentEntryEmailData) {
   const statusLabel = data.isFinal ? "Payment Complete" : "Partial Payment Recorded";
   const statusSentence = data.isFinal
-    ? " This is the final payment — the full payable amount has now been settled."
+    ? " This is the final payment - the full payable amount has now been settled."
     : " This is a partial payment; ₹ {{remaining}} remains to be paid.";
   return {
-    subject: `${data.documentLabel} ${data.displayNo} — ${statusLabel}`,
+    subject: `${data.documentLabel} ${data.displayNo} - ${statusLabel}`,
     html: replaceTokens(PAYMENT_ENTRY_TEMPLATE, {
       status_label: statusLabel,
       status_sentence: statusSentence,

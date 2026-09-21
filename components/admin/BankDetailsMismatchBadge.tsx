@@ -9,7 +9,7 @@ export function BankDetailsMismatchBadge({ bankDetailsMismatch }: { bankDetailsM
 
   return (
     <span
-      title="The invoice's printed bank details didn't match what's on file for this vendor — the system record was used. Verify before paying."
+      title="The invoice's printed bank details didn't match what's on file for this vendor - the system record was used. Verify before paying."
       className="inline-flex items-center gap-1 rounded-full bg-[#b3261e]/10 px-2 py-0.5 text-[11px] font-semibold text-[#b3261e]"
     >
       ⚠ Bank details mismatch

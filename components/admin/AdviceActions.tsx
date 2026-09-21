@@ -334,10 +334,10 @@ export function AdviceActions({
       return (
         <div className="flex flex-col gap-2 rounded-md border border-gray-200 p-4">
           <p className="text-sm font-medium text-[#0b1f3a]">
-            {billPassedForLabel} {initialBillPassedFor ?? "—"}
+            {billPassedForLabel} {initialBillPassedFor ?? "-"}
           </p>
           <p className="text-sm text-gray-600">
-            Payment Done{doneBy ? ` — ${doneBy}` : ""}
+            Payment Done{doneBy ? ` - ${doneBy}` : ""}
             {doneAt
               ? ` on ${formatIstDate(doneAt)}`
               : ""}
@@ -550,7 +550,7 @@ export function AdviceActions({
 
       {status === "APPROVED" && paymentMode === "CASH" && isAdvance ? (
         <div className="rounded-md border border-[#2e8b57]/30 bg-[#2e8b57]/5 p-4 text-sm text-[#1e5c39]">
-          Payment Done{paymentDoneBy ? ` — ${paymentDoneBy}` : ""}
+          Payment Done{paymentDoneBy ? ` - ${paymentDoneBy}` : ""}
           {paymentDoneAt ? ` on ${formatIstDate(paymentDoneAt)}` : ""}.
         </div>
       ) : null}
@@ -568,7 +568,7 @@ export function AdviceActions({
             {remaining !== null ? (
               <p className="mt-1 text-[#1e5c39]">
                 Paid so far: ₹ {formatMoney(totalPaid)} of ₹ {formatMoney(initialPayableAmount ?? "0")}{" "}
-                — ₹ {formatMoney(remaining)} remaining.
+                - ₹ {formatMoney(remaining)} remaining.
               </p>
             ) : null}
           </div>

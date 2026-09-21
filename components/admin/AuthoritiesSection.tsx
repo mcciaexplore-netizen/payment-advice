@@ -150,7 +150,7 @@ export function AuthoritiesSection({ authorities }: { authorities: Authority[] }
               authorities.map((a) => (
                 <tr key={a.id} className="border-b border-gray-100 last:border-0 hover:bg-gray-50">
                   <td className="px-4 py-3 font-medium text-[#0b1f3a]">{a.authorityName}</td>
-                  <td className="px-4 py-3">{a.email ?? "—"}</td>
+                  <td className="px-4 py-3">{a.email ?? "-"}</td>
                   <td className="px-4 py-3">{a.isActive ? "Active" : "Inactive"}</td>
                   <td className="whitespace-nowrap px-4 py-3">
                     <button

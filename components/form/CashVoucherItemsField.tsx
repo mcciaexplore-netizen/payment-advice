@@ -127,7 +127,7 @@ export function CashVoucherItemsField({
           </button>
         ) : (
           <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">
-            Maximum 10 expenses per submission — contact Accounts if you need to submit more.
+            Maximum 10 expenses per submission - contact Accounts if you need to submit more.
           </p>
         )}
       </div>

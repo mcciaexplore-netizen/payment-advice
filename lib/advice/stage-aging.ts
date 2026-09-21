@@ -19,7 +19,7 @@ export function currentStageEnteredAt(advice: StageAgingAdvice): Date | null {
   }
   if (stage === "Awaiting Finance Review" || stage === "Advance Payment") return advice.approvedAt;
   if (stage === "Received & In Process") return advice.financeReceivedAt;
-  if (stage === "Verified — Ready for Payment") return advice.verifiedAt;
+  if (stage === "Verified - Ready for Payment") return advice.verifiedAt;
   if (stage === "Partial Payment Done") return advice.firstPaymentAt;
   if (stage === "Sent Back") return advice.sentBackAt;
   return null;

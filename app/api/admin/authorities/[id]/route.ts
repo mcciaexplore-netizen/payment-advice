@@ -30,7 +30,7 @@ export async function PATCH(
     if (inProgressCount > 0) {
       return NextResponse.json(
         {
-          error: `This authority has ${inProgressCount} submission(s) still in progress that depend on them — deactivating won't affect those submissions, but confirm you want to proceed.`,
+          error: `This authority has ${inProgressCount} submission(s) still in progress that depend on them - deactivating won't affect those submissions, but confirm you want to proceed.`,
           inProgressCount,
         },
         { status: 409 },

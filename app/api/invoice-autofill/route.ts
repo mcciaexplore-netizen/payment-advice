@@ -55,9 +55,9 @@ Extract a field only when it is plainly legible and unambiguous; otherwise use n
 - basicAmount: taxable/basic subtotal excluding GST, as a number with no currency symbols.
 - gstAmount: total GST (CGST + SGST + IGST) as a number; use 0 only when the invoice clearly shows no GST.
 - payeeName: the supplier/vendor/company issuing the invoice, not the buyer.
-- bankAccountNo: the invoice issuer's own bank account number, only if a "Bank Details" section is printed on the invoice itself — never the buyer's account, never a routing/branch code.
+- bankAccountNo: the invoice issuer's own bank account number, only if a "Bank Details" section is printed on the invoice itself - never the buyer's account, never a routing/branch code.
 - bankIfsc: the invoice issuer's own IFSC code from that same bank details section, if present.
-- bankName: the name of the bank itself (e.g. "Kotak Mahindra Bank", "HDFC Bank") from that same section, if present — not the branch name.
+- bankName: the name of the bank itself (e.g. "Kotak Mahindra Bank", "HDFC Bank") from that same section, if present - not the branch name.
 Never estimate or infer missing values.`;
 
 async function readBlobAsBase64(pathname: string) {

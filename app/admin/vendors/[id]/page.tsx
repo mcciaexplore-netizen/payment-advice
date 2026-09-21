@@ -48,7 +48,7 @@ export default async function EditVendorPage({
         <h2 className="font-heading text-xl text-[#0b1f3a]">Saved Bank Accounts</h2>
         <p className="text-sm text-gray-500">
           Captured automatically from previous submissions for this vendor. By default every account is
-          visible to any submitter who selects this vendor — restrict an account to specific submitter
+          visible to any submitter who selects this vendor - restrict an account to specific submitter
           emails below if it should only be usable by one or a few people (e.g. an individual payee whose
           payments only one person handles).
         </p>

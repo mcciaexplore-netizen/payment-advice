@@ -124,7 +124,7 @@ export async function PATCH(
   }
   if (!advice.verifiedAt) {
     return NextResponse.json(
-      { error: "Not yet verified — nothing to correct." },
+      { error: "Not yet verified - nothing to correct." },
       { status: 409 },
     );
   }

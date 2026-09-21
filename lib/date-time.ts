@@ -22,7 +22,7 @@ export function todayInIst(now: Date = new Date()) {
 
 /** Formats a PostgreSQL `date` value without converting it through a timezone. */
 export function formatDateOnly(value: string | null | undefined) {
-  if (!value) return "—";
+  if (!value) return "-";
   if (!/^\d{4}-\d{2}-\d{2}/.test(value)) return value;
   const [year, month, day] = value.slice(0, 10).split("-");
   return `${day}/${month}/${year}`;
@@ -50,7 +50,7 @@ export function formatDateOnlyShort(value: string) {
 }
 
 export function formatIstDate(value: Date | string | null | undefined) {
-  if (!value) return "—";
+  if (!value) return "-";
   return new Intl.DateTimeFormat("en-IN", {
     timeZone: IST_TIME_ZONE,
     day: "2-digit",
@@ -60,7 +60,7 @@ export function formatIstDate(value: Date | string | null | undefined) {
 }
 
 export function formatIstDateTime(value: Date | string | null | undefined) {
-  if (!value) return "—";
+  if (!value) return "-";
   return new Intl.DateTimeFormat("en-IN", {
     timeZone: IST_TIME_ZONE,
     day: "2-digit",

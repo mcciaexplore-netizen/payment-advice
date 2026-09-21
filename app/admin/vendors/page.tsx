@@ -79,8 +79,8 @@ export default async function VendorsPage({
               rows.map((v) => (
                 <tr key={v.id} className="border-b border-gray-100 last:border-0 hover:bg-gray-50">
                   <td className="px-4 py-3 font-medium text-[#0b1f3a]">{v.companyName}</td>
-                  <td className="px-4 py-3">{v.contactPerson ?? "—"}</td>
-                  <td className="px-4 py-3">{v.gstin ?? "—"}</td>
+                  <td className="px-4 py-3">{v.contactPerson ?? "-"}</td>
+                  <td className="px-4 py-3">{v.gstin ?? "-"}</td>
                   <td className="px-4 py-3">{v.isMsme ? "Yes" : "No"}</td>
                   <td className="px-4 py-3">{v.isActive ? "Active" : "Inactive"}</td>
                   <td className="whitespace-nowrap px-4 py-3">

@@ -7,7 +7,7 @@ export const PIPELINE_SUMMARY_STAGES: { tab: Exclude<AdminTab, "all">; label: st
   { tab: "awaiting_finance", label: "Awaiting Finance Review" },
   { tab: "advance_payment", label: "Advance Payment" },
   { tab: "received_in_process", label: "Received & In Process" },
-  { tab: "verified_ready_payment", label: "Verified — Ready for Payment" },
+  { tab: "verified_ready_payment", label: "Verified - Ready for Payment" },
   { tab: "partial_payment_done", label: "Partial Payment Done" },
   { tab: "fully_payment_settled", label: "Fully Payment Settled" },
   { tab: "payment_done", label: "Payment Done (Cash)" },

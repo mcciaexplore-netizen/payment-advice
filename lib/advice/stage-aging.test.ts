@@ -30,9 +30,9 @@ describe("current-stage aging", () => {
   it("measures a changed stage from entry into that stage, not original submission", () => {
     const row = advice({ approvedAt, financeReceivedAt, verifiedAt });
     expect(stageAging(row, now)).toMatchObject({
-      stage: "Verified — Ready for Payment",
+      stage: "Verified - Ready for Payment",
       days: 3,
-      label: "3 days in Verified — Ready for Payment",
+      label: "3 days in Verified - Ready for Payment",
       isStale: false,
     });
   });

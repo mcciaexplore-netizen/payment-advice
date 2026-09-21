@@ -30,14 +30,14 @@ const DOC_TYPE_LABELS: Record<string, string> = {
 };
 
 function formatDate(value: string | Date | null) {
-  if (!value) return "—";
+  if (!value) return "-";
   return value instanceof Date ? formatIstDate(value) : formatDateOnly(value);
 }
 
 const formatDateTime = formatIstDateTime;
 
 function formatAmount(value: string | null) {
-  return value === null ? "—" : `₹ ${Number(value).toLocaleString("en-IN", { minimumFractionDigits: 2 })}`;
+  return value === null ? "-" : `₹ ${Number(value).toLocaleString("en-IN", { minimumFractionDigits: 2 })}`;
 }
 
 export default async function AuthorityAdviceDetailPage({
@@ -93,24 +93,24 @@ export default async function AuthorityAdviceDetailPage({
           <Section title="Submission">
             <Row label="Submitted By" value={`${advice.submittedByName} (${advice.submittedByEmail})`} />
             <Row label="Department" value={advice.submittedByDepartment} />
-            <Row label="Branch" value={advice.branch ?? "—"} />
+            <Row label="Branch" value={advice.branch ?? "-"} />
             <Row label="Submitted Date" value={formatDateTime(advice.submittedAt)} />
             <Row label="Form Date" value={formatDate(advice.formDate)} />
-            <Row label="Recommending Authority" value={authority?.authorityName ?? "—"} />
+            <Row label="Recommending Authority" value={authority?.authorityName ?? "-"} />
           </Section>
 
           <Section title="Payee">
             <Row label="Name and Address" value={`${advice.payeeName}, ${advice.payeeAddress}`} block />
-            <Row label="Email" value={advice.payeeEmail ?? "—"} />
-            <Row label="Contact Person" value={advice.payeeContactPerson ?? "—"} />
-            <Row label="Contact Phone" value={advice.payeeContactPhone ?? "—"} />
-            <Row label="GSTIN" value={advice.payeeGstin ?? "—"} />
-            <Row label="Udyam / MSME No." value={advice.payeeUdyamNumber ?? "—"} />
+            <Row label="Email" value={advice.payeeEmail ?? "-"} />
+            <Row label="Contact Person" value={advice.payeeContactPerson ?? "-"} />
+            <Row label="Contact Phone" value={advice.payeeContactPhone ?? "-"} />
+            <Row label="GSTIN" value={advice.payeeGstin ?? "-"} />
+            <Row label="Udyam / MSME No." value={advice.payeeUdyamNumber ?? "-"} />
           </Section>
 
           {!advice.isAdvance && advice.paymentMode !== "CASH" ? <Section title="Bill & Reference">
-            <Row label="P.O. No. / Date" value={`${advice.poNumber ?? "—"} / ${formatDate(advice.poDate)}`} />
-            <Row label="Delivery Challan No. / Date" value={`${advice.deliveryChallanNo ?? "—"} / ${formatDate(advice.deliveryChallanDate)}`} />
+            <Row label="P.O. No. / Date" value={`${advice.poNumber ?? "-"} / ${formatDate(advice.poDate)}`} />
+            <Row label="Delivery Challan No. / Date" value={`${advice.deliveryChallanNo ?? "-"} / ${formatDate(advice.deliveryChallanDate)}`} />
             <Row label="Bill No. / Date" value={`${advice.billNo} / ${formatDate(advice.billDate)}`} />
           </Section> : null}
 
@@ -128,18 +128,18 @@ export default async function AuthorityAdviceDetailPage({
 
           <Section title="Details">
             <Row label={advice.isAdvance ? "Purpose of Advance" : "Nature of Expenditure"} value={advice.natureOfExpenditure} block />
-            <Row label="Enclosures" value={advice.enclosures ?? "—"} block />
-            <Row label="Special Remarks" value={advice.specialRemarks ?? "—"} block />
+            <Row label="Enclosures" value={advice.enclosures ?? "-"} block />
+            <Row label="Special Remarks" value={advice.specialRemarks ?? "-"} block />
             {advice.isAdvance ? <Row label="Previous Pending Advance" value={advice.previousPendingAdvanceAmount && Number(advice.previousPendingAdvanceAmount) > 0 ? `${formatAmount(advice.previousPendingAdvanceAmount)} since ${formatDate(advice.previousPendingAdvanceSince)}` : "None"} /> : null}
           </Section>
 
           <Section title="Payment">
             <Row label="Mode" value={advice.isAdvance ? `${advice.paymentMode} (Advance)` : advice.paymentMode} />
             {advice.paymentMode === "NEFT" ? <>
-              <Row label="Bank A/c No." value={advice.bankAccountNo ?? "—"} />
-              <Row label="IFSC" value={advice.bankIfsc ?? "—"} />
-              <Row label="Beneficiary Name" value={advice.beneficiaryName ?? "—"} />
-              <Row label="Bank Name" value={advice.bankName ?? "—"} />
+              <Row label="Bank A/c No." value={advice.bankAccountNo ?? "-"} />
+              <Row label="IFSC" value={advice.bankIfsc ?? "-"} />
+              <Row label="Beneficiary Name" value={advice.beneficiaryName ?? "-"} />
+              <Row label="Bank Name" value={advice.bankName ?? "-"} />
             </> : null}
           </Section>
         </div>
@@ -186,7 +186,7 @@ function ItemsSection({ title, items }: { title: string; items: Array<{ id: stri
 }
 
 function CashVoucherItemsSection({ adviceId, items, documents }: { adviceId: string; items: Array<{ id: string; billDate: string | null; billNo: string | null; attachmentId: string | null; description: string; amount: string }>; documents: Array<{ id: string; fileName: string }> }) {
-  return <Section title="Cash Voucher Items"><div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="border-b border-gray-200 text-xs uppercase text-gray-500"><tr><th className="pb-2">Bill Date</th><th className="pb-2">Bill No.</th><th className="pb-2">Nature of Expenditure</th><th className="pb-2 text-right">Amount</th><th className="pb-2 pl-3">Bill</th></tr></thead><tbody>{items.map((item) => { const document = item.attachmentId ? documents.find((candidate) => candidate.id === item.attachmentId) : undefined; return <tr key={item.id} className="border-b border-gray-100 last:border-0"><td className="py-2">{formatDate(item.billDate)}</td><td className="py-2">{item.billNo || "—"}</td><td className="py-2">{item.description}</td><td className="py-2 text-right">{formatAmount(item.amount)}</td><td className="py-2 pl-3">{document ? <AttachmentPreview fileName={document.fileName} href={`/api/authority/advice/${adviceId}/attachments/${document.id}`}>Preview</AttachmentPreview> : "—"}</td></tr>; })}</tbody></table></div></Section>;
+  return <Section title="Cash Voucher Items"><div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="border-b border-gray-200 text-xs uppercase text-gray-500"><tr><th className="pb-2">Bill Date</th><th className="pb-2">Bill No.</th><th className="pb-2">Nature of Expenditure</th><th className="pb-2 text-right">Amount</th><th className="pb-2 pl-3">Bill</th></tr></thead><tbody>{items.map((item) => { const document = item.attachmentId ? documents.find((candidate) => candidate.id === item.attachmentId) : undefined; return <tr key={item.id} className="border-b border-gray-100 last:border-0"><td className="py-2">{formatDate(item.billDate)}</td><td className="py-2">{item.billNo || "-"}</td><td className="py-2">{item.description}</td><td className="py-2 text-right">{formatAmount(item.amount)}</td><td className="py-2 pl-3">{document ? <AttachmentPreview fileName={document.fileName} href={`/api/authority/advice/${adviceId}/attachments/${document.id}`}>Preview</AttachmentPreview> : "-"}</td></tr>; })}</tbody></table></div></Section>;
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {

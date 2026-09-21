@@ -114,7 +114,7 @@ export function StaffForm({
         <Field
           label="Second Recommending Authority"
           error={errors.secondAuthorityId?.message}
-          help="Optional — offered as an alternative radio option."
+          help="Optional - offered as an alternative radio option."
         >
           <Select hasError={!!errors.secondAuthorityId} {...register("secondAuthorityId")}>
             <option value="">None</option>

@@ -21,7 +21,7 @@ export type PipelineStage =
   | "Awaiting Finance Review"
   | "Advance Payment"
   | "Received & In Process"
-  | "Verified — Ready for Payment"
+  | "Verified - Ready for Payment"
   | "Partial Payment Done"
   | "Fully Payment Settled"
   | "Payment Done"
@@ -46,5 +46,5 @@ export function pipelineStageFor(advice: PipelineStageAdvice): PipelineStage {
     return "Partial Payment Done";
   }
   if (advice.paymentDoneAt) return "Payment Done";
-  return "Verified — Ready for Payment";
+  return "Verified - Ready for Payment";
 }

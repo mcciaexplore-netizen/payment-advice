@@ -593,39 +593,51 @@ export function PaymentAdviceForm({
         </div>
       ) : null}
 
-      {!isAdvance && !isCashVoucher && taxInvoice.length === 0 ? (
+      {!isAdvance && !isCashVoucher ? (
         <div className="rounded-md border border-[#0b1f3a]/20 bg-[#0b1f3a]/5 px-4 py-3 text-sm text-[#0b1f3a]">
-          <b>Tip:</b> Upload your Tax Invoice in Section 6 below and we can auto-fill Bill No., amounts, and
-          vendor/bank details from it — saving you from typing them in by hand.
-        </div>
-      ) : null}
-
-      {!isAdvance && !isCashVoucher && taxInvoice.length === 1 ? (
-        <div className="rounded-md border border-[#0b1f3a]/20 bg-[#0b1f3a]/5 px-4 py-3 text-sm text-[#0b1f3a]">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <p>We can try to auto-fill this form from your uploaded invoice.</p>
-            <button
-              type="button"
-              onClick={tryInvoiceAutoFill}
-              disabled={extractingInvoice}
-              className="rounded-md border border-[#0b1f3a] bg-white px-3 py-1.5 font-medium hover:bg-[#0b1f3a]/5 disabled:cursor-wait disabled:opacity-60"
-            >
-              {extractingInvoice ? "Reading invoice…" : "Try Auto-Fill"}
-            </button>
+          <p className="font-medium">Try filling automatically from Tax Invoice</p>
+          <p className="mt-1 text-xs text-[#0b1f3a]/70">
+            Upload it below and we can auto-fill Bill No., amounts, and vendor/bank details from it - saving
+            you from typing them in by hand. This is also your required Tax Invoice document; no need to
+            attach it again further down.
+          </p>
+          <div className="mt-3">
+            <FileUploadSlot
+              label="Tax Invoice"
+              required
+              allowImages
+              maxFiles={1}
+              files={taxInvoice}
+              onChange={handleTaxInvoiceChange}
+              existingFileNames={existingAttachments?.TAX_INVOICE}
+            />
           </div>
+          {taxInvoice.length === 1 ? (
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-[#0b1f3a]/10 pt-3">
+              <p>Ready to read this invoice?</p>
+              <button
+                type="button"
+                onClick={tryInvoiceAutoFill}
+                disabled={extractingInvoice}
+                className="rounded-md border border-[#0b1f3a] bg-white px-3 py-1.5 font-medium hover:bg-[#0b1f3a]/5 disabled:cursor-wait disabled:opacity-60"
+              >
+                {extractingInvoice ? "Reading invoice…" : "Try Auto-Fill"}
+              </button>
+            </div>
+          ) : null}
         </div>
       ) : null}
 
       {hasInvoiceAutoFill ? (
         <div className="rounded-md border border-[#2e8b57]/30 bg-[#2e8b57]/5 px-4 py-3 text-sm font-medium text-[#245f3d]">
-          These fields were auto-filled from your invoice — please verify they&apos;re correct before submitting.
+          These fields were auto-filled from your invoice - please verify they&apos;re correct before submitting.
         </div>
       ) : null}
 
       {hasBankDetailsMismatch ? (
         <div className="rounded-md border border-[#b3261e]/30 bg-[#b3261e]/5 px-4 py-3 text-sm font-medium text-[#b3261e]">
           The bank details on file for this vendor don&apos;t match what&apos;s printed on your invoice. We&apos;ve
-          used the details on file below — please confirm with the vendor before submitting if their bank has
+          used the details on file below - please confirm with the vendor before submitting if their bank has
           changed. This will be flagged for Finance to review.
         </div>
       ) : null}
@@ -637,7 +649,7 @@ export function PaymentAdviceForm({
             required
             htmlFor="submittedByName"
             error={errors.submittedByName?.message}
-            help="Start typing — if you're in the staff list, we'll pick this up automatically."
+            help="Start typing - if you're in the staff list, we'll pick this up automatically."
           >
             <StaffNameTypeahead
               id="submittedByName"
@@ -710,7 +722,7 @@ export function PaymentAdviceForm({
               error={errors.payeeName?.message}
               help={
                 isAdvance
-                  ? "Auto-filled from Your Name above — an advance is paid to you, the requester. Edit if needed."
+                  ? "Auto-filled from Your Name above - an advance is paid to you, the requester. Edit if needed."
                   : "Search for an existing payee and select them from the list. Can't find this vendor? Contact Accounts department for listing."
               }
             >
@@ -822,7 +834,7 @@ export function PaymentAdviceForm({
                 </Field>
                 {previousPendingAdvanceAmount > 0 ? (
                   <Field
-                    label="Previous Pending Advance — Since"
+                    label="Previous Pending Advance - Since"
                     required
                     error={errors.previousPendingAdvanceSince?.message}
                   >
@@ -932,7 +944,7 @@ export function PaymentAdviceForm({
             <div className={`grid grid-cols-1 gap-6 ${isAdvance ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
               {isAdvance ? (
                 <p className="sm:col-span-3 text-xs text-gray-500">
-                  Optional for an advance — Finance already has your bank details on file. Fill these
+                  Optional for an advance - Finance already has your bank details on file. Fill these
                   in only if you want to provide them here as well.
                 </p>
               ) : (
@@ -998,15 +1010,16 @@ export function PaymentAdviceForm({
         ) : null}
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
           {!isAdvance && !isCashVoucher ? (
-            <FileUploadSlot
-              label="Tax Invoice"
-              required
-              allowImages
-              maxFiles={1}
-              files={taxInvoice}
-              onChange={handleTaxInvoiceChange}
-              existingFileNames={existingAttachments?.TAX_INVOICE}
-            />
+            <div className="flex flex-col gap-1.5">
+              <span className="text-sm font-medium text-[#0b1f3a]">
+                Tax Invoice <span className="text-xs font-normal text-[#b3261e]">Required</span>
+              </span>
+              <p className="text-xs text-gray-500">
+                {taxInvoice.length === 1
+                  ? `Attached above: ${taxInvoice[0].name} - no need to attach it again here.`
+                  : "Attach it at the top of the form, in the auto-fill prompt above."}
+              </p>
+            </div>
           ) : null}
           <FileUploadSlot
             label="Approval / Budget Letter"

@@ -316,7 +316,7 @@ export const paymentAdviceFormSchema = z
         ctx.addIssue({
           code: "custom",
           path: ["payeeName"],
-          message: "Select a vendor from the list — free-text payee names are no longer accepted",
+          message: "Select a vendor from the list - free-text payee names are no longer accepted",
         });
       }
       if (!data.enclosures) {
@@ -446,7 +446,7 @@ export const paymentAdviceFormSchema = z
           ctx.addIssue({
             code: "custom",
             path: ["gstAmount"],
-            message: "GST Amount is required — enter 0 if GST is not applicable",
+            message: "GST Amount is required - enter 0 if GST is not applicable",
           });
         } else if (data.gstAmount < 0) {
           ctx.addIssue({
