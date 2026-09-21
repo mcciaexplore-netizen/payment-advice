@@ -76,6 +76,7 @@ describe("invoiceExtractionSchema", () => {
       payeeName: "Businary Consultancy Services LLP",
       bankAccountNo: "0248274720",
       bankIfsc: "KKBK0001808",
+      bankName: "Kotak Mahindra Bank",
     });
     expect(result.success).toBe(true);
   });
@@ -89,6 +90,7 @@ describe("invoiceExtractionSchema", () => {
       payeeName: "Some Vendor",
       bankAccountNo: null,
       bankIfsc: null,
+      bankName: null,
     });
     expect(result.success).toBe(true);
   });

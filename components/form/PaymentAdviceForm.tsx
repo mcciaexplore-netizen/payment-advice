@@ -394,6 +394,13 @@ export function PaymentAdviceForm({
         });
         changed = true;
       }
+      // Bank Name has no per-vendor system record to prefer over it (unlike
+      // account no./IFSC above) — just fill it directly when the invoice
+      // printed one, independent of whether account/IFSC were also found.
+      if (autoFill.bankName) {
+        setValue("bankName", autoFill.bankName, { shouldValidate: true });
+        changed = true;
+      }
       if (changed) setHasInvoiceAutoFill(true);
     } catch {
       // Best effort only: a provider/upload failure intentionally leaves the
@@ -583,6 +590,13 @@ export function PaymentAdviceForm({
       {submitError ? (
         <div className="rounded-md border border-[#b3261e]/30 bg-[#b3261e]/5 px-4 py-3 text-sm font-medium text-[#b3261e]">
           {submitError}
+        </div>
+      ) : null}
+
+      {!isAdvance && !isCashVoucher && taxInvoice.length === 0 ? (
+        <div className="rounded-md border border-[#0b1f3a]/20 bg-[#0b1f3a]/5 px-4 py-3 text-sm text-[#0b1f3a]">
+          <b>Tip:</b> Upload your Tax Invoice in Section 6 below and we can auto-fill Bill No., amounts, and
+          vendor/bank details from it — saving you from typing them in by hand.
         </div>
       ) : null}
 

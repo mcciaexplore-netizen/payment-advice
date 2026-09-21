@@ -29,6 +29,11 @@ export const invoiceExtractionSchema = z.object({
   // Never used to override a known system record; see the route handler.
   bankAccountNo: z.string().trim().min(1).max(50).nullable(),
   bankIfsc: z.string().trim().min(1).max(20).nullable(),
+  // The bank's own name (e.g. "Kotak Mahindra Bank"), printed alongside the
+  // account/IFSC on the same bank details section. Unlike account/IFSC,
+  // there's no per-vendor system record to prefer over this — Bank Name is
+  // a plain submission field, always filled directly when present.
+  bankName: z.string().trim().min(1).max(200).nullable(),
 });
 
 export type InvoiceExtraction = z.infer<typeof invoiceExtractionSchema>;

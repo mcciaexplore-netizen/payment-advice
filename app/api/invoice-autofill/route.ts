@@ -33,8 +33,18 @@ const responseJsonSchema = {
     payeeName: { type: ["string", "null"] },
     bankAccountNo: { type: ["string", "null"] },
     bankIfsc: { type: ["string", "null"] },
+    bankName: { type: ["string", "null"] },
   },
-  required: ["billNo", "billDate", "basicAmount", "gstAmount", "payeeName", "bankAccountNo", "bankIfsc"],
+  required: [
+    "billNo",
+    "billDate",
+    "basicAmount",
+    "gstAmount",
+    "payeeName",
+    "bankAccountNo",
+    "bankIfsc",
+    "bankName",
+  ],
   additionalProperties: false,
 };
 
@@ -47,6 +57,7 @@ Extract a field only when it is plainly legible and unambiguous; otherwise use n
 - payeeName: the supplier/vendor/company issuing the invoice, not the buyer.
 - bankAccountNo: the invoice issuer's own bank account number, only if a "Bank Details" section is printed on the invoice itself — never the buyer's account, never a routing/branch code.
 - bankIfsc: the invoice issuer's own IFSC code from that same bank details section, if present.
+- bankName: the name of the bank itself (e.g. "Kotak Mahindra Bank", "HDFC Bank") from that same section, if present — not the branch name.
 Never estimate or infer missing values.`;
 
 async function readBlobAsBase64(pathname: string) {
@@ -142,6 +153,7 @@ export async function POST(request: Request) {
         payeeName: extracted.data.payeeName,
         bankAccountNo: extracted.data.bankAccountNo,
         bankIfsc: extracted.data.bankIfsc,
+        bankName: extracted.data.bankName,
         vendor: matchedVendor,
       },
     });
