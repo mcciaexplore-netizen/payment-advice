@@ -183,6 +183,7 @@ export async function POST(req: NextRequest) {
           bankIfsc: values.bankIfsc ?? null,
           beneficiaryName: values.beneficiaryName ?? null,
           bankName: values.bankName ?? null,
+          bankDetailsMismatch: values.bankDetailsMismatch,
           submittedByName: values.submittedByName,
           submittedByEmail: values.submittedByEmail,
           submittedByDepartment: values.submittedByDepartment,

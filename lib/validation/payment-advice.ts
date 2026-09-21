@@ -276,6 +276,11 @@ export const paymentAdviceFormSchema = z
     ),
     beneficiaryName: optionalTrimmed(),
     bankName: optionalTrimmed(),
+    // Set client-side only when Gemini invoice auto-fill detects the
+    // invoice's own printed bank details contradict the vendor's known
+    // system-of-record account (which always wins for what's actually
+    // saved above) — see lib/invoice-autofill.ts's bankDetailsMismatch().
+    bankDetailsMismatch: z.boolean().default(false),
 
     // Section 5 — enclosures & remarks
     enclosures: optionalTrimmed(),

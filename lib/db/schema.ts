@@ -293,6 +293,14 @@ export const paymentAdvices = pgTable("payment_advices", {
   bankIfsc: text("bank_ifsc"),
   beneficiaryName: text("beneficiary_name"),
   bankName: text("bank_name"),
+  // True only when the Gemini invoice auto-fill extracted a bank account
+  // no./IFSC from the invoice itself that differs from the vendor's known
+  // system-of-record bank account (which always wins and is what actually
+  // gets saved above) — see lib/invoice-autofill.ts's bankDetailsMismatch().
+  // A real signal worth Finance's attention: it can mean the invoice is
+  // stale, or a genuine vendor-bank-change/fraud red flag. Never true for a
+  // submission that didn't go through invoice auto-fill at all.
+  bankDetailsMismatch: boolean("bank_details_mismatch").default(false).notNull(),
   // Own gapless series (CASH/MCCIA/<FY>/NNNN, via serial_counters' CASH_VOUCHER
   // row), allocated only for regular payment_mode = 'CASH' submissions.
   // serial_no mirrors this value and acts as the canonical reference.

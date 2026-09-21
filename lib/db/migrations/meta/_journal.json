@@ -169,6 +169,13 @@
       "when": 1789554140225,
       "tag": "0023_payable_gst",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1789983817724,
+      "tag": "0024_overconfident_millenium_guard",
+      "breakpoints": true
     }
   ]
 }

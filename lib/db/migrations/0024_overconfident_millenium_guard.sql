@@ -1,0 +1,1 @@
+ALTER TABLE "payment_advices" ADD COLUMN "bank_details_mismatch" boolean DEFAULT false NOT NULL;

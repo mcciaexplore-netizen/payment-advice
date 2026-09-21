@@ -15,6 +15,7 @@ import { AdviceActions } from "@/components/admin/AdviceActions";
 import { BackLink } from "@/components/admin/BackLink";
 import { NameCorrectionAction } from "@/components/admin/NameCorrectionAction";
 import { SentBackIndicators } from "@/components/admin/SentBackIndicators";
+import { BankDetailsMismatchBadge } from "@/components/admin/BankDetailsMismatchBadge";
 import { PaymentMode, Status, SANCTIONER_NAMES } from "@/lib/validation/payment-advice";
 import { getAdminSession } from "@/lib/admin-session";
 import { displayNoFor, documentLabelFor } from "@/lib/advice/document-identity";
@@ -252,6 +253,12 @@ export default async function AdviceDetailPage({
                 <Row label="IFSC" value={advice.bankIfsc ?? "—"} />
                 <Row label="Beneficiary Name" value={advice.beneficiaryName ?? "—"} />
                 <Row label="Bank Name" value={advice.bankName ?? "—"} />
+                {advice.bankDetailsMismatch ? (
+                  <div className="flex items-baseline gap-2 text-sm">
+                    <span className="min-w-[200px] text-xs font-medium uppercase tracking-wide text-gray-500" />
+                    <BankDetailsMismatchBadge bankDetailsMismatch={advice.bankDetailsMismatch} />
+                  </div>
+                ) : null}
               </>
             ) : null}
           </Section>

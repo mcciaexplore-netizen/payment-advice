@@ -23,6 +23,7 @@ import { defaultPaymentModeForRoles } from "@/lib/admin/role-scope";
 import { pipelineStageFor } from "@/lib/advice/pipeline-stage";
 import { STAGE_FOR_TAB, STAGE_STYLE } from "@/lib/advice/stage-style";
 import { SentBackIndicators } from "@/components/admin/SentBackIndicators";
+import { BankDetailsMismatchBadge } from "@/components/admin/BankDetailsMismatchBadge";
 import { sentBackStatus } from "@/lib/advice/send-back-status";
 import { formatDateOnly, formatIstDate } from "@/lib/date-time";
 
@@ -138,6 +139,7 @@ export default async function AdminListPage({
         verifiedAt: paymentAdvices.verifiedAt,
         paymentDoneAt: paymentAdvices.paymentDoneAt,
         totalPaid: paymentAdvices.totalPaid,
+        bankDetailsMismatch: paymentAdvices.bankDetailsMismatch,
       })
       .from(paymentAdvices)
       .where(where)
@@ -402,7 +404,12 @@ export default async function AdminListPage({
                     </span>
                   </td>
                   <td className="whitespace-nowrap px-4 py-3">{formatDateOnly(row.formDate)}</td>
-                  <td className="px-4 py-3">{row.payeeName}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex flex-col items-start gap-1">
+                      <span>{row.payeeName}</span>
+                      <BankDetailsMismatchBadge bankDetailsMismatch={row.bankDetailsMismatch} />
+                    </div>
+                  </td>
                   <td className="whitespace-nowrap px-4 py-3 text-right">₹ {formatAmount(row.amount)}</td>
                   <td className="whitespace-nowrap px-4 py-3">
                     {row.paymentMode}
