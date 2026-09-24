@@ -1010,16 +1010,25 @@ export function PaymentAdviceForm({
         ) : null}
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
           {!isAdvance && !isCashVoucher ? (
-            <div className="flex flex-col gap-1.5">
-              <span className="text-sm font-medium text-[#0b1f3a]">
-                Tax Invoice <span className="text-xs font-normal text-[#b3261e]">Required</span>
-              </span>
-              <p className="text-xs text-gray-500">
-                {taxInvoice.length === 1
-                  ? `Attached above: ${taxInvoice[0].name} - no need to attach it again here.`
-                  : "Attach it at the top of the form, in the auto-fill prompt above."}
-              </p>
-            </div>
+            // Same underlying `taxInvoice` state and `handleTaxInvoiceChange`
+            // handler as the auto-fill prompt's own FileUploadSlot at the top
+            // of the form - there is exactly one Tax Invoice attachment per
+            // submission, and this is a second, fully functioning control
+            // over that same field, not a placeholder or a link back up.
+            // Uploading here works standalone for anyone who skips the
+            // auto-fill prompt; uploading up there shows up here too
+            // (filename + Remove/Replace), with no re-upload required either
+            // way and no duplicate Blob upload (only tryInvoiceAutoFill and
+            // final submit ever upload to Blob).
+            <FileUploadSlot
+              label="Tax Invoice"
+              required
+              allowImages
+              maxFiles={1}
+              files={taxInvoice}
+              onChange={handleTaxInvoiceChange}
+              existingFileNames={existingAttachments?.TAX_INVOICE}
+            />
           ) : null}
           <FileUploadSlot
             label="Approval / Budget Letter"

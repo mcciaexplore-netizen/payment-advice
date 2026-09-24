@@ -1,7 +1,7 @@
 import { SQL } from "drizzle-orm";
 import { PgDialect } from "drizzle-orm/pg-core";
 import { describe, expect, it } from "vitest";
-import { ADMIN_TABS, buildAdminListOrderBy, buildTabCondition, isAdminTab } from "./filters";
+import { ADMIN_TABS, buildAdminListOrderBy, buildAdviceWhere, buildTabCondition, isAdminTab } from "./filters";
 
 /** Drizzle SQL condition objects are circular (they reference the table)
  * and have no useful toString(), so the only reliable way to inspect what
@@ -178,5 +178,35 @@ describe("buildAdminListOrderBy", () => {
     expect(dialect.sqlToQuery(order[1]).sql).toContain('"advance_no"');
     expect(dialect.sqlToQuery(order[1]).sql).toContain('"cash_voucher_no"');
     expect(dialect.sqlToQuery(order[1]).sql).toContain("desc");
+  });
+});
+
+describe("buildAdviceWhere", () => {
+  // Column objects carry a circular reference back to their whole table, so
+  // extractColumnNames (used above for order-by clauses) would report every
+  // sibling column as "present" here too — not useful for a "does NOT
+  // reference this column" assertion. The rendered SQL text is unambiguous.
+  function sqlText(where: SQL | undefined) {
+    return new PgDialect().sqlToQuery(where!).sql;
+  }
+
+  it("'q' free-text search matches serial/bill number and submitter name/email, not payee", () => {
+    const sql = sqlText(buildAdviceWhere({ q: "test" }));
+    expect(sql).toContain('"serial_no"');
+    expect(sql).toContain('"bill_no"');
+    expect(sql).toContain('"submitted_by_name"');
+    expect(sql).toContain('"submitted_by_email"');
+    expect(sql).not.toContain('"payee_name"');
+  });
+
+  it("the dedicated 'payee' filter still matches payee_name, independent of 'q'", () => {
+    expect(sqlText(buildAdviceWhere({ payee: "Acme" }))).toContain('"payee_name"');
+  });
+
+  it("'q' and 'payee' can both apply at once without either overriding the other", () => {
+    const sql = sqlText(buildAdviceWhere({ q: "test", payee: "Acme" }));
+    expect(sql).toContain('"payee_name"');
+    expect(sql).toContain('"submitted_by_name"');
+    expect(sql).toContain('"submitted_by_email"');
   });
 });
