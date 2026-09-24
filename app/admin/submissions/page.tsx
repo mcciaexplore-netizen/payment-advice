@@ -333,7 +333,7 @@ export default async function AdminListPage({
             <option value="CASH">Cash</option>
           </select>
         </FilterField>
-        <FilterField label="Search (serial / bill / submitter)">
+        <FilterField label="Search (serial/bill/submitter)">
           <input type="text" name="q" defaultValue={filterParams.q ?? ""} className="admin-filter-input" />
         </FilterField>
         <div className="col-span-2 flex items-end gap-2 sm:col-span-4 lg:col-span-7">
