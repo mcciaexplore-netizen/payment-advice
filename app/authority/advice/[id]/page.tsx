@@ -100,7 +100,8 @@ export default async function AuthorityAdviceDetailPage({
           </Section>
 
           <Section title="Payee">
-            <Row label="Name and Address" value={`${advice.payeeName}, ${advice.payeeAddress}`} block />
+            <Row label="Payee Name" value={advice.payeeName} />
+            <Row label="Payee Address" value={advice.payeeAddress} block />
             <Row label="Email" value={advice.payeeEmail ?? "-"} />
             <Row label="Contact Person" value={advice.payeeContactPerson ?? "-"} />
             <Row label="Contact Phone" value={advice.payeeContactPhone ?? "-"} />
@@ -158,6 +159,15 @@ export default async function AuthorityAdviceDetailPage({
 
           <Section title={isPending ? "Decision" : "Decision Record"}>
             {isPending && !isDg ? <AuthorityQueueActions adviceId={advice.id} /> : isDg ? <p className="text-sm text-gray-500">DG Executive Dashboard is read-only.</p> : <DecisionRecord advice={advice} />}
+            {/* Second shortcut back to the list, below the decision actions/
+                record above - shares the exact same navigation (history-back
+                with fallback) and label as the top-of-page link, so both
+                always land in the same place. */}
+            <BackLink
+              label="Back to Authority Recommendations"
+              fallbackHref={fallbackHref}
+              className="w-fit rounded border border-gray-300 px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50"
+            />
           </Section>
         </aside>
       </div>
