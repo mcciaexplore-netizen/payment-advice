@@ -33,7 +33,21 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     paddingHorizontal: 6,
     width: 94,
-    // Keep the stamp level so it aligns cleanly with the signature block.
+    transform: "rotate(-5deg)",
+  },
+  // Forwarding Memo's inFlow layout sits directly in the signature block's
+  // normal document flow (not absolutely positioned in a corner like the
+  // other three uses), so the -5deg tilt is dropped there only - keeping it
+  // level is what makes it align cleanly with that block. The original
+  // Payment Advice/Cash Voucher stamps keep their tilt via `box` above,
+  // unchanged from before Forwarding Memo was added.
+  boxFlow: {
+    borderWidth: 1,
+    borderStyle: "solid",
+    borderRadius: 4,
+    paddingVertical: 4,
+    paddingHorizontal: 6,
+    width: 94,
   },
   label: {
     fontFamily: "Helvetica-Bold",
@@ -70,7 +84,7 @@ export function Stamp({
   const { border, text } = COLORS[color];
   return (
     <View style={inFlow ? styles.flowWrapper : styles.wrapper}>
-      <View style={[styles.box, { borderColor: border }]}>
+      <View style={[inFlow ? styles.boxFlow : styles.box, { borderColor: border }]}>
         <Text style={[styles.label, { color: text }]}>{label}</Text>
         <Text style={[styles.name, { color: text }]}>{name}</Text>
         <Text style={[styles.date, { color: text }]}>{date}</Text>
