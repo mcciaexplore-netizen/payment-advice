@@ -100,7 +100,8 @@ export default async function AuthorityAdviceDetailPage({
           </Section>
 
           <Section title="Payee">
-            <Row label="Name and Address" value={`${advice.payeeName}, ${advice.payeeAddress}`} block />
+            <Row label="Payee Name" value={advice.payeeName} />
+            <Row label="Payee Address" value={advice.payeeAddress} block />
             <Row label="Email" value={advice.payeeEmail ?? "-"} />
             <Row label="Contact Person" value={advice.payeeContactPerson ?? "-"} />
             <Row label="Contact Phone" value={advice.payeeContactPhone ?? "-"} />

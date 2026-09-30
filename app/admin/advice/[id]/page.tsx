@@ -157,7 +157,8 @@ export default async function AdviceDetailPage({
           </Section>
 
           <Section title="Payee">
-            <Row label="Name and Address of the Payee" value={`${advice.payeeName}, ${advice.payeeAddress}`} />
+            <Row label="Payee Name" value={advice.payeeName} />
+            <Row label="Payee Address" value={advice.payeeAddress} block />
             <Row label="E-mail ID" value={advice.payeeEmail ?? "-"} />
             <Row label="Contact Person" value={advice.payeeContactPerson ?? "-"} />
             <Row label="Contact Phone" value={advice.payeeContactPhone ?? "-"} />
