@@ -1,5 +1,7 @@
 CREATE TABLE "forwarding_memos" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"serial_no" text NOT NULL,
+	"financial_year" text NOT NULL,
 	"memo_date" date NOT NULL,
 	"party_name" text NOT NULL,
 	"party_address" text NOT NULL,
@@ -12,7 +14,11 @@ CREATE TABLE "forwarding_memos" (
 	"drawn_on_bank" text NOT NULL,
 	"amount" numeric(14, 2) NOT NULL,
 	"submitted_by_name" text NOT NULL,
+	"submitted_by_email" text,
+	"received_at" timestamp with time zone,
+	"received_by" text,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "forwarding_memos_serial_no_unique" UNIQUE("serial_no"),
 	CONSTRAINT "forwarding_memos_instrument_mode_check" CHECK ("forwarding_memos"."instrument_mode" in ('CHEQUE', 'DD')),
 	CONSTRAINT "forwarding_memos_amount_positive_check" CHECK ("forwarding_memos"."amount" > 0)
 );

@@ -10,6 +10,7 @@ type Executor = Pick<Database, "execute">;
 const PAYMENT_ADVICE_SERIES = "PAYMENT_ADVICE";
 const CASH_VOUCHER_SERIES = "CASH_VOUCHER";
 const ADVANCE_SERIES = "ADVANCE";
+const FORWARDING_MEMO_SERIES = "FORWARDING_MEMO";
 
 /**
  * Indian financial year runs 1 April -> 31 March.
@@ -32,6 +33,10 @@ export function formatCashVoucherNo(financialYear: string, number: number): stri
 
 export function formatAdvanceNo(financialYear: string, number: number): string {
   return `ADV/MCCIA/${financialYear}/${String(number).padStart(4, "0")}`;
+}
+
+export function formatForwardingMemoNo(financialYear: string, number: number): string {
+  return `FM/MCCIA/${financialYear}/${String(number).padStart(4, "0")}`;
 }
 
 /**
@@ -113,4 +118,15 @@ export async function allocateAdvanceNumber(
 ): Promise<string> {
   const nextNumber = await allocateNumber(tx, financialYear, ADVANCE_SERIES);
   return formatAdvanceNo(financialYear, nextNumber);
+}
+
+/** Allocates the next Forwarding Memo number (FM/MCCIA/<FY>/NNNN) — its own
+ * independent series, same gapless SELECT ... FOR UPDATE mechanism as the
+ * other three. Forwarding Memos never touch any of the other three counters. */
+export async function allocateForwardingMemoNumber(
+  tx: Executor,
+  financialYear: string,
+): Promise<string> {
+  const nextNumber = await allocateNumber(tx, financialYear, FORWARDING_MEMO_SERIES);
+  return formatForwardingMemoNo(financialYear, nextNumber);
 }
