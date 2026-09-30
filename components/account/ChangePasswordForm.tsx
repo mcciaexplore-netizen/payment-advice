@@ -56,7 +56,7 @@ export function ChangePasswordForm() {
   if (success) {
     return (
       <div className="max-w-sm rounded-md border border-[#2e8b57]/30 bg-[#2e8b57]/5 px-4 py-3 text-sm text-[#1f6b41]">
-        Your password has been changed. Use it the next time you sign in — you
+        Your password has been changed. Use it the next time you sign in - you
         won&apos;t be signed out of this session now.
       </div>
     );

@@ -15,6 +15,7 @@ import { AdviceActions } from "@/components/admin/AdviceActions";
 import { BackLink } from "@/components/admin/BackLink";
 import { NameCorrectionAction } from "@/components/admin/NameCorrectionAction";
 import { SentBackIndicators } from "@/components/admin/SentBackIndicators";
+import { BankDetailsMismatchBadge } from "@/components/admin/BankDetailsMismatchBadge";
 import { PaymentMode, Status, SANCTIONER_NAMES } from "@/lib/validation/payment-advice";
 import { getAdminSession } from "@/lib/admin-session";
 import { displayNoFor, documentLabelFor } from "@/lib/advice/document-identity";
@@ -37,7 +38,7 @@ const formatDate = formatDateOnly;
 const formatDateTime = formatIstDateTime;
 
 function formatAmount(value: string | null) {
-  if (value === null) return "—";
+  if (value === null) return "-";
   return `₹ ${Number(value).toLocaleString("en-IN", { minimumFractionDigits: 2 })}`;
 }
 
@@ -156,19 +157,20 @@ export default async function AdviceDetailPage({
           </Section>
 
           <Section title="Payee">
-            <Row label="Name and Address of the Payee" value={`${advice.payeeName}, ${advice.payeeAddress}`} />
-            <Row label="E-mail ID" value={advice.payeeEmail ?? "—"} />
-            <Row label="Contact Person" value={advice.payeeContactPerson ?? "—"} />
-            <Row label="Contact Phone" value={advice.payeeContactPhone ?? "—"} />
-            <Row label="GSTIN" value={advice.payeeGstin ?? "—"} />
-            <Row label="Udyam / MSME No." value={advice.payeeUdyamNumber ?? "—"} />
+            <Row label="Payee Name" value={advice.payeeName} />
+            <Row label="Payee Address" value={advice.payeeAddress} />
+            <Row label="E-mail ID" value={advice.payeeEmail ?? "-"} />
+            <Row label="Contact Person" value={advice.payeeContactPerson ?? "-"} />
+            <Row label="Contact Phone" value={advice.payeeContactPhone ?? "-"} />
+            <Row label="GSTIN" value={advice.payeeGstin ?? "-"} />
+            <Row label="Udyam / MSME No." value={advice.payeeUdyamNumber ?? "-"} />
           </Section>
 
           {advice.paymentMode !== "CASH" ? <Section title="Reference">
-            <Row label="P.O. No. / Date" value={`${advice.poNumber ?? "—"} / ${formatDate(advice.poDate)}`} />
+            <Row label="P.O. No. / Date" value={`${advice.poNumber ?? "-"} / ${formatDate(advice.poDate)}`} />
             <Row
               label="Delivery Challan No. / Date"
-              value={`${advice.deliveryChallanNo ?? "—"} / ${formatDate(advice.deliveryChallanDate)}`}
+              value={`${advice.deliveryChallanNo ?? "-"} / ${formatDate(advice.deliveryChallanDate)}`}
             />
             <Row label="Bill No. / Date" value={`${advice.billNo} / ${formatDate(advice.billDate)}`} />
           </Section> : null}
@@ -193,8 +195,8 @@ export default async function AdviceDetailPage({
               value={advice.natureOfExpenditure}
               block
             />
-            <Row label="Enclosures" value={advice.enclosures ?? "—"} block />
-            <Row label="Special Remarks" value={advice.specialRemarks ?? "—"} block />
+            <Row label="Enclosures" value={advice.enclosures ?? "-"} block />
+            <Row label="Special Remarks" value={advice.specialRemarks ?? "-"} block />
           </Section>
 
           {advice.isAdvance ? (
@@ -236,7 +238,7 @@ export default async function AdviceDetailPage({
                   <tbody>
                     {voucherItems.map((item) => {
                       const bill = item.attachmentId ? adviceAttachments.find((attachment) => attachment.id === item.attachmentId) : undefined;
-                      return <tr key={item.id} className="border-b border-gray-100 last:border-0"><td className="py-2">{formatDate(item.billDate)}</td><td className="py-2">{item.billNo || "—"}</td><td className="py-2">{item.description}</td><td className="py-2 text-right">{formatAmount(item.amount)}</td><td className="py-2 pl-3">{bill ? <AttachmentPreview fileName={bill.fileName} href={`/api/admin/attachments/${bill.id}`}>Preview</AttachmentPreview> : "—"}</td></tr>;
+                      return <tr key={item.id} className="border-b border-gray-100 last:border-0"><td className="py-2">{formatDate(item.billDate)}</td><td className="py-2">{item.billNo || "-"}</td><td className="py-2">{item.description}</td><td className="py-2 text-right">{formatAmount(item.amount)}</td><td className="py-2 pl-3">{bill ? <AttachmentPreview fileName={bill.fileName} href={`/api/admin/attachments/${bill.id}`}>Preview</AttachmentPreview> : "-"}</td></tr>;
                     })}
                   </tbody>
                 </table>
@@ -248,10 +250,16 @@ export default async function AdviceDetailPage({
             <Row label="Mode" value={advice.isAdvance ? `${advice.paymentMode} (Advance)` : advice.paymentMode} />
             {advice.paymentMode === "NEFT" ? (
               <>
-                <Row label="Bank A/c No." value={advice.bankAccountNo ?? "—"} />
-                <Row label="IFSC" value={advice.bankIfsc ?? "—"} />
-                <Row label="Beneficiary Name" value={advice.beneficiaryName ?? "—"} />
-                <Row label="Bank Name" value={advice.bankName ?? "—"} />
+                <Row label="Bank A/c No." value={advice.bankAccountNo ?? "-"} />
+                <Row label="IFSC" value={advice.bankIfsc ?? "-"} />
+                <Row label="Beneficiary Name" value={advice.beneficiaryName ?? "-"} />
+                <Row label="Bank Name" value={advice.bankName ?? "-"} />
+                {advice.bankDetailsMismatch ? (
+                  <div className="flex items-baseline gap-2 text-sm">
+                    <span className="min-w-[200px] text-xs font-medium uppercase tracking-wide text-gray-500" />
+                    <BankDetailsMismatchBadge bankDetailsMismatch={advice.bankDetailsMismatch} />
+                  </div>
+                ) : null}
               </>
             ) : null}
           </Section>
@@ -259,10 +267,10 @@ export default async function AdviceDetailPage({
           <Section title="People">
             <Row label="Submitted By" value={`${advice.submittedByName} (${advice.submittedByEmail})`} />
             <Row label="Department" value={advice.submittedByDepartment} />
-            <Row label="Branch" value={advice.branch ?? "—"} />
+            <Row label="Branch" value={advice.branch ?? "-"} />
             <Row
               label="Recommending Authority"
-              value={`${authority?.authorityName ?? "—"}${authorityStatusSuffix(advice)}`}
+              value={`${authority?.authorityName ?? "-"}${authorityStatusSuffix(advice)}`}
             />
           </Section>
 
@@ -360,7 +368,7 @@ export default async function AdviceDetailPage({
               ) : null}
             </div>
           ) : null}
-          {advice.status === "REJECTED" ? <div className="rounded-md border border-red-400 bg-red-50 p-4 text-sm text-red-950"><p className="font-medium">Rejected by {advice.rejectedBy ?? "—"}</p><p className="mt-1 text-xs">{advice.rejectedAt ? formatDateTime(advice.rejectedAt) : "—"}</p><p className="mt-3 whitespace-pre-wrap"><span className="font-medium">Remarks:</span> {advice.rejectionRemarks ?? "—"}</p><p className="mt-3 text-xs">Permanently closed; reference number retained.</p></div> : null}
+          {advice.status === "REJECTED" ? <div className="rounded-md border border-red-400 bg-red-50 p-4 text-sm text-red-950"><p className="font-medium">Rejected by {advice.rejectedBy ?? "-"}</p><p className="mt-1 text-xs">{advice.rejectedAt ? formatDateTime(advice.rejectedAt) : "-"}</p><p className="mt-3 whitespace-pre-wrap"><span className="font-medium">Remarks:</span> {advice.rejectionRemarks ?? "-"}</p><p className="mt-3 text-xs">Permanently closed; reference number retained.</p></div> : null}
           <AdviceActions
             adviceId={advice.id}
             status={advice.status as Status}
@@ -419,7 +427,11 @@ function Row({ label, value, block }: { label: string; value: string; block?: bo
       <span className="min-w-[200px] text-xs font-medium uppercase tracking-wide text-gray-500">
         {label}
       </span>
-      <span className={block ? "whitespace-pre-wrap text-sm text-[#171717]" : "text-sm text-[#171717]"}>
+      {/* whitespace-pre-wrap always applies (not just in block mode) - a
+          no-op for every single-line value, but it's what keeps a real
+          multi-line payee address's line breaks intact even while sitting
+          inline next to its label like every other field on this page. */}
+      <span className="whitespace-pre-wrap text-sm text-[#171717]">
         {value}
       </span>
     </div>

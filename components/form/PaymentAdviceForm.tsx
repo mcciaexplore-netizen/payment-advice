@@ -15,6 +15,7 @@ import { FileUploadSlot } from "@/components/form/FileUploadSlot";
 import { LineItemsField } from "@/components/form/LineItemsField";
 import { CashVoucherItemsField } from "@/components/form/CashVoucherItemsField";
 import { storeSubmissionSummary } from "@/lib/submission-summary";
+import { bankDetailsMismatch } from "@/lib/invoice-autofill";
 import { resolveAutoFillEmail } from "@/lib/form/staff-email-autofill";
 import { resolveSourceFieldAutoFill } from "@/lib/form/source-field-autofill";
 import {
@@ -74,6 +75,21 @@ export function PaymentAdviceForm({
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   const [taxInvoice, setTaxInvoice] = useState<File[]>([]);
+  // A Tax Invoice is uploaded to Blob only when the submitter explicitly
+  // asks Gemini to read it. The same private Blob is then reused by final
+  // submission, avoiding a second upload and keeping invoice bytes out of
+  // the serverless form request.
+  const [autoFillInvoiceUpload, setAutoFillInvoiceUpload] = useState<UploadedAttachment | null>(null);
+  const [extractingInvoice, setExtractingInvoice] = useState(false);
+  const [hasInvoiceAutoFill, setHasInvoiceAutoFill] = useState(false);
+  // The invoice's own printed bank details (if extracted), kept only to
+  // compare against whatever the vendor-bank-accounts system record ends up
+  // filling in — see applyVendorBankAccount below. Cleared whenever the Tax
+  // Invoice file changes so a stale comparison can't leak across invoices.
+  const [invoiceExtractedBank, setInvoiceExtractedBank] = useState<{
+    bankAccountNo: string | null;
+    bankIfsc: string | null;
+  } | null>(null);
   const [approvalBudget, setApprovalBudget] = useState<File[]>([]);
   const [purchaseOrder, setPurchaseOrder] = useState<File[]>([]);
   const [deliveryChallanFile, setDeliveryChallanFile] = useState<File[]>([]);
@@ -132,6 +148,7 @@ export function PaymentAdviceForm({
   const lastAutoFilledEmailRef = useRef<string | null>(null);
 
   const paymentMode = useWatch({ control, name: "paymentMode" });
+  const hasBankDetailsMismatch = useWatch({ control, name: "bankDetailsMismatch" }) ?? false;
   const payeeName = useWatch({ control, name: "payeeName" }) ?? "";
   const vendorId = useWatch({ control, name: "vendorId" });
   const submittedByName = useWatch({ control, name: "submittedByName" }) ?? "";
@@ -280,6 +297,119 @@ export function PaymentAdviceForm({
     if (vendor.udyamNumber) setValue("payeeUdyamNumber", vendor.udyamNumber);
   }
 
+  function handleTaxInvoiceChange(files: File[]) {
+    const priorUpload = autoFillInvoiceUpload;
+    setTaxInvoice(files);
+    setAutoFillInvoiceUpload(null);
+    setHasInvoiceAutoFill(false);
+    setInvoiceExtractedBank(null);
+    setValue("bankDetailsMismatch", false);
+    if (priorUpload) void cleanupPendingUploads([priorUpload]);
+  }
+
+  async function tryInvoiceAutoFill() {
+    const file = taxInvoice[0];
+    if (!file || isAdvance || isCashVoucher) return;
+
+    setExtractingInvoice(true);
+    try {
+      let uploaded = autoFillInvoiceUpload;
+      if (!uploaded) {
+        const uploadBatchId = crypto.randomUUID();
+        const blob = await upload(
+          `pending-uploads/${uploadBatchId}/TAX_INVOICE-${safeUploadFileName(file.name)}`,
+          file,
+          {
+            access: "private",
+            handleUploadUrl: "/api/attachments/upload",
+            multipart: file.size > 4 * 1024 * 1024,
+          },
+        );
+        uploaded = {
+          docType: "TAX_INVOICE",
+          fileName: file.name,
+          blobPathname: blob.pathname,
+          blobUrl: blob.url,
+          sizeBytes: file.size,
+        };
+        setAutoFillInvoiceUpload(uploaded);
+      }
+
+      const response = await fetch("/api/invoice-autofill", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pathname: uploaded.blobPathname }),
+      });
+      const payload = response.ok ? await response.json() : null;
+      const autoFill = payload?.autoFill;
+      if (!autoFill) return;
+
+      let changed = false;
+      if (autoFill.billNo) {
+        setValue("billNo", autoFill.billNo, { shouldValidate: true });
+        changed = true;
+      }
+      if (autoFill.billDate) {
+        setValue("billDate", autoFill.billDate, { shouldValidate: true });
+        changed = true;
+      }
+      if (typeof autoFill.basicAmount === "number") {
+        setValue("basicAmount", autoFill.basicAmount, { shouldValidate: true });
+        changed = true;
+      }
+      if (typeof autoFill.gstAmount === "number") {
+        setValue("gstAmount", autoFill.gstAmount, { shouldValidate: true });
+        changed = true;
+      }
+      // The server returns a vendor only after a strict match against active
+      // canonical vendor rows. Raw invoice payee text never reaches this
+      // branch, so auto-fill cannot create or bypass the vendor dropdown.
+      if (autoFill.vendor) {
+        applyVendor(autoFill.vendor as VendorSearchResult);
+        changed = true;
+      }
+      // Bank details: the invoice's own printed bank details are only a
+      // fallback starting point, filled here as plain editable text — never
+      // a vendor-selection risk, since nothing here can pick a vendor.
+      // `VendorBankAccountFields` below watches `vendorId` (just set by
+      // applyVendor, if a vendor matched) and re-fetches on the next
+      // render, *after* this synchronous handler finishes: if the vendor
+      // turns out to have exactly one known account on file, that system
+      // record correctly overwrites these invoice-sourced values a moment
+      // later; if it has none, these stay; if it has several, the picker
+      // appears and — same as a manual edit — nothing here is touched
+      // until the submitter actively chooses an option.
+      if (autoFill.bankAccountNo || autoFill.bankIfsc) {
+        if (autoFill.bankAccountNo) setValue("bankAccountNo", autoFill.bankAccountNo, { shouldValidate: true });
+        if (autoFill.bankIfsc) setValue("bankIfsc", autoFill.bankIfsc, { shouldValidate: true });
+        const beneficiaryName = autoFill.vendor?.companyName ?? autoFill.payeeName;
+        if (beneficiaryName) setValue("beneficiaryName", beneficiaryName, { shouldValidate: true });
+        // Kept so applyVendorBankAccount (fired later by
+        // VendorBankAccountFields, if this invoice's vendor turns out to
+        // have a known system record) can compare against it and flag a
+        // contradiction for Finance — see that function below.
+        setInvoiceExtractedBank({
+          bankAccountNo: autoFill.bankAccountNo ?? null,
+          bankIfsc: autoFill.bankIfsc ?? null,
+        });
+        changed = true;
+      }
+      // Bank Name has no per-vendor system record to prefer over it (unlike
+      // account no./IFSC above) — just fill it directly when the invoice
+      // printed one, independent of whether account/IFSC were also found.
+      if (autoFill.bankName) {
+        setValue("bankName", autoFill.bankName, { shouldValidate: true });
+        changed = true;
+      }
+      if (changed) setHasInvoiceAutoFill(true);
+    } catch {
+      // Best effort only: a provider/upload failure intentionally leaves the
+      // ordinary manual form flow uninterrupted and without an error banner.
+    } finally {
+      setExtractingInvoice(false);
+    }
+  }
+
   // Fired by VendorBankAccountFields — either a known account was applied
   // (auto-filled, or the submitter picked one of several) or `null` for an
   // explicit "None of these" manual-entry choice, which clears the fields
@@ -288,6 +418,15 @@ export function PaymentAdviceForm({
     setValue("bankAccountNo", account?.bankAccountNo ?? "");
     setValue("bankIfsc", account?.bankIfsc ?? "");
     setValue("beneficiaryName", account?.beneficiaryName ?? "");
+    // The known system record always wins for what's actually saved above —
+    // but if it contradicts what the invoice itself printed, flag it for
+    // Finance rather than silently overwriting and saying nothing. Only
+    // meaningful when a real system account was just applied and this
+    // invoice actually extracted bank details to compare it against.
+    setValue(
+      "bankDetailsMismatch",
+      account && invoiceExtractedBank ? bankDetailsMismatch(account, invoiceExtractedBank) : false,
+    );
   }
 
   async function onSubmit(values: PaymentAdviceFormValues) {
@@ -341,6 +480,10 @@ export function PaymentAdviceForm({
       const uploadBatchId = crypto.randomUUID();
       for (const { docType, files } of attachmentGroups) {
         for (const file of files) {
+          if (docType === "TAX_INVOICE" && autoFillInvoiceUpload) {
+            uploadedAttachments.push(autoFillInvoiceUpload);
+            continue;
+          }
           const blob = await upload(
             `pending-uploads/${uploadBatchId}/${docType}-${safeUploadFileName(file.name)}`,
             file,
@@ -450,6 +593,55 @@ export function PaymentAdviceForm({
         </div>
       ) : null}
 
+      {!isAdvance && !isCashVoucher ? (
+        <div className="rounded-md border border-[#0b1f3a]/20 bg-[#0b1f3a]/5 px-4 py-3 text-sm text-[#0b1f3a]">
+          <p className="font-medium">Try filling automatically from Tax Invoice</p>
+          <p className="mt-1 text-xs text-[#0b1f3a]/70">
+            Upload it below and we can auto-fill Bill No., amounts, and vendor/bank details from it - saving
+            you from typing them in by hand. This is also your required Tax Invoice document; no need to
+            attach it again further down.
+          </p>
+          <div className="mt-3">
+            <FileUploadSlot
+              label="Tax Invoice"
+              required
+              allowImages
+              maxFiles={1}
+              files={taxInvoice}
+              onChange={handleTaxInvoiceChange}
+              existingFileNames={existingAttachments?.TAX_INVOICE}
+            />
+          </div>
+          {taxInvoice.length === 1 ? (
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-[#0b1f3a]/10 pt-3">
+              <p>Ready to read this invoice?</p>
+              <button
+                type="button"
+                onClick={tryInvoiceAutoFill}
+                disabled={extractingInvoice}
+                className="rounded-md border border-[#0b1f3a] bg-white px-3 py-1.5 font-medium hover:bg-[#0b1f3a]/5 disabled:cursor-wait disabled:opacity-60"
+              >
+                {extractingInvoice ? "Reading invoice…" : "Try Auto-Fill"}
+              </button>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      {hasInvoiceAutoFill ? (
+        <div className="rounded-md border border-[#2e8b57]/30 bg-[#2e8b57]/5 px-4 py-3 text-sm font-medium text-[#245f3d]">
+          These fields were auto-filled from your invoice - please verify they&apos;re correct before submitting.
+        </div>
+      ) : null}
+
+      {hasBankDetailsMismatch ? (
+        <div className="rounded-md border border-[#b3261e]/30 bg-[#b3261e]/5 px-4 py-3 text-sm font-medium text-[#b3261e]">
+          The bank details on file for this vendor don&apos;t match what&apos;s printed on your invoice. We&apos;ve
+          used the details on file below - please confirm with the vendor before submitting if their bank has
+          changed. This will be flagged for Finance to review.
+        </div>
+      ) : null}
+
       <Section title="1. Submitter details">
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
           <Field
@@ -457,7 +649,7 @@ export function PaymentAdviceForm({
             required
             htmlFor="submittedByName"
             error={errors.submittedByName?.message}
-            help="Start typing — if you're in the staff list, we'll pick this up automatically."
+            help="Start typing - if you're in the staff list, we'll pick this up automatically."
           >
             <StaffNameTypeahead
               id="submittedByName"
@@ -530,7 +722,7 @@ export function PaymentAdviceForm({
               error={errors.payeeName?.message}
               help={
                 isAdvance
-                  ? "Auto-filled from Your Name above — an advance is paid to you, the requester. Edit if needed."
+                  ? "Auto-filled from Your Name above - an advance is paid to you, the requester. Edit if needed."
                   : "Search for an existing payee and select them from the list. Can't find this vendor? Contact Accounts department for listing."
               }
             >
@@ -642,7 +834,7 @@ export function PaymentAdviceForm({
                 </Field>
                 {previousPendingAdvanceAmount > 0 ? (
                   <Field
-                    label="Previous Pending Advance — Since"
+                    label="Previous Pending Advance - Since"
                     required
                     error={errors.previousPendingAdvanceSince?.message}
                   >
@@ -752,7 +944,7 @@ export function PaymentAdviceForm({
             <div className={`grid grid-cols-1 gap-6 ${isAdvance ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
               {isAdvance ? (
                 <p className="sm:col-span-3 text-xs text-gray-500">
-                  Optional for an advance — Finance already has your bank details on file. Fill these
+                  Optional for an advance - Finance already has your bank details on file. Fill these
                   in only if you want to provide them here as well.
                 </p>
               ) : (
@@ -818,13 +1010,23 @@ export function PaymentAdviceForm({
         ) : null}
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
           {!isAdvance && !isCashVoucher ? (
+            // Same underlying `taxInvoice` state and `handleTaxInvoiceChange`
+            // handler as the auto-fill prompt's own FileUploadSlot at the top
+            // of the form - there is exactly one Tax Invoice attachment per
+            // submission, and this is a second, fully functioning control
+            // over that same field, not a placeholder or a link back up.
+            // Uploading here works standalone for anyone who skips the
+            // auto-fill prompt; uploading up there shows up here too
+            // (filename + Remove/Replace), with no re-upload required either
+            // way and no duplicate Blob upload (only tryInvoiceAutoFill and
+            // final submit ever upload to Blob).
             <FileUploadSlot
               label="Tax Invoice"
               required
               allowImages
               maxFiles={1}
               files={taxInvoice}
-              onChange={setTaxInvoice}
+              onChange={handleTaxInvoiceChange}
               existingFileNames={existingAttachments?.TAX_INVOICE}
             />
           ) : null}

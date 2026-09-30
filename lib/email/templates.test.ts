@@ -51,7 +51,7 @@ describe("email templates", () => {
       previousRemarks: "Correct GST <script>alert(1)</script>",
     });
     expect(message.subject).toBe(
-      "[Resubmission — Revision 2] Recommendation Required: Payment Advice MCCIA/2026-27/0001",
+      "[Resubmission - Revision 2] Recommendation Required: Payment Advice MCCIA/2026-27/0001",
     );
     expect(message.html).toContain("This is a resubmission (revision 2)");
     expect(message.html).toContain("Previous remarks: Correct GST &lt;script&gt;alert(1)&lt;/script&gt;");
@@ -261,7 +261,7 @@ describe("renderPaymentDoneEmail", () => {
       amount: "1,250.00",
       formDate: "30/07/2026",
     });
-    expect(message.subject).toBe("Payment Advice MCCIA/2026-27/0011 — Payment Done");
+    expect(message.subject).toBe("Payment Advice MCCIA/2026-27/0011 - Payment Done");
     expect(message.html).toContain("MCCIA/2026-27/0011 has been paid");
   });
 
@@ -274,7 +274,7 @@ describe("renderPaymentDoneEmail", () => {
       amount: "850.00",
       formDate: "30/07/2026",
     });
-    expect(message.subject).toBe("Cash Payment Voucher CASH/MCCIA/2026-27/0012 — Payment Done");
+    expect(message.subject).toBe("Cash Payment Voucher CASH/MCCIA/2026-27/0012 - Payment Done");
     expect(message.html).toContain("CASH/MCCIA/2026-27/0012 has been paid");
   });
 });
@@ -295,7 +295,7 @@ describe("renderPaymentEntryEmail", () => {
 
   it("labels a partial payment clearly, states the remaining balance, and never mentions 'Payment Complete'", () => {
     const message = renderPaymentEntryEmail({ ...base, isFinal: false });
-    expect(message.subject).toBe("Payment Advice MCCIA/2026-27/0050 — Partial Payment Recorded");
+    expect(message.subject).toBe("Payment Advice MCCIA/2026-27/0050 - Partial Payment Recorded");
     expect(message.html).toContain("This is a partial payment");
     expect(message.html).toContain("600.00");
     expect(message.html).not.toContain("Payment Complete");
@@ -309,7 +309,7 @@ describe("renderPaymentEntryEmail", () => {
       remaining: "0.00",
       isFinal: true,
     });
-    expect(message.subject).toBe("Payment Advice MCCIA/2026-27/0050 — Payment Complete");
+    expect(message.subject).toBe("Payment Advice MCCIA/2026-27/0050 - Payment Complete");
     expect(message.html).toContain("full payable amount has now been settled");
     expect(message.html).not.toContain("Partial Payment Recorded");
   });

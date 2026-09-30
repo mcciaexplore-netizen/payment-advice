@@ -61,10 +61,16 @@ export function buildAdviceWhere(params: AdviceFilterParams): SQL | undefined {
 
   if (params.q) {
     const term = `%${params.q}%`;
+    // Matches serial/bill number plus the submitter (name or email) — not
+    // payee/vendor, which already has its own dedicated `payee` filter
+    // above. Kept as two separate criteria (name, email) rather than one
+    // combined column so a partial match on either works, same as the
+    // dedicated payee filter's single-column partial match.
     const searchOr = or(
       ilike(paymentAdvices.serialNo, term),
       ilike(paymentAdvices.billNo, term),
-      ilike(paymentAdvices.payeeName, term),
+      ilike(paymentAdvices.submittedByName, term),
+      ilike(paymentAdvices.submittedByEmail, term),
     );
     if (searchOr) conditions.push(searchOr);
   }

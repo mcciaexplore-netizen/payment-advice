@@ -23,6 +23,7 @@ import { defaultPaymentModeForRoles } from "@/lib/admin/role-scope";
 import { pipelineStageFor } from "@/lib/advice/pipeline-stage";
 import { STAGE_FOR_TAB, STAGE_STYLE } from "@/lib/advice/stage-style";
 import { SentBackIndicators } from "@/components/admin/SentBackIndicators";
+import { BankDetailsMismatchBadge } from "@/components/admin/BankDetailsMismatchBadge";
 import { sentBackStatus } from "@/lib/advice/send-back-status";
 import { formatDateOnly, formatIstDate } from "@/lib/date-time";
 
@@ -138,6 +139,7 @@ export default async function AdminListPage({
         verifiedAt: paymentAdvices.verifiedAt,
         paymentDoneAt: paymentAdvices.paymentDoneAt,
         totalPaid: paymentAdvices.totalPaid,
+        bankDetailsMismatch: paymentAdvices.bankDetailsMismatch,
       })
       .from(paymentAdvices)
       .where(where)
@@ -257,7 +259,7 @@ export default async function AdminListPage({
           searchParams={sp}
         />
         <TabLink
-          label="Verified — Ready for Payment"
+          label="Verified - Ready for Payment"
           tab="verified_ready_payment"
           activeTab={tab}
           count={verifiedCount[0]?.count ?? 0}
@@ -331,7 +333,7 @@ export default async function AdminListPage({
             <option value="CASH">Cash</option>
           </select>
         </FilterField>
-        <FilterField label="Search (serial / bill / payee)">
+        <FilterField label="Search (serial/bill/submitter)">
           <input type="text" name="q" defaultValue={filterParams.q ?? ""} className="admin-filter-input" />
         </FilterField>
         <div className="col-span-2 flex items-end gap-2 sm:col-span-4 lg:col-span-7">
@@ -402,7 +404,12 @@ export default async function AdminListPage({
                     </span>
                   </td>
                   <td className="whitespace-nowrap px-4 py-3">{formatDateOnly(row.formDate)}</td>
-                  <td className="px-4 py-3">{row.payeeName}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex flex-col items-start gap-1">
+                      <span>{row.payeeName}</span>
+                      <BankDetailsMismatchBadge bankDetailsMismatch={row.bankDetailsMismatch} />
+                    </div>
+                  </td>
                   <td className="whitespace-nowrap px-4 py-3 text-right">₹ {formatAmount(row.amount)}</td>
                   <td className="whitespace-nowrap px-4 py-3">
                     {row.paymentMode}
@@ -429,11 +436,11 @@ export default async function AdminListPage({
                   </td>
                   {tab === "sent_back" ? (
                     <td className="max-w-[240px] truncate px-4 py-3" title={row.adminRemarks ?? ""}>
-                      {row.adminRemarks ?? "—"}
+                      {row.adminRemarks ?? "-"}
                     </td>
                   ) : null}
-                  {tab === "rejected" ? <td className="px-4 py-3"><div>{row.rejectedBy ?? "—"}</div><div className="text-xs text-gray-500">{row.rejectedAt ? formatIstDate(row.rejectedAt) : "—"}</div></td> : null}
-                  {tab === "rejected" ? <td className="max-w-[260px] whitespace-pre-wrap px-4 py-3">{row.rejectionRemarks ?? "—"}</td> : null}
+                  {tab === "rejected" ? <td className="px-4 py-3"><div>{row.rejectedBy ?? "-"}</div><div className="text-xs text-gray-500">{row.rejectedAt ? formatIstDate(row.rejectedAt) : "-"}</div></td> : null}
+                  {tab === "rejected" ? <td className="max-w-[260px] whitespace-pre-wrap px-4 py-3">{row.rejectionRemarks ?? "-"}</td> : null}
                   <td className="whitespace-nowrap px-4 py-3">
                     <Link href={`/admin/advice/${row.id}`} className="font-medium text-[#0b1f3a] hover:underline">
                       View

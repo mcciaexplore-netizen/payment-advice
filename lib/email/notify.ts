@@ -162,7 +162,7 @@ async function send(
 
   const override = process.env.EMAIL_TEST_OVERRIDE_RECIPIENT;
   const recipient = override || to;
-  const subject = override ? `[TEST — would go to: ${to}] ${message.subject}` : message.subject;
+  const subject = override ? `[TEST - would go to: ${to}] ${message.subject}` : message.subject;
 
   try {
     const result = await dispatch(getFrom(), recipient, subject, message.html);

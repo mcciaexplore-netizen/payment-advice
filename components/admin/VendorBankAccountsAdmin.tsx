@@ -81,7 +81,7 @@ function AccountRow({ account }: { account: AdminVendorBankAccount }) {
     <div className="rounded-md border border-gray-200 p-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <div className="text-sm font-medium text-[#0b1f3a]">
-          A/c ending {account.bankAccountNo.slice(-4)} — {account.beneficiaryName}
+          A/c ending {account.bankAccountNo.slice(-4)} - {account.beneficiaryName}
         </div>
         <div className="text-xs text-gray-500">IFSC {account.bankIfsc}</div>
       </div>
@@ -99,7 +99,7 @@ function AccountRow({ account }: { account: AdminVendorBankAccount }) {
         ) : (
           <>
             <p className="text-xs font-medium text-amber-800">
-              Restricted — only visible to:
+              Restricted - only visible to:
             </p>
             <div className="mt-1.5 flex flex-wrap gap-1.5">
               {emails.map((email) => (

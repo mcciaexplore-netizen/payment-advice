@@ -74,7 +74,7 @@ function VendorBankAccountFieldsForVendor({
 
   const verifyNote = (
     <p className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800">
-      These bank details were auto-filled from a previous submission for this vendor — please verify
+      These bank details were auto-filled from a previous submission for this vendor - please verify
       they&apos;re correct before submitting.
     </p>
   );
@@ -86,7 +86,7 @@ function VendorBankAccountFieldsForVendor({
   return (
     <div className="sm:col-span-2 flex flex-col gap-2 rounded-md border border-[#0b1f3a]/20 bg-[#0b1f3a]/[0.02] p-3">
       <p className="text-xs font-medium text-[#0b1f3a]">
-        This vendor has more than one bank account on file — select the correct one:
+        This vendor has more than one bank account on file - select the correct one:
       </p>
       <div className="flex flex-col gap-1.5">
         {accounts.map((account) => (
@@ -108,7 +108,7 @@ function VendorBankAccountFieldsForVendor({
             <span>
               A/c ending in {account.bankAccountNo.slice(-4)}, IFSC {account.bankIfsc}
               {account.lastUsedAt
-                ? ` — last used ${new Date(account.lastUsedAt).toLocaleDateString("en-IN")}`
+                ? ` - last used ${new Date(account.lastUsedAt).toLocaleDateString("en-IN")}`
                 : ""}
             </span>
           </label>
@@ -124,7 +124,7 @@ function VendorBankAccountFieldsForVendor({
             }}
             className="mt-0.5 accent-[#0b1f3a]"
           />
-          <span>None of these — enter new bank details</span>
+          <span>None of these - enter new bank details</span>
         </label>
       </div>
       {choice && choice !== "manual" ? verifyNote : null}

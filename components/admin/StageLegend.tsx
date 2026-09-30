@@ -21,7 +21,7 @@ export function StageLegend() {
             <div key={stage} className="flex items-center gap-2 whitespace-nowrap text-xs text-gray-600">
               <span className={`h-2.5 w-2.5 flex-none rounded-full ${style.dot}`} />
               <span className="font-medium text-gray-700">{style.shortLabel}</span>
-              <span className="text-gray-400">— {stage}</span>
+              <span className="text-gray-400">- {stage}</span>
             </div>
           );
         })}

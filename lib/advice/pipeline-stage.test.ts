@@ -13,7 +13,7 @@ describe("pipelineStageFor", () => {
     [{ approvedAt: new Date() }, "Awaiting Finance Review"],
     [{ approvedAt: new Date(), isAdvance: true }, "Advance Payment"],
     [{ approvedAt: new Date(), financeReceivedAt: new Date() }, "Received & In Process"],
-    [{ approvedAt: new Date(), financeReceivedAt: new Date(), verifiedAt: new Date() }, "Verified — Ready for Payment"],
+    [{ approvedAt: new Date(), financeReceivedAt: new Date(), verifiedAt: new Date() }, "Verified - Ready for Payment"],
     [{ approvedAt: new Date(), financeReceivedAt: new Date(), verifiedAt: new Date(), totalPaid: "25" }, "Partial Payment Done"],
     [{ status: "APPROVED" }, "Fully Payment Settled"],
     [{ status: "APPROVED", paymentMode: "CASH" }, "Payment Done"],

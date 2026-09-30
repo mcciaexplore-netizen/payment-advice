@@ -93,6 +93,6 @@ export function calculateDgIntervalMetrics(rows: DgIntervalRow[], now = new Date
 }
 
 export function formatDuration(hours: number | null): string {
-  if (hours === null) return "—";
+  if (hours === null) return "-";
   return hours < 48 ? `${hours.toFixed(1)} hrs` : `${(hours / 24).toFixed(1)} days`;
 }

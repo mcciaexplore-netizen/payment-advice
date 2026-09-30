@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
   // posts an arbitrary or stale id.
   if (values.paymentMode === "NEFT" && !values.isAdvance && !(await isActiveVendor(values.vendorId!))) {
     return NextResponse.json(
-      { error: "Select a vendor from the list — free-text payee names are no longer accepted" },
+      { error: "Select a vendor from the list - free-text payee names are no longer accepted" },
       { status: 400 },
     );
   }
@@ -183,6 +183,7 @@ export async function POST(req: NextRequest) {
           bankIfsc: values.bankIfsc ?? null,
           beneficiaryName: values.beneficiaryName ?? null,
           bankName: values.bankName ?? null,
+          bankDetailsMismatch: values.bankDetailsMismatch,
           submittedByName: values.submittedByName,
           submittedByEmail: values.submittedByEmail,
           submittedByDepartment: values.submittedByDepartment,

@@ -18,6 +18,7 @@
     "seed:team-dashboard-users": "tsx scripts/seed-team-dashboard-users.ts"
   },
   "dependencies": {
+    "@google/genai": "^2.23.0",
     "@hookform/resolvers": "^5.5.7",
     "@neondatabase/serverless": "^1.1.0",
     "@react-pdf/renderer": "^4.5.1",

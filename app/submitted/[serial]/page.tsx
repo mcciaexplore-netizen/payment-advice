@@ -120,7 +120,7 @@ export default function SubmittedPage() {
           <p className="mt-1">
             Download and print the Cash Payment Voucher above, then take it
             around for the &quot;Submitted by&quot; and &quot;Recommended
-            by&quot; signatures — the boxes are already labelled with who
+            by&quot; signatures - the boxes are already labelled with who
             should sign each one. Once signed, hand it to Finance &amp;
             Accounts, who will review it online and either approve it or send
             it back to you with remarks and a link to fix and resubmit.
@@ -129,7 +129,7 @@ export default function SubmittedPage() {
           <p className="mt-1">
             Download and print the Payment Advice above, then take it around
             for the &quot;Recommended by&quot;, &quot;Verified by&quot; and
-            &quot;Sanctioned by&quot; signatures — the boxes are already
+            &quot;Sanctioned by&quot; signatures - the boxes are already
             labelled with who should sign each one. Once signed, hand it to
             Finance &amp; Accounts, who will review it online and either
             approve it or send it back to you with remarks and a link to fix
@@ -137,7 +137,7 @@ export default function SubmittedPage() {
           </p>
         )}
         <p className="mt-2">
-          Please note down the number above — quote it if you contact
+          Please note down the number above - quote it if you contact
           Accounts about this payment.
         </p>
       </div>

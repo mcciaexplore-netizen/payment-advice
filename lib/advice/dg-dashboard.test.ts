@@ -50,7 +50,7 @@ describe("DG executive interval metrics", () => {
   });
 
   it("formats short durations as hours and longer ones as days", () => {
-    expect(formatDuration(null)).toBe("—");
+    expect(formatDuration(null)).toBe("-");
     expect(formatDuration(12)).toBe("12.0 hrs");
     expect(formatDuration(60)).toBe("2.5 days");
   });

@@ -165,7 +165,7 @@ export default async function AdminDashboardPage() {
         </Panel>
 
         <Panel title="Authority recommendation time" subtitle="Average for recommended submissions this financial year">
-          <p className="font-heading text-4xl text-[#0b1f3a]">{averageApprovalHours === null ? "—" : averageApprovalHours < 48 ? `${averageApprovalHours.toFixed(1)} hrs` : `${(averageApprovalHours / 24).toFixed(1)} days`}</p>
+          <p className="font-heading text-4xl text-[#0b1f3a]">{averageApprovalHours === null ? "-" : averageApprovalHours < 48 ? `${averageApprovalHours.toFixed(1)} hrs` : `${(averageApprovalHours / 24).toFixed(1)} days`}</p>
           <p className="mt-2 text-sm text-gray-500">Based on {approvalCount} recommended submission{approvalCount === 1 ? "" : "s"}.</p>
         </Panel>
       </div>

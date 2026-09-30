@@ -1,5 +1,5 @@
 export const ATTACHMENT_SIZE_ERROR =
-  "Your attachments are too large to submit — please compress them or contact Accounts for help.";
+  "Your attachments are too large to submit - please compress them or contact Accounts for help.";
 
 export async function readSubmitResponse(response: Response) {
   const text = await response.text();

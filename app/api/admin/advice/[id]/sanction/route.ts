@@ -142,7 +142,7 @@ export async function PATCH(
   }
   if (!advice.sanctionedAt) {
     return NextResponse.json(
-      { error: "Not yet sanctioned — nothing to correct." },
+      { error: "Not yet sanctioned - nothing to correct." },
       { status: 409 },
     );
   }

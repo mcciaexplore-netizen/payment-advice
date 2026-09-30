@@ -1,6 +1,6 @@
 {
-  "id": "d758be09-1235-4136-9dca-1bcafb662143",
-  "prevId": "c1bb1f5c-77bc-4e6c-9e82-f286cd9bcaaf",
+  "id": "f85d848b-16fa-48b0-9409-94b84c8cc81f",
+  "prevId": "d758be09-1235-4136-9dca-1bcafb662143",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -377,6 +377,12 @@
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
+        },
+        "forwarding_memo_id": {
+          "name": "forwarding_memo_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {},
@@ -387,6 +393,19 @@
           "tableTo": "payment_advices",
           "columnsFrom": [
             "payment_advice_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "audit_log_forwarding_memo_id_forwarding_memos_id_fk": {
+          "name": "audit_log_forwarding_memo_id_forwarding_memos_id_fk",
+          "tableFrom": "audit_log",
+          "tableTo": "forwarding_memos",
+          "columnsFrom": [
+            "forwarding_memo_id"
           ],
           "columnsTo": [
             "id"
@@ -1580,6 +1599,114 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.forwarding_memos": {
+      "name": "forwarding_memos",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "memo_date": {
+          "name": "memo_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "party_name": {
+          "name": "party_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "party_address": {
+          "name": "party_address",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "purpose": {
+          "name": "purpose",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "bill_no": {
+          "name": "bill_no",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "bill_date": {
+          "name": "bill_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "instrument_mode": {
+          "name": "instrument_mode",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "instrument_no": {
+          "name": "instrument_no",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "instrument_date": {
+          "name": "instrument_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "drawn_on_bank": {
+          "name": "drawn_on_bank",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "amount": {
+          "name": "amount",
+          "type": "numeric(14, 2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "submitted_by_name": {
+          "name": "submitted_by_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "forwarding_memos_instrument_mode_check": {
+          "name": "forwarding_memos_instrument_mode_check",
+          "value": "\"forwarding_memos\".\"instrument_mode\" in ('CHEQUE', 'DD')"
+        },
+        "forwarding_memos_amount_positive_check": {
+          "name": "forwarding_memos_amount_positive_check",
+          "value": "\"forwarding_memos\".\"amount\" > 0"
+        }
+      },
       "isRLSEnabled": false
     }
   },

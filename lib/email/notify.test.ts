@@ -239,7 +239,7 @@ describe("lib/email/notify.ts", () => {
       expect(mocks.gmailSendMail).toHaveBeenCalledWith(
         expect.objectContaining({
           to: "submitter@example.com",
-          subject: "Payment Advice MCCIA/2026-27/0004 Recommended — Forwarded to Finance",
+          subject: "Payment Advice MCCIA/2026-27/0004 Recommended - Forwarded to Finance",
           html: expect.stringContaining("recommended by <strong>Ganesh Mate</strong>"),
         }),
       );
@@ -258,7 +258,7 @@ describe("lib/email/notify.ts", () => {
       expect(mocks.gmailSendMail).toHaveBeenCalledWith(
         expect.objectContaining({
           to: "submitter@example.com",
-          subject: "Payment Advice MCCIA/2026-27/0009 — Payment Done",
+          subject: "Payment Advice MCCIA/2026-27/0009 - Payment Done",
         }),
       );
     });
@@ -268,7 +268,7 @@ describe("lib/email/notify.ts", () => {
       expect(mocks.gmailSendMail).toHaveBeenCalledWith(
         expect.objectContaining({
           to: "submitter@example.com",
-          subject: "Payment Advice MCCIA/2026-27/0050 — Partial Payment Recorded",
+          subject: "Payment Advice MCCIA/2026-27/0050 - Partial Payment Recorded",
         }),
       );
     });
@@ -281,7 +281,7 @@ describe("lib/email/notify.ts", () => {
       expect(mocks.gmailSendMail).toHaveBeenCalledWith(
         expect.objectContaining({
           to: "submitter@example.com",
-          subject: "Payment Advice MCCIA/2026-27/0050 — Payment Complete",
+          subject: "Payment Advice MCCIA/2026-27/0050 - Payment Complete",
         }),
       );
     });
@@ -309,7 +309,7 @@ describe("lib/email/notify.ts", () => {
       expect(mocks.gmailSendMail).toHaveBeenCalledWith(
         expect.objectContaining({
           to: "tester@example.com",
-          subject: "[TEST — would go to: submitter@example.com] Payment Advice MCCIA/2026-27/0001 Submitted",
+          subject: "[TEST - would go to: submitter@example.com] Payment Advice MCCIA/2026-27/0001 Submitted",
         }),
       );
     });
@@ -320,7 +320,7 @@ describe("lib/email/notify.ts", () => {
       expect(mocks.gmailSendMail).toHaveBeenCalledWith(
         expect.objectContaining({
           to: "tester@example.com",
-          subject: expect.stringContaining("[TEST — would go to: ganeshm@mcciapune.com] "),
+          subject: expect.stringContaining("[TEST - would go to: ganeshm@mcciapune.com] "),
         }),
       );
     });
@@ -442,7 +442,7 @@ describe("lib/email/notify.ts", () => {
       expect(mocks.resendSend).toHaveBeenCalledWith(
         expect.objectContaining({
           to: "tester@example.com",
-          subject: "[TEST — would go to: submitter@example.com] Payment Advice MCCIA/2026-27/0001 Submitted",
+          subject: "[TEST - would go to: submitter@example.com] Payment Advice MCCIA/2026-27/0001 Submitted",
         }),
       );
     });

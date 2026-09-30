@@ -39,6 +39,7 @@ Copy `.env.local.example` to `.env.local` and fill in real values. Never commit
 |---|---|---|
 | `DATABASE_URL` | Yes | Neon Postgres connection string (pooled connection recommended). Neon dashboard → Connection Details. Must support real transactions (the app uses `@neondatabase/serverless`'s WebSocket `Pool`, not the stateless HTTP driver) — this only works against a real Neon (or Neon Local) endpoint, not a plain local Postgres. |
 | `BLOB_READ_WRITE_TOKEN` | Yes | Vercel Blob read/write token. Vercel dashboard → Storage → your Blob store → `.env.local` tab. |
+| `GEMINI_API_KEY` | Only for invoice auto-fill | Server-side Google Gemini API key used only when a Payment Advice submitter explicitly asks to read an uploaded Tax Invoice. Set it in `.env.local` and Vercel project secrets; never use a `NEXT_PUBLIC_` name or commit a real value. |
 | `AUTH_SECRET` | Yes | Secret used to sign/verify the admin session JWT (HS256). Generate with `openssl rand -base64 32`. |
 | `TEST_DATABASE_URL` | No | Only needed to run the `lib/serial.ts` integration tests (`npm test`) against a real Postgres instance. Point this at a **scratch** Neon branch or local Postgres — never at your real `DATABASE_URL` — since the tests write rows to `serial_counters`. Leave unset to skip those tests (the pure unit tests still run). |
 | `EMAIL_MODE` | No | `preview` (default if unset) — render + console.log only, no network call. `live` — actually sends via whichever provider `EMAIL_PROVIDER` selects. |

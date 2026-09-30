@@ -183,7 +183,7 @@ export function RecommendingAuthorityField({
     return (
       <div className="flex flex-col gap-1.5">
         <p className="text-xs text-gray-500">
-          We couldn&apos;t find your name in the staff list — type the name of your
+          We couldn&apos;t find your name in the staff list - type the name of your
           recommending authority below.
         </p>
         <FreeTextAuthorityInput

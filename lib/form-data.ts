@@ -69,6 +69,7 @@ export function parsePaymentAdviceFormData(formData: FormData) {
     bankIfsc: str(formData, "bankIfsc"),
     beneficiaryName: str(formData, "beneficiaryName"),
     bankName: str(formData, "bankName"),
+    bankDetailsMismatch: str(formData, "bankDetailsMismatch") === "true",
     enclosures: str(formData, "enclosures"),
     specialRemarks: str(formData, "specialRemarks"),
     formDate: str(formData, "formDate"),

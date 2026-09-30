@@ -276,6 +276,11 @@ export const paymentAdviceFormSchema = z
     ),
     beneficiaryName: optionalTrimmed(),
     bankName: optionalTrimmed(),
+    // Set client-side only when Gemini invoice auto-fill detects the
+    // invoice's own printed bank details contradict the vendor's known
+    // system-of-record account (which always wins for what's actually
+    // saved above) — see lib/invoice-autofill.ts's bankDetailsMismatch().
+    bankDetailsMismatch: z.boolean().default(false),
 
     // Section 5 — enclosures & remarks
     enclosures: optionalTrimmed(),
@@ -311,7 +316,7 @@ export const paymentAdviceFormSchema = z
         ctx.addIssue({
           code: "custom",
           path: ["payeeName"],
-          message: "Select a vendor from the list — free-text payee names are no longer accepted",
+          message: "Select a vendor from the list - free-text payee names are no longer accepted",
         });
       }
       if (!data.enclosures) {
@@ -441,7 +446,7 @@ export const paymentAdviceFormSchema = z
           ctx.addIssue({
             code: "custom",
             path: ["gstAmount"],
-            message: "GST Amount is required — enter 0 if GST is not applicable",
+            message: "GST Amount is required - enter 0 if GST is not applicable",
           });
         } else if (data.gstAmount < 0) {
           ctx.addIssue({

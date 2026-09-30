@@ -57,7 +57,7 @@ export const STAGE_STYLE: Record<PipelineStage, StageStyle> = {
     tabInactive: "bg-blue-50 text-blue-600 border-blue-300 hover:border-blue-500",
     dot: "bg-blue-600",
   },
-  "Verified — Ready for Payment": {
+  "Verified - Ready for Payment": {
     shortLabel: "Verified",
     badge: "bg-teal-100 text-teal-700 border-teal-300",
     tabActive: "bg-teal-600 text-white border-teal-600",
@@ -112,7 +112,7 @@ export const PIPELINE_STAGE_ORDER: PipelineStage[] = [
   "Awaiting Finance Review",
   "Advance Payment",
   "Received & In Process",
-  "Verified — Ready for Payment",
+  "Verified - Ready for Payment",
   "Partial Payment Done",
   "Fully Payment Settled",
   "Payment Done",
@@ -129,7 +129,7 @@ export const STAGE_FOR_TAB: Record<Exclude<AdminTab, "all">, PipelineStage> = {
   awaiting_finance: "Awaiting Finance Review",
   advance_payment: "Advance Payment",
   received_in_process: "Received & In Process",
-  verified_ready_payment: "Verified — Ready for Payment",
+  verified_ready_payment: "Verified - Ready for Payment",
   partial_payment_done: "Partial Payment Done",
   fully_payment_settled: "Fully Payment Settled",
   payment_done: "Payment Done",

@@ -20,7 +20,7 @@ type Snapshot = {
 
 const migrationsDir = path.join(process.cwd(), "lib/db/migrations");
 const migrationSql = fs.readFileSync(path.join(migrationsDir, "0025_forwarding_memos.sql"), "utf8");
-const previous: Snapshot = JSON.parse(fs.readFileSync(path.join(migrationsDir, "meta/0023_snapshot.json"), "utf8"));
+const previous: Snapshot = JSON.parse(fs.readFileSync(path.join(migrationsDir, "meta/0024_snapshot.json"), "utf8"));
 const current: Snapshot = JSON.parse(fs.readFileSync(path.join(migrationsDir, "meta/0025_snapshot.json"), "utf8"));
 
 describe("Forwarding Memo migration safety", () => {
