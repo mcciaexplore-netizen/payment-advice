@@ -342,23 +342,25 @@ export function AdviceActions({
       const doneAt = paymentDoneAt ?? sanctionedAt;
       const doneBy = paymentDoneBy ?? sanctionedBy;
       return (
-        <div className="flex flex-col gap-2 rounded-md border border-gray-200 p-4">
-          <p className="text-sm font-medium text-[#0b1f3a]">
-            {billPassedForLabel} {initialBillPassedFor ?? "-"}
-          </p>
-          <p className="text-sm text-gray-600">
-            Payment Done{doneBy ? ` - ${doneBy}` : ""}
-            {doneAt
-              ? ` on ${formatIstDate(doneAt)}`
-              : ""}
-            .
-          </p>
-          <a
-            href={`/api/admin/advice/${adviceId}/cash-voucher-pdf`}
-            className="inline-block w-fit rounded-md bg-[#0b1f3a] px-4 py-2 text-sm font-medium text-white hover:bg-[#0b1f3a]/90"
-          >
-            Download Cash Payment Voucher
-          </a>
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-2 rounded-md border border-gray-200 p-4">
+            <p className="text-sm font-medium text-[#0b1f3a]">
+              {billPassedForLabel} {initialBillPassedFor ?? "-"}
+            </p>
+            <p className="text-sm text-gray-600">
+              Payment Done{doneBy ? ` - ${doneBy}` : ""}
+              {doneAt
+                ? ` on ${formatIstDate(doneAt)}`
+                : ""}
+              .
+            </p>
+            <a
+              href={`/api/admin/advice/${adviceId}/cash-voucher-pdf`}
+              className="inline-block w-fit rounded-md bg-[#0b1f3a] px-4 py-2 text-sm font-medium text-white hover:bg-[#0b1f3a]/90"
+            >
+              Download Cash Payment Voucher
+            </a>
+          </div>
           <BackLink
             label="Back to Submissions"
             fallbackHref="/admin/submissions"
@@ -374,7 +376,8 @@ export function AdviceActions({
     initialPayableAmount != null ? Number(initialPayableAmount) - Number(totalPaid) : null;
 
   return (
-    <div className="flex flex-col gap-6 rounded-md border border-gray-200 p-4">
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-6 rounded-md border border-gray-200 p-4">
       {paymentMode === "CASH" ? (
         <a
           href={`/api/advice/${adviceId}/cash-voucher-pdf`}
@@ -687,12 +690,14 @@ export function AdviceActions({
         </div>
       ) : null}
       {showReject && !hasPaymentEntries ? <div className="flex flex-col gap-3 rounded-md border border-red-400 bg-red-50 p-4"><p className="text-sm text-red-950">Permanently close this submission. The reference number will not be reused.</p><label className="text-sm font-medium text-red-950">Rejection remarks <span className="text-xs font-normal text-[#b3261e]">Required</span></label><textarea value={rejectionRemarks} onChange={(e) => setRejectionRemarks(e.target.value)} rows={3} className="admin-filter-input"/>{rejectError ? <p className="text-sm font-medium text-[#b3261e]">{rejectError}</p> : null}<button type="button" onClick={rejectSubmission} disabled={rejecting || !rejectionRemarks.trim()} className="w-fit rounded-md bg-red-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">{rejecting ? "Rejecting…" : "Confirm Reject"}</button></div> : null}
+      </div>
 
-      {/* Second shortcut back to the list, below every action above (Send
-          Back/Reject included) - a long detail page otherwise leaves only
-          the top-of-page link, out of view once scrolled down here. Shares
-          BackLink's exact history-back-with-fallback behavior, so this and
-          the top link always land in the same place. */}
+      {/* Second shortcut back to the list, below the whole action panel
+          above (Send Back/Reject included), outside its border - a long
+          detail page otherwise leaves only the top-of-page link, out of
+          view once scrolled down here. Shares BackLink's exact
+          history-back-with-fallback behavior, so this and the top link
+          always land in the same place. */}
       <BackLink
         label="Back to Submissions"
         fallbackHref="/admin/submissions"

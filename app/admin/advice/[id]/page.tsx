@@ -158,7 +158,7 @@ export default async function AdviceDetailPage({
 
           <Section title="Payee">
             <Row label="Payee Name" value={advice.payeeName} />
-            <Row label="Payee Address" value={advice.payeeAddress} block />
+            <Row label="Payee Address" value={advice.payeeAddress} />
             <Row label="E-mail ID" value={advice.payeeEmail ?? "-"} />
             <Row label="Contact Person" value={advice.payeeContactPerson ?? "-"} />
             <Row label="Contact Phone" value={advice.payeeContactPhone ?? "-"} />
@@ -427,7 +427,11 @@ function Row({ label, value, block }: { label: string; value: string; block?: bo
       <span className="min-w-[200px] text-xs font-medium uppercase tracking-wide text-gray-500">
         {label}
       </span>
-      <span className={block ? "whitespace-pre-wrap text-sm text-[#171717]" : "text-sm text-[#171717]"}>
+      {/* whitespace-pre-wrap always applies (not just in block mode) - a
+          no-op for every single-line value, but it's what keeps a real
+          multi-line payee address's line breaks intact even while sitting
+          inline next to its label like every other field on this page. */}
+      <span className="whitespace-pre-wrap text-sm text-[#171717]">
         {value}
       </span>
     </div>
