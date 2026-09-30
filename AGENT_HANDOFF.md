@@ -47,36 +47,15 @@ Design system: Navy `#0B1F3A`, Forest green `#2E8B57`, Amber `#E8A33D`. Headings
 
 ## 3. Current State (update this every session)
 
-**Last updated:** 30 September 2026, by Claude Opus 5 (1M context) (second "Back to Submissions" button + Payee Name/Address display split; see entry below)
+**Last updated:** 19 September 2026, by Codex (development dataset requested; cloud access pending; Forwarding Memo remains incomplete and not deployed)
 
-### Shipped — Second "Back to Submissions" button on detail pages; split combined Payee Name/Address display (Claude Opus 5, 2026-09-30, branch `feature/detail-page-back-button-payee-split`, not yet merged)
-- **Change 1 — second back button.** `components/admin/BackLink.tsx` now takes an optional `className` (defaults to its original plain-text look, so every existing top-of-page usage is visually unchanged) so a second instance can reuse its exact history-back-with-fallback navigation with a boxed/bordered look instead of duplicating that logic. Added to the bottom of `components/admin/AdviceActions.tsx`'s panel in **all three** of its return branches (main pipeline view, the terminal REJECTED message, and Cash Voucher's fully-settled terminal view) — so it's present regardless of the advice's current stage, not just the one screenshot state — and to the bottom of the Decision/Decision Record section on `app/authority/advice/[id]/page.tsx` (covers Authority pending/history and DG's read-only view alike, since they all share this one page). Each bottom button matches its own panel's existing button styling (Admin's `text-sm`/`rounded-md` bordered buttons; Authority's smaller `text-xs`/`rounded` ones) and reuses that page's own existing top-link label/fallback, so both buttons on a page always go to the identical place.
-- **Real finding, not assumed:** Branch/Department Team Dashboards have **no submission detail page at all** — their list rows never render a link into one (only `isAuthority` rows get a `ViewLink` in `app/authority/page.tsx`), and `/authority/advice/[id]` itself 404s any session without the `AUTHORITY` role (`!hasRole(session, "AUTHORITY")` gate). So there's nothing to add a second button *to* for Branch/Department today — flagged back rather than building unrequested drill-down access to force this in.
-- **Change 2 — split "Name and Address of the Payee" back into two fields.** `payee_name`/`payee_address` are, and always were, two separate DB columns; searched every surface that reads either field before touching anything. Found exactly 2 places combining them into one displayed line: `app/admin/advice/[id]/page.tsx` ("Name and Address of the Payee") and `app/authority/advice/[id]/page.tsx` ("Name and Address") — both split into separate `Payee Name`/`Payee Address` rows, matching the exact labels the Excel export already uses for these two columns. Everywhere else checked was already correct or not applicable: Excel export (`app/api/admin/export/route.ts`) already has fully separate columns; the Payment Advice PDF (`lib/pdf/PaymentAdviceDocument.tsx`) already renders them as two separate `<Text>` lines under one shared label that mirrors the original paper form's own field name for that box — left as-is, flagged in case the label itself should also split; Cash Voucher PDF only ever shows payee name (no address field); the public confirmation page, authority-approval token page, and every notification email only ever show a bare "Payee" name, never combined with address; the submission form already collects them as two separate fields (untouched). Display-only — no data changed.
-- Live-tested against the real dev server + real Neon DB (real historical rows, including one with a genuine multi-line address, `MCCIA/2026-27/0018`): confirmed exactly 2 real `<button>` elements render per detail page (top + bottom, correctly styled) across a SUBMITTED, a REJECTED, and a fully-settled CASH row on Admin, and a pending + a history row on Authority (via Chintamani Shrotri's real account, a temporary locally-signed session JWT — his password never touched); confirmed both `Payee Name`/`Payee Address` rows render correctly and the old combined label is gone on both pages; confirmed the stored `payee_name`/`payee_address` values are byte-for-byte unchanged before/after. PDF route re-fetched successfully (200, valid PDF) to confirm it still works, but not visually screenshotted — no PDF-rendering tool (`pdftoppm`/poppler) available in this environment, same long-standing "no browser automation" gap noted throughout this file; relied on direct source inspection instead (the PDF template file itself is untouched).
-- `tsc --noEmit`, ESLint, and the full Vitest suite (**75 files, 489 passed, 7 pre-existing skipped**) all clean; a production build passed. Not yet pushed/merged — branch `feature/detail-page-back-button-payee-split`, 2 separable commits, awaiting explicit human approval (per the standing rule: only push feature branches, never merge to `main` without explicit approval each time).
+### In progress — Forwarding Memo (Codex, 2026-09-17; feature branch only)
+- Worktree `D:\Payment-advice\forwarding-memo`, branch `feature/forwarding-memo`, based on fetched `origin/main` at `75e29725fbe2c1f90846057e5e99c496f104a613`. The original checkout is unchanged, including its pre-existing `package-lock.json` modification. No commits, pushes or deployments.
+- Human approved **code and migration files**, not migration execution. Added the fourth existing-style landing card and `/forwarding-memo` form with RHF/Zod, paper wording, Cheque/D.D. choices, separate instrument date, typed submitter name and physical-signature areas. No existing request form, serial allocator, approval or email code changed.
+- Added a pure React-PDF renderer and additive `0024_forwarding_memos.sql` plus Drizzle snapshot/journal. This only proposes a separate `forwarding_memos` table and nullable `audit_log.forwarding_memo_id` FK. **Not applied to any database.** No new numbering series or receipt/approval workflow is encoded.
+- **Not a completed saved-submission feature:** the form explicitly says entries are not saved and its submit button is disabled. No memo API, saved-record page, PDF download endpoint, email or access policy has been implemented while business decisions are pending. This is a local reviewable foundation; the intended scope remains saved submissions with PDF, not a substitute print-only feature.
+- Latest checks: TypeScript clean; ESLint clean; Vitest **503 passed / 7 skipped, 75 files**; `npm.cmd run build -- --webpack` passed. Local GET `/` and `/forwarding-memo` returned HTTP 200. Actual synthetic PDFs were rendered and every page visually inspected (standard one page, long-content four pages), including leading zeros, distinct dates, signature space and bill label/value pagination. Browser runtime reported no available browser, so no interactive browser verification is claimed. No database integration tests, real submissions or test financial records were run/created.
 
-### Shipped — Real standalone Tax Invoice upload in Section 6 + Finance Admin search matches submitter, not payee (Claude Sonnet 5, 2026-09-24)
-- **Correction to the entry immediately below, which this session found stale on arrival:** it says "Still entirely uncommitted" — that was true as of 2026-09-21, but `git log` on `main` shows the whole Gemini auto-fill feature (plus two follow-ups: "extract Bank Name from invoice too" and "replace em dashes...; relocate Tax Invoice upload to the auto-fill prompt") was in fact committed straight to `main` later that same day (`6b1df36`, `438f146`, `0175761`) by someone/some session that never updated this file. Flagging this explicitly per the standing "never assume the other agent's claims are true" rule — whoever committed those either worked outside this handoff's discipline or ran out of turn before writing the entry. The content of those three commits (described below the correction) is real and live on `main`.
-- **The problem this session fixed:** that last relocation commit (`0175761`) moved the Tax Invoice upload control entirely into the top-of-form "Try Auto-Fill" prompt and left Section 6 "Documents" with only passive text ("Attach it at the top of the form..."). A submitter who never used the auto-fill prompt had **no way to attach a Tax Invoice at all** — this was reported as a bug and is fixed on `fix/tax-invoice-dualattach-admin-search` (2 commits, not yet merged to `main` — awaiting human approval).
-- **Fix:** Section 6 now renders a second, fully functioning `FileUploadSlot` for Tax Invoice, bound to the exact same `taxInvoice` React state and `handleTaxInvoiceChange` handler as the top prompt's own slot (`components/form/PaymentAdviceForm.tsx`). One underlying field, two entry points — no new dedup/reuse logic needed, since it's the same state: uploading via either control instantly reflects in both (filename + Remove/Replace), removing/replacing from either updates the one shared field, and the existing Blob-reuse logic (`autoFillInvoiceUpload`) and server-side attach/replace-on-resubmit plumbing were untouched and already correct.
-- **Live-tested against the real dev server + real Neon DB + real Vercel Blob + a real Gemini call** (own throwaway rows, not the human's real data): (1) fresh submission with the invoice attached only via Section 6, no auto-fill used → exactly one `TAX_INVOICE` attachment, retrievable via `/api/admin/attachments/[id]` and the admin detail page. (2) fresh submission using the top auto-fill prompt first (real Gemini call, extracted fields including a correct vendor match on the real vendor "A V DABAKE & CO") → final submit reused the exact pre-uploaded Blob pathname, confirmed via a direct DB read that only one physical upload ever occurred. (3) `/edit/[token]` resubmit exercised twice on the same advice: resubmitting without touching the file left the single attachment/Blob completely untouched; resubmitting with a replacement correctly swapped to exactly one new row and the admin route's existing old-Blob-delete logic actually removed the old one (`head()` confirmed gone, not orphaned). (4) spot-checked two real historical rows (`MCCIA/2026-27/0001`, `/0002`) to confirm this change doesn't affect existing Tax Invoice retrieval in admin views. All test rows/attachments/a test-created `vendor_bank_accounts` row (created as a side effect of using a real vendor + real bank fields in the test submission — didn't exist before, deleted, not "restored") and every real Blob object created were deleted afterward, confirmed via direct DB/Blob re-queries; the two consumed serial numbers (`MCCIA/2026-27/0203`, `/0204`) were not reused.
-- **Second, independent change on the same branch:** Finance Admin's `/admin/submissions` free-text search bar (`"Search (serial / bill / payee)"`) matched serial, bill, **and payee** — redundant with the dashboard's already-separate dedicated "Payee" filter field, and there was no way to search by submitter at all. Relabeled to `"Search (serial / bill / submitter)"`; `buildAdviceWhere()`'s `q` condition (`lib/admin/filters.ts`) now matches `submitted_by_name` OR `submitted_by_email` instead of `payee_name` (case-insensitive partial match, same as serial/bill). The dedicated `payee` filter param/condition is completely untouched and independently confirmed still working. Checked whether Authority/Branch/Department/DG dashboards share this query builder — they don't (none of them call `buildAdviceWhere`/`parseAdviceFilterParams`), so this is correctly scoped to Finance Admin only, as asked. 3 new unit tests on the rendered SQL (`lib/admin/filters.test.ts`). Live-tested read-only against real data: `MCCIA/2026-27/0018` (Satish Joshi, `satishj@mcciapune.com`, payee Atronix India) — searching "SATISH" and "satishj" both find it via the bar; searching "ATRONIX" via the bar no longer does, while the separate Payee filter still finds it by that same term; exact-serial search still works. No data mutated (pure read-only GETs).
-- `tsc --noEmit`, ESLint, and the full Vitest suite (**75 files, 489 passed, 7 pre-existing skipped**) all clean; a production build passed. **Human explicitly approved merge and push right after this was reported** — merged to `main` (`2137f38`) and pushed the same session.
-- **Follow-up UI fix, same session, committed straight to `main` (`fee766f`):** the human sent a screenshot showing the new "Search (serial / bill / submitter)" label wrapping to two lines on `/admin/submissions` at desktop width and pushing that one filter input down out of alignment with the rest of the row (`components`/`app` grid uses `align-items: stretch` by default, so a taller label cell doesn't reflow the shorter ones next to it). Fixed by tightening the label to `"Search (serial/bill/submitter)"` (no spaces around the slashes) — 30 characters, exactly the same length as the original `"Search (serial / bill / payee)"` label that fit on one line at this width, so it renders identically without changing meaning. Verified the rendered label text via a real authenticated request (no browser-automation tool available in this environment to screenshot it directly — same long-standing gap noted throughout this file). tsc/lint/full Vitest suite clean, production build passed.
-
-### In progress, uncommitted — explicit Gemini Tax Invoice auto-fill, Payment Advice only (Codex 2026-09-20, verified/extended by Claude 2026-09-21)
-- Implemented only on the dedicated `/payment-advice` (regular NEFT) form, never Cash Voucher or Advance. Once one Tax Invoice PDF/JPEG/PNG is selected, a notice above Submitter Details offers an explicit **Try Auto-Fill** action; no AI request runs automatically.
-- The request uses Google’s current official `@google/genai` SDK with the server-only `GEMINI_API_KEY` environment variable and stable `gemini-2.5-flash`. The key name is documented in `.env.local.example` and README. The human has since supplied a real key in local `.env.local` and Vercel Preview — confirmed present (length-checked, never printed) without ever exposing it.
-- To preserve the direct-to-Blob upload architecture, clicking Try Auto-Fill first uploads the selected invoice privately to the existing pending Blob prefix, then sends only its pathname to `/api/invoice-autofill`. The server reads that private Blob, supplies PDF/image bytes to Gemini, and the final submission reuses that exact validated Blob rather than uploading it twice or putting file bytes through a serverless request.
-- Extracts Bill No., Bill Date, Basic Amount, GST Amount, invoice issuer name, and (as of 2026-09-21) the issuer's own printed bank account number/IFSC when a "Bank Details" section exists on the invoice. The server queries active vendors and applies a conservative deterministic match (exact normalized name or unique >=95% similarity); raw invoice payee text is never sent to the client *for vendor selection* — it's returned separately, alongside `vendor` (null unless matched), purely as free text for a Beneficiary Name fallback (see below), which carries none of the vendor-creation/bypass risk. No extraction can create a vendor, invent a `vendorId`, or bypass the existing vendor typeahead/server-side active-vendor enforcement. Every received value stays editable and a verify-before-submitting notice appears only when at least one field was populated.
-- **2026-09-21 fix — vendor name matching now strips MCCIA's own internal ledger tags.** Live-tested with a real invoice from "Businary Consultancy Services LLP" whose vendor-master row is `BUSINARY CONSULTANCY SERVICES LLP-CR` — the `-CR` tag (an internal Tally/import artifact, never printed on a real invoice) dragged the similarity score to 90.6%, just under the 95% threshold, so it silently failed to match. A DB check found **65 of 689 vendors (~9.4%)** carry one of a small closed set of these tags (`-CR`, `-NEW`, `-JW`, and chained combinations) — every one of those vendors' real invoices had this same silent-miss bug. `normalizedVendorName()` now strips a trailing `(-(cr|new|jw))+` before comparing. Checked for newly-introduced ambiguity: stripping tags collapses 4 pairs of vendor rows to the same normalized name (e.g. `SAHYADRI MOTORS PRIVATE LIMITED` vs. `...-CR`, likely a duplicated ledger row for the same real vendor) — the existing uniqueness-margin check already handles this safely (equal top scores → declines to guess, same as today), so no new mismatch risk was introduced. 4 new tests, including a real-data regression test for the Businary case and a collision-safety test using the real Sahyadri Motors pair.
-- **2026-09-21 addition — bank details auto-fill, with the system's own vendor bank-account records always taking priority over the invoice.** Requested by the human specifically: "if bank details of that vendor are there in our system that should be auto fetched or else we'll take it from the invoice — also for those whom we're not able to identify the vendor." The priority order needs no new merge-priority code, because of how the two existing effects are already sequenced: `tryInvoiceAutoFill()` tentatively fills Bank A/c No./IFSC/Beneficiary Name (Beneficiary = matched vendor's canonical name, else the raw extracted issuer name) synchronously, in the same click handler that calls `applyVendor()` (which sets `vendorId`); `VendorBankAccountFields` (the existing vendor-bank-accounts memory feature) watches `vendorId` and only fetches/decides on the *next* render, after this handler returns — so a vendor with exactly one known account on file correctly overwrites the tentative invoice-sourced value a moment later, a vendor with zero known accounts never calls `onApply` at all (so the invoice-sourced value survives untouched), and a vendor with several known accounts shows the picker and touches nothing (same "never silently auto-select among multiple" rule as always — the invoice-sourced value just sits there exactly like a manual edit would, until an option is actively picked). Live-tested both paths for real: Businary (vendor matched, has exactly one system-known account, matching the invoice's own printed details exactly) → system record filled, confirmed via the existing vendor-bank verify note; a synthetic unmatched-vendor invoice with its own printed bank details → those printed details filled directly, Payee/Company Name correctly left blank. 2 new schema tests.
-- Provider/upload/unreadable-document failures return no values and are deliberately silent in the form, preserving manual entry. TypeScript, ESLint, full Vitest (**74 files, 479 passed, 7 skipped**), and production build all pass, re-verified by Claude after every change above (not just trusted from Codex's report).
-- **Blob cleanup gap identified, not yet built — proposal awaiting the human's choice, not picked silently:** clicking Try Auto-Fill uploads privately to Blob *before* any commitment to submit; if abandoned, nothing cleans it up today (existing cleanup only fires on an explicit file-swap or a failed submission — never on a plain closed tab). Traced that `pending-uploads/...` is NOT actually a pre-submit staging prefix — a submitted attachment's DB row keeps that exact path forever, no move/rename step — so a naive age-based sweep of that whole prefix would eventually delete real permanent attachments. Two real options, presented with tradeoffs, not decided: (A) Vercel Blob's native per-object `ttlDays` (confirmed real via their repo; needs `@vercel/blob` bumped from the installed `2.6.1` to `2.8.0`+, plus a `copy()`/`rename()` "promotion" step in `/api/submit`/`/api/edit/[token]` to strip the TTL before a submitted invoice becomes permanent — new file-lifecycle surgery in an already-tested path) vs. (B) a new Vercel Cron route that sweeps `pending-uploads/` and deletes anything past an age threshold with no matching `attachments` row (fixes the same pre-existing gap for every attachment type, not just this one; no changes to the tested submit/reuse architecture; this repo has zero cron infrastructure today, confirmed by searching — needs new infra, and its safety depends entirely on the DB cross-reference being correct).
-- **2026-09-21 addition — bank-details mismatch flag for Finance, human-directed with an explicit choice between three options (inline-only warning / warning + persisted admin-visible flag / warning + persisted flag + email) — the human picked warning + persisted flag, not email.** New additive migration `0024_overconfident_millenium_guard.sql` adds `payment_advices.bank_details_mismatch` (boolean, `DEFAULT false NOT NULL` — safe for every existing row). `lib/invoice-autofill.ts`'s new pure `bankDetailsMismatch()` compares the invoice-extracted account/IFSC (normalized: whitespace-stripped, case-folded) against whichever system bank account `VendorBankAccountFields` ends up applying, and only flags a field the invoice actually extracted a value for — missing invoice data is never treated as a contradiction. Wired into `applyVendorBankAccount()` in `PaymentAdviceForm.tsx`, which already runs for both the auto-single-match and the manual-multi-account-pick paths, so both are covered by one comparison point. A red inline warning banner appears on the form when flagged ("please confirm with the vendor... this will be flagged for Finance to review"); the actual bank fields always keep the system value, never the invoice's contradicting one. New `BankDetailsMismatchBadge` component renders a small "⚠ Bank details mismatch" pill under Payee on `/admin/submissions` (every tab, not just one) and under Bank Name on `/admin/advice/[id]`. Threaded through `lib/validation/payment-advice.ts` (`bankDetailsMismatch: z.boolean().default(false)`) and `lib/form-data.ts` (`=== "true"` string-boolean coercion, matching the existing `isAdvance` pattern exactly) into both `/api/submit` and `/api/edit/[token]`. 6 new unit tests for `bankDetailsMismatch()` plus a migration-shape test. **Live-tested end-to-end for real**, not simulated: a synthetic invoice for the real vendor Businary (whose real system account is `0248274720`/`KKBK0001808`) printed a deliberately different account (`917020012345678`/`UTIB0001999`) — confirmed the system value was what actually filled the form and what got saved, confirmed the warning banner appeared, then drove a full real submission (`MCCIA/2026-27/0191`) through the actual `/payment-advice` page and confirmed via a real authenticated admin session (a temporary locally-signed JWT, not a real account) that the badge renders on both the submissions list and the detail page. All test data deleted afterward — including restoring Businary's real `vendor_bank_accounts.last_used_at` to its exact pre-test value, since the real capture-on-submit path had bumped it as a side effect of the test submission.
-- **Noted, not fixed — Bank Name is not auto-filled by anything on this branch.** It's a separate required-for-NEFT field; the IFSC→Bank Name lookup feature (`ifsc-bank-name-lookup` branch) has not been merged as of this session, even though the `bank_name` column itself already exists in the schema (from an earlier, unrelated change). A submitter using invoice auto-fill still has to type Bank Name manually — discovered while live-testing a full real submission above (blocked with "Bank Name is required for NEFT" until filled by hand).
-- **STALE as of 2026-09-24 — see the correction in the entry above.** This line ("still entirely uncommitted... sitting in the working tree pending the human's go-ahead") was true when written on 2026-09-21 but is no longer true: everything described in this whole entry was committed straight to `main` later that same day as `6b1df36`/`438f146`/`0175761`, without this file being updated at the time. Left the rest of this entry's content as-is (it's an accurate description of what shipped), just flagging that its "uncommitted"/"pending" framing is out of date.
 
 ### Shipped — Per-account submitter restriction on vendor bank accounts (Claude, 2026-09-16)
 - **The problem:** Prashant Girbane's (note the real spelling — no "h"; vendor row `PRASHANT GIRBANE`) saved bank account was visible/auto-fillable to any submitter who selected him as payee, even though only Ganesh Mate ever legitimately submits on his behalf. Built as a general, reusable capability — not a one-off hardcoded exception — since other individual payees with one designated submitter could come up again.
@@ -943,12 +922,14 @@ Requested because every `admin_users` password (Sunil's, Abha's, the ALL account
 
 Status legend: 🔴 unverified / high risk · 🟡 unverified / lower risk · 🟢 verified
 
+- 🟡 **Isolated development dataset requested (2026-09-19):** human selected an anonymized sample of existing data in a separate development database and wants it connected to localhost. Current Vercel CLI account cannot see the MCCIA project: its only listed team is its personal team, and project listing is empty. Neither local checkout has `.env.local` or a Vercel project link; no database URL or Neon API key is configured in the process. Neon integration was suggested but is not confirmed connected. Await authorized source/destination access. Do not pull shared production/Preview settings directly into the running local app, run pending migrations, or treat an unverified endpoint as development.
+
+- 🟡 **Forwarding Memo remains local and incomplete (2026-09-17):** human approved code/migration files only. Need confirmed memo-number format/reset (or no numbering), business Date policy, who may submit/view, whether Accounts receipt is only printed or recorded digitally, recommendation versus direct Accounts flow, and notification events/recipients. Keep saving disabled until these decisions are supplied. Physical-signature blanks and receipt text do not assert receipt/approval. Bill references are currently nullable; requiredness can be finalized with the workflow. Applying a migration requires separate explicit approval; do not run it against the shared production database. Recheck remote migration slots before integrating this uncommitted branch.
+
 - 🟢 **Per-account vendor bank-account submitter restriction is merged and pushed on `main` (2026-09-16).** Prashant Girbane's saved account remains restricted to `ganeshm@mcciapune.com`; the server-side filter and Finance management UI are live code, not branch-only work.
 - 🟢 **The 2026-09-15 calculator local schema/code mismatch was isolated from `main` until production compatibility was explicitly approved.** On 16 September the human approved renumbering the additive calculator/GST migration to `0023` and initializing `payable_amount` from the already-saved `bill_passed_for` only for existing submissions that already have payment entries. This preserves the established cap for `MCCIA/2026-27/0001` without changing its serial number, passed amount, or recorded payment.
 
 - 🟢 **Production compatibility initialization approved 2026-09-16:** `0023_payable_gst.sql` copies an existing saved `bill_passed_for` into the new `payable_amount` only when that advice already has a payment entry. The pre-migration production check found exactly one such row, `MCCIA/2026-27/0001`; its ₹5,040 cap is preserved against ₹4,800 already paid, leaving the correct ₹240 remainder.
-
-- 🟢 **STALE, now resolved — `GEMINI_API_KEY` has been provisioned and the whole feature is live on `main` (confirmed 2026-09-24).** This item said the key was still needed as of 2026-09-20/21; `.env.local` now has a real key, the feature shipped to `main` on 2026-09-21 (`6b1df36`/`438f146`/`0175761` — see the correction note in §3), and this session's own 2026-09-24 work made a real live Gemini call against it (extracted fields + a correct vendor match on a real vendor) as part of testing the Section 6 attach-field fix. `feature/gemini-invoice-autofill` itself was apparently never merged/deleted — its work landed on `main` via direct commits instead; that stray branch can probably be deleted, not verified this session.
 
 - 🟢 **Submitter Branch migration applied 2026-09-07:** additive migration `0018_swift_grey_gargoyle.sql` is now applied to the configured production database. No historical rows were backfilled or rewritten; historical Branch remains null by design. No test submission/reference number was created.
 
@@ -1084,14 +1065,6 @@ Status legend: 🔴 unverified / high risk · 🟡 unverified / lower risk · �
 ## 6. Session Log
 
 Append one entry per session, newest at the top. Keep entries short — this is a changelog, not a diary.
-
-2026-09-30 — Claude Opus 5 (1M context) — Branch `feature/detail-page-back-button-payee-split` (2 commits, not pushed/merged, awaiting approval). (1) Added a second "Back to Submissions"/"Back to Authority Recommendations" button at the bottom of the detail-page action panel — Finance Admin (`AdviceActions.tsx`, all 3 of its return branches) and the shared Authority/DG page — reusing `BackLink`'s exact navigation via a new optional `className` prop, styled to match each panel's own buttons. Found Branch/Department Team Dashboards have no detail page at all today (no `ViewLink` ever renders for non-AUTHORITY roles, and the route itself 404s them) — flagged, not built around. (2) Split the combined "Name and Address of the Payee" display back into separate "Payee Name"/"Payee Address" rows on the Admin and Authority detail pages — the only 2 places found combining them; Excel export, the Payment Advice PDF (already 2 separate Text lines, not 1 string), Cash Voucher PDF, emails, and the public confirmation page were all checked and are either already correct or don't show address at all. Display-only, no data changed. Live-tested against the real dev server + real Neon DB across SUBMITTED/REJECTED/CASH-approved Admin rows and pending/history Authority rows (temporary locally-signed JWT for a real Authority account, password untouched). tsc/lint/full Vitest (75 files, 489 passed, 7 skipped)/production build all clean.
-
-2026-09-24 — Claude Sonnet 5 — Built on `fix/tax-invoice-dualattach-admin-search` (2 commits), human explicitly approved merge, merged + pushed to `main` (`2137f38`) same session. (1) Section 6 "Documents" now has a real, standalone Tax Invoice `FileUploadSlot` again — the 2026-09-21 relocation (see below) had left only passive text there once the upload control moved into the top auto-fill prompt, so anyone skipping that prompt had no way to attach a Tax Invoice. Fixed by rendering a second `FileUploadSlot` bound to the exact same `taxInvoice` state/handler as the top prompt's — one field, two entry points, no new dedup logic needed. (2) Finance Admin's free-text search bar now matches submitter (name/email) instead of payee (which already has its own dedicated filter); relabeled "(serial / bill / submitter)". Both live-tested for real (own throwaway rows for #1, read-only against real production data for #2); test data + a test-created `vendor_bank_accounts` row + all Blob objects cleaned up. Also found and corrected a real gap in this file: the 2026-09-21 Gemini auto-fill work (§3 entry, "In progress, uncommitted") had actually been committed straight to `main` that same day (`6b1df36`/`438f146`/`0175761`) without anyone updating this file — see the correction notes added in §3 and §4. Post-merge follow-up, same session, direct to `main` (`fee766f`): human sent a screenshot showing the new Search label wrapping to two lines and misaligning that filter field on `/admin/submissions` — tightened to "Search (serial/bill/submitter)" (no spaces around slashes), same character count as the original label, restores alignment. tsc/lint/full Vitest (75 files, 489 passed, 7 skipped)/production build all clean throughout.
-
-2026-09-21 (retroactively logged 2026-09-24 — see the note above) — committed directly to `main`, no session-log entry written at the time. `6b1df36` "feat: Gemini Tax Invoice auto-fill for Payment Advice (NEFT)" (Codex's 2026-09-20 work plus Claude's 2026-09-21 extensions from the §3 entry below: vendor-tag-stripping fix, bank-account/IFSC fallback extraction with vendor-record priority, bank-details-mismatch flag). `438f146` "feat: extract Bank Name from invoice too, explain auto-fill upfront". `0175761` "style: replace em dashes with hyphens...; relocate Tax Invoice upload to the auto-fill prompt" (the relocation this session's #1 fix above was responding to).
-
-2026-09-20 — Codex — Built the Payment Advice-only, explicit-click Gemini Tax Invoice auto-fill on `feature/gemini-invoice-autofill`. It uses `@google/genai`, server-only `GEMINI_API_KEY`, private direct-to-Blob input, structured extraction of only Bill No./Date/Basic/GST, and a strict server-side active-vendor matcher that returns only an existing canonical vendor or nothing; no raw extracted company text can create/bypass a vendor selection. Reuses the pre-uploaded private Blob during final submit. Added a top-of-form prompt/loading state/verify note and silent failure fallback. `.env.local.example`/README document the secret; `.env.local` remains gitignored and has no key. TypeScript, ESLint, full Vitest (74 files, 474 passed, 7 skipped), and production build pass. Live model/document testing awaits the human-provided key.
 (Note: this header was accidentally dropped in an earlier edit and restored 2026-08-01 by Claude Code — no content was lost, only the heading line.)
 
 ```
@@ -3345,4 +3318,140 @@ Every correction logged actor/timestamp/old-new values/vendor IDs. Reference
 numbers, amounts, statuses, addresses (except canonical Tier 4 vendor-master
 addresses copied verbatim), and payment/workflow fields were untouched.
 
+2026-09-17 — Codex — Prepared the approved Forwarding Memo code/migration
+foundation on `feature/forwarding-memo` in an isolated worktree after fetching
+current main and checking existing work. The unmerged IFSC branch touches the
+shared payment form/bank components; this feature does not touch those files.
+The paper image was read as form content, not as authority to remove fields
+based on its handwritten marks. Its preprinted form code was not treated as a
+numbering-series specification. Its instrument `Dt.` is separate from memo
+Date and bill Date; Accounts receipt/signatures are printed blanks only.
+
+Files changed/added:
+- `app/page.tsx`, `app/forwarding-memo/page.tsx`
+- `components/form/ForwardingMemoForm.tsx`
+- `lib/validation/forwarding-memo.ts`, `lib/validation/forwarding-memo.test.ts`
+- `lib/pdf/ForwardingMemoDocument.tsx`, `lib/pdf/render-forwarding-memo.tsx`, `lib/pdf/forwarding-memo-render.test.tsx`
+- `lib/db/schema.ts`, `lib/db/migrations/0024_forwarding_memos.sql`
+- `lib/db/migrations/meta/0024_snapshot.json`, `lib/db/migrations/meta/_journal.json`
+- `lib/db/migrations/forwarding-memos-migration.test.ts`
+- `AGENT_HANDOFF.md`
+
+Migration generation used existing dependencies and no database connection.
+The migration safety tests compare all pre-existing snapshot tables and
+allow only the three additive SQL statements. Validation checks actual
+calendar dates, supported currency precision, text instrument numbers and
+the two requested modes. A 200-character submitter-name limit keeps the
+physical-signature area printable. PDF tests render real in-memory bytes,
+including a regression proving a bill label stays on the page with its value.
+Final verification: `npm.cmd exec -- tsc --noEmit`, `npm.cmd run lint`,
+`npm.cmd test` (503 passed, 7 skipped), and
+`npm.cmd run build -- --webpack` all passed. Webpack is used because the
+isolated worktree reuses installed dependencies through a junction and
+Turbopack does not allow a dependency link outside the project root.
+Synthetic PNG/PDF QA files were removed after inspection. No dependencies
+were installed, no env secrets configured, no database queried or migrated,
+and no form requests submitted. Local preview is served at
+`http://localhost:3001/forwarding-memo`; port 3000 is the original checkout.
+End-to-end saving/access/numbering/email remains pending the decisions above.
+
+2026-09-17 — Codex — Follow-up on the landing-page screenshot: verified both
+local servers by GET. Port 3000 serves the original three-card checkout;
+port 3001 serves the feature landing page with the fourth Forwarding Memo
+card linking to `/forwarding-memo`. Both returned HTTP 200. The correct
+landing-page review link is `http://localhost:3001/`. No implementation,
+database or workflow changes were needed for this follow-up; saving remains
+disabled pending the business decisions above.
+
+2026-09-19 — Codex — Restored the unavailable local preview. Initial HTTP
+checks found no responding server on ports 3000 or 3001. Restarted the
+existing feature worktree using `npm.cmd run dev -- --webpack --hostname
+127.0.0.1 --port 3001`. Confirmed `http://localhost:3001/` and
+`http://localhost:3001/forwarding-memo` both return HTTP 200 with Forwarding
+Memo content. No application code, database, migration, dependency or
+deployment changes. Saving and workflow decisions remain pending. The
+preview requires its local development server to remain running.
+
+2026-09-19 — Codex — Inspected the requested anonymized development-data
+setup. User explicitly chose an anonymized sample of existing records in
+a separate development database. Read the guidelines, local database
+configuration, schema/relationship dependencies, numbering and email code.
+The app uses the Neon WebSocket Pool; a plain local Postgres URL will not
+work with the unchanged adapter.
+
+Vercel CLI is installed. Its initial account check failed because of
+sandbox/network certificate conditions; `node --use-system-ca` with the
+installed CLI and `NO_UPDATE_NOTIFIER=1` succeeded without disabling TLS
+verification or changing global settings. The signed-in account's only
+available team has zero projects, so it cannot provide MCCIA's Neon
+credentials. No environment variables were downloaded. A Neon integration
+was suggested; installation/connection is not confirmed. Asked the user
+to connect the account owning MCCIA's Neon project or sign the Vercel CLI
+into an authorized MCCIA account; never requested passwords in chat.
+
+Prepared extraction scope for when access is available: up to 24 requests
+representing document types/stages, referenced vendors, saved bank accounts,
+staff/authorities/options, and complete selected-request cash/advance/payment
+child rows. Source reads must use a read-only transaction. Transform in
+memory using explicit field allowlists, regenerate UUID/reference/name/email
+maps and coherent dates/amounts while preserving relations and calculation
+invariants. Exclude production users/password hashes, tokens, attachments/
+Blob references, and audit rows. Create fresh development-only auth values
+and keep EMAIL_MODE=preview with production email/Blob credentials absent.
+Verify the destination is isolated before any import. Existing restrictions
+on migration execution and production writes still apply. No dataset was
+extracted or written, no database connected/queried/created/migrated, and
+ the running localhost preview still has no database connection.
+
+2026-09-30 — Codex — Diagnosed Forwarding Memo submission error from the
+local browser. `POST /api/forwarding-memo` was returning HTTP 500 because
+the Neon WebSocket connection failed before any SQL ran: PostgreSQL error
+`28P01`, password authentication failed for the configured Neon user. A
+read-only connection attempt could not reach table inspection for the same
+reason; no record was inserted or modified. `.env.local` has
+`FORWARDING_MEMO_LOCAL_TEST=true`, but its `DATABASE_URL` credentials must be
+replaced with a valid isolated development Neon connection string. Updated
+the API to return HTTP 503 with a safe database-unavailable message instead
+of an opaque 500, and updated the form to display the server's useful error.
+ TypeScript, ESLint and `git diff --check` pass. Do not run migrations or
+ retry a real submission until the development credentials are corrected and
+ the destination is confirmed isolated.
+
+2026-09-30 — Codex — Confirmed the intended post-submit flow remains
+`POST /api/forwarding-memo` → `/forwarding-memo/submitted/[id]` → PDF route.
+Added an explicit Download PDF action beside Open printable memo; the PDF
+route now returns `Content-Disposition: attachment` for `?download=1` and
+keeps inline viewing as the default. TypeScript, ESLint and diff checks pass.
+The flow cannot be exercised end-to-end until the configured Neon password is
+correct and migration `0024_forwarding_memos` exists in the isolated dev
+database.
+
+2026-09-30 — Codex — Added a database-free local preview path for the
+Forwarding Memo. When `FORWARDING_MEMO_LOCAL_TEST=true`, submitting the form
+now posts only to `/api/forwarding-memo/preview`, validates the form payload,
+renders the existing React PDF document, and opens the PDF in a new browser
+tab. This path does not insert records, write audit rows, send email, or
+require Neon credentials. The PDF retains the MCCIA-style `SUBMITTED` stamp
+with submitter name and memo date in the bottom signature area. Focused
+validation/PDF tests (30 tests), TypeScript, ESLint, and diff checks pass.
+
+2026-09-30 — Codex — Removed the automatic copy from Party Name into
+Submitted by — Name. Submitters must enter that field separately. Updated the
+Payment Desk landing grid to use two columns at desktop/tablet widths so the
+four cards appear as two cards in the first row and two in the second. The
+landing page and Forwarding Memo route both return HTTP 200 locally; TypeScript
+and ESLint pass.
+
+2026-09-30 — Codex — Adjusted Forwarding Memo PDF masthead alignment so the
+MCCIA logo remains anchored at the left while the chamber name is centered on
+the full page width. PDF rendering tests, TypeScript, and ESLint pass.
+
 *End of handoff file. Both agents: read §0 again before starting work.*
+
+2026-09-30 - Codex - Made PublicSubmissionPage tolerate an unavailable development database during the read-only authority lookup. Payment Advice and Cash Payment Voucher pages now render with an empty authority list and safe warning instead of HTTP 500; actual submission behavior is unchanged. Payment Advice returned HTTP 200 locally; TypeScript and ESLint pass.
+
+2026-09-30 - Codex - Reworked the Forwarding Memo submitted-by signature block so the submitter name, MCCIA SUBMITTED stamp, signature line, and label follow a clean vertical alignment. Updated the PDF rendering assertion for the new visual/text order; all three PDF rendering tests pass.
+
+2026-09-30 - Codex - Aligned the two bottom signature columns on the Forwarding Memo PDF. The submitter name and stamp now sit above the Name & Signature line; the Accounts Department side reserves the same stamp space so both signature lines share one baseline. Reduced the reserved footer height to keep standard memos on one page. PDF rendering tests pass.
+
+2026-09-30 - Codex - Straightened the MCCIA stamp and added enough reserved height for its internal name/date to remain visible. The stamp is centered above the Name & Signature line, with both signature columns aligned. PDF rendering tests pass.

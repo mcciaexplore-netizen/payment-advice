@@ -480,6 +480,32 @@ export const paymentEntries = pgTable("payment_entries", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 });
 
+/** Forwarded instruments are stored separately from payment requests so
+ * they do not enter the existing disbursement or recommendation workflows. */
+export const forwardingMemos = pgTable(
+  "forwarding_memos",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    memoDate: date("memo_date").notNull(),
+    partyName: text("party_name").notNull(),
+    partyAddress: text("party_address").notNull(),
+    purpose: text("purpose").notNull(),
+    billNo: text("bill_no"),
+    billDate: date("bill_date"),
+    instrumentMode: text("instrument_mode", { enum: ["CHEQUE", "DD"] }).notNull(),
+    instrumentNo: text("instrument_no").notNull(),
+    instrumentDate: date("instrument_date").notNull(),
+    drawnOnBank: text("drawn_on_bank").notNull(),
+    amount: numeric("amount", { precision: 14, scale: 2 }).notNull(),
+    submittedByName: text("submitted_by_name").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    check("forwarding_memos_instrument_mode_check", sql`${table.instrumentMode} in ('CHEQUE', 'DD')`),
+    check("forwarding_memos_amount_positive_check", sql`${table.amount} > 0`),
+  ],
+);
+
 /** One row per (financial year, series) pair. 'PAYMENT_ADVICE' is the
  * regular-NEFT series (MCCIA/<FY>/NNNN); 'CASH_VOUCHER' is the independent
  * regular-Cash series (CASH/MCCIA/<FY>/NNNN).
@@ -504,6 +530,7 @@ export const auditLog = pgTable("audit_log", {
   paymentAdviceId: uuid("payment_advice_id").references(
     () => paymentAdvices.id,
   ),
+  forwardingMemoId: uuid("forwarding_memo_id").references(() => forwardingMemos.id),
   action: text("action").notNull(), // 'SUBMITTED' | 'RESUBMITTED' | 'APPROVED' | 'SENT_BACK' | 'PDF_GENERATED' | 'EXPORTED'
   actor: text("actor").notNull(),
   ipAddress: text("ip_address"),
