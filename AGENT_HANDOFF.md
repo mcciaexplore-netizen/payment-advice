@@ -47,7 +47,15 @@ Design system: Navy `#0B1F3A`, Forest green `#2E8B57`, Amber `#E8A33D`. Headings
 
 ## 3. Current State (update this every session)
 
-**Last updated:** 16 September 2026, by Codex (Arrears/TDS calculator production integration)
+**Last updated:** 19 September 2026, by Codex (development dataset requested; cloud access pending; Forwarding Memo remains incomplete and not deployed)
+
+### In progress — Forwarding Memo (Codex, 2026-09-17; feature branch only)
+- Worktree `D:\Payment-advice\forwarding-memo`, branch `feature/forwarding-memo`, based on fetched `origin/main` at `75e29725fbe2c1f90846057e5e99c496f104a613`. The original checkout is unchanged, including its pre-existing `package-lock.json` modification. No commits, pushes or deployments.
+- Human approved **code and migration files**, not migration execution. Added the fourth existing-style landing card and `/forwarding-memo` form with RHF/Zod, paper wording, Cheque/D.D. choices, separate instrument date, typed submitter name and physical-signature areas. No existing request form, serial allocator, approval or email code changed.
+- Added a pure React-PDF renderer and additive `0024_forwarding_memos.sql` plus Drizzle snapshot/journal. This only proposes a separate `forwarding_memos` table and nullable `audit_log.forwarding_memo_id` FK. **Not applied to any database.** No new numbering series or receipt/approval workflow is encoded.
+- **Not a completed saved-submission feature:** the form explicitly says entries are not saved and its submit button is disabled. No memo API, saved-record page, PDF download endpoint, email or access policy has been implemented while business decisions are pending. This is a local reviewable foundation; the intended scope remains saved submissions with PDF, not a substitute print-only feature.
+- Latest checks: TypeScript clean; ESLint clean; Vitest **503 passed / 7 skipped, 75 files**; `npm.cmd run build -- --webpack` passed. Local GET `/` and `/forwarding-memo` returned HTTP 200. Actual synthetic PDFs were rendered and every page visually inspected (standard one page, long-content four pages), including leading zeros, distinct dates, signature space and bill label/value pagination. Browser runtime reported no available browser, so no interactive browser verification is claimed. No database integration tests, real submissions or test financial records were run/created.
+
 
 ### Shipped — Per-account submitter restriction on vendor bank accounts (Claude, 2026-09-16)
 - **The problem:** Prashant Girbane's (note the real spelling — no "h"; vendor row `PRASHANT GIRBANE`) saved bank account was visible/auto-fillable to any submitter who selected him as payee, even though only Ganesh Mate ever legitimately submits on his behalf. Built as a general, reusable capability — not a one-off hardcoded exception — since other individual payees with one designated submitter could come up again.
@@ -913,6 +921,10 @@ Requested because every `admin_users` password (Sunil's, Abha's, the ALL account
 ## 4. Open Items (verify before building on top of these)
 
 Status legend: 🔴 unverified / high risk · 🟡 unverified / lower risk · 🟢 verified
+
+- 🟡 **Isolated development dataset requested (2026-09-19):** human selected an anonymized sample of existing data in a separate development database and wants it connected to localhost. Current Vercel CLI account cannot see the MCCIA project: its only listed team is its personal team, and project listing is empty. Neither local checkout has `.env.local` or a Vercel project link; no database URL or Neon API key is configured in the process. Neon integration was suggested but is not confirmed connected. Await authorized source/destination access. Do not pull shared production/Preview settings directly into the running local app, run pending migrations, or treat an unverified endpoint as development.
+
+- 🟡 **Forwarding Memo remains local and incomplete (2026-09-17):** human approved code/migration files only. Need confirmed memo-number format/reset (or no numbering), business Date policy, who may submit/view, whether Accounts receipt is only printed or recorded digitally, recommendation versus direct Accounts flow, and notification events/recipients. Keep saving disabled until these decisions are supplied. Physical-signature blanks and receipt text do not assert receipt/approval. Bill references are currently nullable; requiredness can be finalized with the workflow. Applying a migration requires separate explicit approval; do not run it against the shared production database. Recheck remote migration slots before integrating this uncommitted branch.
 
 - 🟢 **Per-account vendor bank-account submitter restriction is merged and pushed on `main` (2026-09-16).** Prashant Girbane's saved account remains restricted to `ganeshm@mcciapune.com`; the server-side filter and Finance management UI are live code, not branch-only work.
 - 🟢 **The 2026-09-15 calculator local schema/code mismatch was isolated from `main` until production compatibility was explicitly approved.** On 16 September the human approved renumbering the additive calculator/GST migration to `0023` and initializing `payable_amount` from the already-saved `bill_passed_for` only for existing submissions that already have payment entries. This preserves the established cap for `MCCIA/2026-27/0001` without changing its serial number, passed amount, or recorded payment.
@@ -3306,4 +3318,140 @@ Every correction logged actor/timestamp/old-new values/vendor IDs. Reference
 numbers, amounts, statuses, addresses (except canonical Tier 4 vendor-master
 addresses copied verbatim), and payment/workflow fields were untouched.
 
+2026-09-17 — Codex — Prepared the approved Forwarding Memo code/migration
+foundation on `feature/forwarding-memo` in an isolated worktree after fetching
+current main and checking existing work. The unmerged IFSC branch touches the
+shared payment form/bank components; this feature does not touch those files.
+The paper image was read as form content, not as authority to remove fields
+based on its handwritten marks. Its preprinted form code was not treated as a
+numbering-series specification. Its instrument `Dt.` is separate from memo
+Date and bill Date; Accounts receipt/signatures are printed blanks only.
+
+Files changed/added:
+- `app/page.tsx`, `app/forwarding-memo/page.tsx`
+- `components/form/ForwardingMemoForm.tsx`
+- `lib/validation/forwarding-memo.ts`, `lib/validation/forwarding-memo.test.ts`
+- `lib/pdf/ForwardingMemoDocument.tsx`, `lib/pdf/render-forwarding-memo.tsx`, `lib/pdf/forwarding-memo-render.test.tsx`
+- `lib/db/schema.ts`, `lib/db/migrations/0024_forwarding_memos.sql`
+- `lib/db/migrations/meta/0024_snapshot.json`, `lib/db/migrations/meta/_journal.json`
+- `lib/db/migrations/forwarding-memos-migration.test.ts`
+- `AGENT_HANDOFF.md`
+
+Migration generation used existing dependencies and no database connection.
+The migration safety tests compare all pre-existing snapshot tables and
+allow only the three additive SQL statements. Validation checks actual
+calendar dates, supported currency precision, text instrument numbers and
+the two requested modes. A 200-character submitter-name limit keeps the
+physical-signature area printable. PDF tests render real in-memory bytes,
+including a regression proving a bill label stays on the page with its value.
+Final verification: `npm.cmd exec -- tsc --noEmit`, `npm.cmd run lint`,
+`npm.cmd test` (503 passed, 7 skipped), and
+`npm.cmd run build -- --webpack` all passed. Webpack is used because the
+isolated worktree reuses installed dependencies through a junction and
+Turbopack does not allow a dependency link outside the project root.
+Synthetic PNG/PDF QA files were removed after inspection. No dependencies
+were installed, no env secrets configured, no database queried or migrated,
+and no form requests submitted. Local preview is served at
+`http://localhost:3001/forwarding-memo`; port 3000 is the original checkout.
+End-to-end saving/access/numbering/email remains pending the decisions above.
+
+2026-09-17 — Codex — Follow-up on the landing-page screenshot: verified both
+local servers by GET. Port 3000 serves the original three-card checkout;
+port 3001 serves the feature landing page with the fourth Forwarding Memo
+card linking to `/forwarding-memo`. Both returned HTTP 200. The correct
+landing-page review link is `http://localhost:3001/`. No implementation,
+database or workflow changes were needed for this follow-up; saving remains
+disabled pending the business decisions above.
+
+2026-09-19 — Codex — Restored the unavailable local preview. Initial HTTP
+checks found no responding server on ports 3000 or 3001. Restarted the
+existing feature worktree using `npm.cmd run dev -- --webpack --hostname
+127.0.0.1 --port 3001`. Confirmed `http://localhost:3001/` and
+`http://localhost:3001/forwarding-memo` both return HTTP 200 with Forwarding
+Memo content. No application code, database, migration, dependency or
+deployment changes. Saving and workflow decisions remain pending. The
+preview requires its local development server to remain running.
+
+2026-09-19 — Codex — Inspected the requested anonymized development-data
+setup. User explicitly chose an anonymized sample of existing records in
+a separate development database. Read the guidelines, local database
+configuration, schema/relationship dependencies, numbering and email code.
+The app uses the Neon WebSocket Pool; a plain local Postgres URL will not
+work with the unchanged adapter.
+
+Vercel CLI is installed. Its initial account check failed because of
+sandbox/network certificate conditions; `node --use-system-ca` with the
+installed CLI and `NO_UPDATE_NOTIFIER=1` succeeded without disabling TLS
+verification or changing global settings. The signed-in account's only
+available team has zero projects, so it cannot provide MCCIA's Neon
+credentials. No environment variables were downloaded. A Neon integration
+was suggested; installation/connection is not confirmed. Asked the user
+to connect the account owning MCCIA's Neon project or sign the Vercel CLI
+into an authorized MCCIA account; never requested passwords in chat.
+
+Prepared extraction scope for when access is available: up to 24 requests
+representing document types/stages, referenced vendors, saved bank accounts,
+staff/authorities/options, and complete selected-request cash/advance/payment
+child rows. Source reads must use a read-only transaction. Transform in
+memory using explicit field allowlists, regenerate UUID/reference/name/email
+maps and coherent dates/amounts while preserving relations and calculation
+invariants. Exclude production users/password hashes, tokens, attachments/
+Blob references, and audit rows. Create fresh development-only auth values
+and keep EMAIL_MODE=preview with production email/Blob credentials absent.
+Verify the destination is isolated before any import. Existing restrictions
+on migration execution and production writes still apply. No dataset was
+extracted or written, no database connected/queried/created/migrated, and
+ the running localhost preview still has no database connection.
+
+2026-09-30 — Codex — Diagnosed Forwarding Memo submission error from the
+local browser. `POST /api/forwarding-memo` was returning HTTP 500 because
+the Neon WebSocket connection failed before any SQL ran: PostgreSQL error
+`28P01`, password authentication failed for the configured Neon user. A
+read-only connection attempt could not reach table inspection for the same
+reason; no record was inserted or modified. `.env.local` has
+`FORWARDING_MEMO_LOCAL_TEST=true`, but its `DATABASE_URL` credentials must be
+replaced with a valid isolated development Neon connection string. Updated
+the API to return HTTP 503 with a safe database-unavailable message instead
+of an opaque 500, and updated the form to display the server's useful error.
+ TypeScript, ESLint and `git diff --check` pass. Do not run migrations or
+ retry a real submission until the development credentials are corrected and
+ the destination is confirmed isolated.
+
+2026-09-30 — Codex — Confirmed the intended post-submit flow remains
+`POST /api/forwarding-memo` → `/forwarding-memo/submitted/[id]` → PDF route.
+Added an explicit Download PDF action beside Open printable memo; the PDF
+route now returns `Content-Disposition: attachment` for `?download=1` and
+keeps inline viewing as the default. TypeScript, ESLint and diff checks pass.
+The flow cannot be exercised end-to-end until the configured Neon password is
+correct and migration `0024_forwarding_memos` exists in the isolated dev
+database.
+
+2026-09-30 — Codex — Added a database-free local preview path for the
+Forwarding Memo. When `FORWARDING_MEMO_LOCAL_TEST=true`, submitting the form
+now posts only to `/api/forwarding-memo/preview`, validates the form payload,
+renders the existing React PDF document, and opens the PDF in a new browser
+tab. This path does not insert records, write audit rows, send email, or
+require Neon credentials. The PDF retains the MCCIA-style `SUBMITTED` stamp
+with submitter name and memo date in the bottom signature area. Focused
+validation/PDF tests (30 tests), TypeScript, ESLint, and diff checks pass.
+
+2026-09-30 — Codex — Removed the automatic copy from Party Name into
+Submitted by — Name. Submitters must enter that field separately. Updated the
+Payment Desk landing grid to use two columns at desktop/tablet widths so the
+four cards appear as two cards in the first row and two in the second. The
+landing page and Forwarding Memo route both return HTTP 200 locally; TypeScript
+and ESLint pass.
+
+2026-09-30 — Codex — Adjusted Forwarding Memo PDF masthead alignment so the
+MCCIA logo remains anchored at the left while the chamber name is centered on
+the full page width. PDF rendering tests, TypeScript, and ESLint pass.
+
 *End of handoff file. Both agents: read §0 again before starting work.*
+
+2026-09-30 - Codex - Made PublicSubmissionPage tolerate an unavailable development database during the read-only authority lookup. Payment Advice and Cash Payment Voucher pages now render with an empty authority list and safe warning instead of HTTP 500; actual submission behavior is unchanged. Payment Advice returned HTTP 200 locally; TypeScript and ESLint pass.
+
+2026-09-30 - Codex - Reworked the Forwarding Memo submitted-by signature block so the submitter name, MCCIA SUBMITTED stamp, signature line, and label follow a clean vertical alignment. Updated the PDF rendering assertion for the new visual/text order; all three PDF rendering tests pass.
+
+2026-09-30 - Codex - Aligned the two bottom signature columns on the Forwarding Memo PDF. The submitter name and stamp now sit above the Name & Signature line; the Accounts Department side reserves the same stamp space so both signature lines share one baseline. Reduced the reserved footer height to keep standard memos on one page. PDF rendering tests pass.
+
+2026-09-30 - Codex - Straightened the MCCIA stamp and added enough reserved height for its internal name/date to remain visible. The stamp is centered above the Name & Signature line, with both signature columns aligned. PDF rendering tests pass.

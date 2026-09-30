@@ -22,6 +22,10 @@ const styles = StyleSheet.create({
     bottom: 7,
     right: 6,
   },
+  flowWrapper: {
+    alignSelf: "flex-end",
+    marginBottom: 7,
+  },
   box: {
     borderWidth: 1,
     borderStyle: "solid",
@@ -29,7 +33,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     paddingHorizontal: 6,
     width: 94,
-    transform: "rotate(-5deg)",
+    // Keep the stamp level so it aligns cleanly with the signature block.
   },
   label: {
     fontFamily: "Helvetica-Bold",
@@ -55,15 +59,17 @@ export function Stamp({
   name,
   date,
   color,
+  inFlow = false,
 }: {
   label: string;
   name: string;
   date: string;
   color: StampColor;
+  inFlow?: boolean;
 }) {
   const { border, text } = COLORS[color];
   return (
-    <View style={styles.wrapper}>
+    <View style={inFlow ? styles.flowWrapper : styles.wrapper}>
       <View style={[styles.box, { borderColor: border }]}>
         <Text style={[styles.label, { color: text }]}>{label}</Text>
         <Text style={[styles.name, { color: text }]}>{name}</Text>
