@@ -9,8 +9,24 @@ import { useRouter } from "next/navigation";
  * around. Falls back to a known-good URL only when there's nothing to go
  * back to (e.g. this page was opened directly / in a new tab), detected via
  * history length rather than assumed.
+ *
+ * `className` defaults to the original plain-text-link look (every existing
+ * top-of-page usage keeps that exact appearance unchanged). A second
+ * instance placed lower on a page — e.g. at the bottom of an action panel,
+ * so reviewers don't have to scroll back up — can pass a boxed/bordered
+ * button className instead to match that panel's own button conventions,
+ * while sharing this exact same navigation behavior (so both instances on
+ * a page always go to the identical place).
  */
-export function BackLink({ label, fallbackHref }: { label: string; fallbackHref: string }) {
+export function BackLink({
+  label,
+  fallbackHref,
+  className = "w-fit text-sm font-medium text-gray-600 hover:text-[#0b1f3a]",
+}: {
+  label: string;
+  fallbackHref: string;
+  className?: string;
+}) {
   const router = useRouter();
   return (
     <button
@@ -22,7 +38,7 @@ export function BackLink({ label, fallbackHref }: { label: string; fallbackHref:
           router.push(fallbackHref);
         }
       }}
-      className="w-fit text-sm font-medium text-gray-600 hover:text-[#0b1f3a]"
+      className={className}
     >
       ← {label}
     </button>
