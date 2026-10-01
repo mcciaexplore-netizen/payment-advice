@@ -11,6 +11,7 @@ import {
   jsonb,
   unique,
   primaryKey,
+  type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
@@ -190,6 +191,45 @@ export const staffAuthorityOptions = pgTable(
   (table) => [unique().on(table.staffMemberId, table.recommendingAuthorityId)],
 );
 
+/** A submitter-initiated request to add a new vendor, filed alongside a
+ * Payment Advice submission rather than blocking on it - the PA can be
+ * fully submitted (vendor_id null, pending_vendor_request_id set here)
+ * while Finance reviews this request separately. Stage is derived from the
+ * nullable timestamp columns (approved_at / sent_back_at / neither =
+ * pending), same convention as the rest of the app - no status enum. */
+export const vendorRequests = pgTable("vendor_requests", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  requestedName: text("requested_name").notNull(),
+  requestedAddress: text("requested_address").notNull(),
+  requestedGstin: text("requested_gstin"),
+  // MICRO | SMALL | MEDIUM | NOT_REGISTERED | UNKNOWN - free-ish, not a DB
+  // enum, since the submitter is self-reporting what they believe is true,
+  // not something this app can verify. Defaults to UNKNOWN at the
+  // application layer when not provided (see lib/validation/vendor-request.ts).
+  msmeStatus: text("msme_status"),
+  // Blob URL for whichever document the submitter attached (Udyam
+  // Registration Certificate, or a signed non-MSME declaration) - optional,
+  // not a submission gate. Same direct-to-Blob pattern as every other
+  // attachment in this app, but stored here directly rather than in the
+  // shared `attachments` table since it belongs to this request, not to a
+  // specific payment_advices row's document set.
+  msmeDocumentUrl: text("msme_document_url"),
+  msmeDocumentType: text("msme_document_type"), // 'UDYAM_CERTIFICATE' | 'NON_MSME_DECLARATION'
+  requestedByName: text("requested_by_name").notNull(),
+  requestedByEmail: text("requested_by_email").notNull(),
+  paymentAdviceId: uuid("payment_advice_id")
+    .notNull()
+    .references((): AnyPgColumn => paymentAdvices.id),
+  approvedAt: timestamp("approved_at", { withTimezone: true }),
+  approvedBy: text("approved_by"),
+  // The real vendor record created/linked once approved - null until then.
+  approvedVendorId: uuid("approved_vendor_id").references(() => vendors.id),
+  sentBackAt: timestamp("sent_back_at", { withTimezone: true }),
+  sentBackBy: text("sent_back_by"),
+  sentBackRemarks: text("sent_back_remarks"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
 export const paymentAdvices = pgTable("payment_advices", {
   id: uuid("id").primaryKey().defaultRandom(),
   serialNo: text("serial_no").notNull().unique(),
@@ -201,6 +241,10 @@ export const paymentAdvices = pgTable("payment_advices", {
 
   // Payee block
   vendorId: uuid("vendor_id").references(() => vendors.id),
+  // Set instead of vendorId when the submitter requested a new vendor be
+  // added alongside this submission (vendorId stays null until Finance
+  // approves the request and backfills it - see lib/advice/vendor-requests.ts).
+  pendingVendorRequestId: uuid("pending_vendor_request_id").references((): AnyPgColumn => vendorRequests.id),
   payeeName: text("payee_name").notNull(),
   payeeAddress: text("payee_address").notNull(),
   payeeEmail: text("payee_email"),
@@ -545,6 +589,7 @@ export const auditLog = pgTable("audit_log", {
     () => paymentAdvices.id,
   ),
   forwardingMemoId: uuid("forwarding_memo_id").references(() => forwardingMemos.id),
+  vendorRequestId: uuid("vendor_request_id").references(() => vendorRequests.id),
   action: text("action").notNull(), // 'SUBMITTED' | 'RESUBMITTED' | 'APPROVED' | 'SENT_BACK' | 'PDF_GENERATED' | 'EXPORTED'
   actor: text("actor").notNull(),
   ipAddress: text("ip_address"),
