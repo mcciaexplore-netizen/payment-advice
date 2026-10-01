@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { auditLog, forwardingMemos } from "@/lib/db/schema";
 import { forwardingMemoSchema } from "@/lib/validation/forwarding-memo";
 import { todayInIst } from "@/lib/date-time";
+import { allocateForwardingMemoNumber, financialYearFor } from "@/lib/serial";
 
 export const runtime = "nodejs";
 
@@ -11,10 +12,6 @@ function clientIp(req: NextRequest): string | null {
 }
 
 export async function POST(req: NextRequest) {
-  if (process.env.FORWARDING_MEMO_LOCAL_TEST !== "true") {
-    return NextResponse.json({ error: "Forwarding Memo submissions are not enabled." }, { status: 404 });
-  }
-
   const parsed = forwardingMemoSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
     return NextResponse.json(
@@ -23,33 +20,47 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const values = { ...parsed.data, memoDate: todayInIst() };
+  // Memo Date is system-controlled, same as Payment Advice's formDate - a
+  // client-supplied date is never trusted for the record that actually gets
+  // numbered/saved, regardless of what the (read-only) form field showed.
+  const now = new Date();
+  const values = { ...parsed.data, memoDate: todayInIst(now) };
+
   try {
-    const [memo] = await db.transaction(async (tx) => {
+    const { memo } = await db.transaction(async (tx) => {
+      const financialYear = financialYearFor(now);
+      const serialNo = await allocateForwardingMemoNumber(tx, financialYear);
+
+      // Allocation and row creation deliberately share this transaction -
+      // if the insert below fails, the counter rolls back with it, same
+      // gapless-but-never-wasted-on-a-failed-write guarantee as the other
+      // three series.
       const [created] = await tx
         .insert(forwardingMemos)
         .values({
           ...values,
+          serialNo,
+          financialYear,
           amount: values.amount.toFixed(2),
         })
-        .returning({ id: forwardingMemos.id, createdAt: forwardingMemos.createdAt });
+        .returning({ id: forwardingMemos.id, serialNo: forwardingMemos.serialNo, createdAt: forwardingMemos.createdAt });
 
       await tx.insert(auditLog).values({
         forwardingMemoId: created.id,
         action: "FORWARDING_MEMO_SUBMITTED",
         actor: values.submittedByName,
         ipAddress: clientIp(req),
-        details: {},
+        details: { serialNo: created.serialNo },
       });
 
-      return [created] as const;
+      return { memo: created };
     });
 
-    return NextResponse.json({ ok: true, id: memo.id, createdAt: memo.createdAt });
+    return NextResponse.json({ ok: true, id: memo.id, serialNo: memo.serialNo, createdAt: memo.createdAt });
   } catch (error) {
     console.error("[Forwarding Memo] database submission failed", error);
     return NextResponse.json(
-      { error: "The development database is unavailable. Check DATABASE_URL and Neon credentials." },
+      { error: "Something went wrong while submitting. Please try again." },
       { status: 503 },
     );
   }

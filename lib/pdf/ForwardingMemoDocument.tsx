@@ -1,5 +1,5 @@
 import { Document, Image, Page, StyleSheet, Text, View } from "@react-pdf/renderer";
-import { formatDateOnly } from "@/lib/date-time";
+import { formatDateOnly, formatIstDate } from "@/lib/date-time";
 import { Stamp } from "@/lib/pdf/Stamp";
 import type { ForwardingMemoInput } from "@/lib/validation/forwarding-memo";
 
@@ -14,7 +14,9 @@ const styles = StyleSheet.create({
   heading: { width: "100%", textAlign: "center" },
   chamber: { fontFamily: "Helvetica-Bold", color: NAVY, fontSize: 10, lineHeight: 1.4 },
   title: { marginTop: 14, marginBottom: 14, fontFamily: "Helvetica-Bold", fontSize: 18, color: NAVY, textAlign: "center" },
-  date: { textAlign: "right", marginBottom: 16 },
+  referenceRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 16 },
+  referenceNo: { fontFamily: "Helvetica-Bold", color: NAVY },
+  date: {},
   addressee: { fontFamily: "Helvetica-Bold", lineHeight: 1.5 },
   introduction: { marginTop: 6, marginBottom: 16, lineHeight: 1.5 },
   row: { borderBottom: BORDER, paddingTop: 7, paddingBottom: 8 },
@@ -65,9 +67,18 @@ function Detail({ label, value }: { label: string; value: string }) {
  * blank: rendering a memo is not submission, acknowledgement or approval. */
 export function ForwardingMemoDocument({
   data,
+  serialNo,
+  receivedAt,
+  receivedBy,
   logoDataUrl,
 }: {
   data: ForwardingMemoInput;
+  /** Server-allocated FM/MCCIA/<FY>/NNNN reference - undefined only for the
+   * database-free local preview rendered before a real row exists. */
+  serialNo?: string;
+  /** Present only once Finance Admin has marked this memo received. */
+  receivedAt?: string | null;
+  receivedBy?: string | null;
   logoDataUrl?: string;
 }) {
   const mode = data.instrumentMode === "CHEQUE" ? "Cheque" : "D.D.";
@@ -84,7 +95,10 @@ export function ForwardingMemoDocument({
           </View>
         </View>
         <Text style={styles.title}>Forwarding Memo</Text>
-        <Text style={styles.date}>Date : {formatDateOnly(data.memoDate)}</Text>
+        <View style={styles.referenceRow}>
+          <Text style={styles.referenceNo}>{serialNo ? `No. : ${serialNo}` : ""}</Text>
+          <Text style={styles.date}>Date : {formatDateOnly(data.memoDate)}</Text>
+        </View>
         <View wrap={false}>
           <Text style={styles.addressee}>To{"\n"}The Chief Accountant</Text>
           <Text style={styles.introduction}>
@@ -114,7 +128,13 @@ export function ForwardingMemoDocument({
           <View style={styles.signature}>
             <Text style={styles.signatureHeading}>Received the above instrument</Text>
             <Text style={styles.signatureSubheading}>for Accounts Department</Text>
-            <View style={styles.signatureStampSlot} />
+            <View style={styles.signatureStampSlot}>
+              {receivedAt ? (
+                <View style={styles.submitterStamp}>
+                  <Stamp inFlow label="RECEIVED" name={receivedBy ?? ""} date={formatIstDate(receivedAt)} color="green" />
+                </View>
+              ) : null}
+            </View>
             <View style={styles.signatureLine} />
             <Text style={styles.signatureLabel}>Signature</Text>
           </View>
