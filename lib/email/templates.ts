@@ -264,6 +264,33 @@ export function renderPaymentEntryEmail(data: PaymentEntryEmailData) {
   };
 }
 
+export interface VendorMsmeRequestEmailData {
+  vendorName: string;
+  submitterName: string;
+  /** Already formatted (DD/MM/YYYY) — see computeMsmeRequestDeadline in
+   * lib/advice/msme-email-template.ts, which does the actual date math. */
+  deadline: string;
+}
+
+// Sent to the vendor directly (not the submitter) by the app itself — see
+// AGENT_HANDOFF.md's 2026-10-01 revision note. Same "Action Required" amber
+// styling as SENT_BACK/AUTHORITY_APPROVAL above, since this also asks its
+// recipient (the vendor) to act. Wording is the human-specified statutory
+// notice text from the original brief — don't reword without checking,
+// since it references a specific MCA order.
+const VENDOR_MSME_REQUEST_TEMPLATE = shell("#E8A33D", `<tr><td style="padding:32px;"><p style="margin:0 0 4px;font-size:13px;color:#B45309;text-transform:uppercase;letter-spacing:.5px;font-weight:600;">Action Required</p><h1 style="margin:0 0 20px;font-family:Georgia,'Times New Roman',serif;font-size:22px;color:#0B1F3A;">MSME Status Declaration Required</h1><p style="margin:0 0 20px;font-size:15px;line-height:1.6;color:#1F2937;">Dear {{vendor_name}},<br><br>As per the Ministry of Corporate Affairs' Specified Companies (Furnishing of information about payment to micro and small enterprise suppliers) Order, 2019 (attached), companies must report payments to MSME suppliers delayed beyond 45 days.</p><p style="margin:0 0 12px;font-size:15px;line-height:1.6;color:#1F2937;">To comply, we need your MSME status on record. Please share one of the following within 7 days:</p><ol style="margin:0 0 20px;padding-left:20px;font-size:15px;line-height:1.8;color:#1F2937;"><li>If registered as Micro/Small/Medium — your Udyam Registration Certificate, or</li><li>If not registered under MSME — a signed declaration on your letterhead (template attached)</li></ol><p style="margin:0 0 20px;font-size:15px;line-height:1.6;color:#1F2937;">If we don't hear back by <strong>{{deadline}}</strong>, we'll record your status as non-MSME for reporting purposes.</p><p style="margin:0 0 20px;font-size:15px;line-height:1.6;color:#1F2937;">This is a statutory requirement — we appreciate a prompt response.</p><p style="margin:0;font-size:15px;line-height:1.6;color:#1F2937;">Regards,<br>{{submitter_name}}<br>Mahratta Chamber of Commerce, Industries &amp; Agriculture</p></td></tr>`);
+
+export function renderVendorMsmeRequestEmail(data: VendorMsmeRequestEmailData) {
+  return {
+    subject: `MSME Status Declaration Required — ${data.vendorName}`,
+    html: replaceTokens(VENDOR_MSME_REQUEST_TEMPLATE, {
+      vendor_name: data.vendorName,
+      submitter_name: data.submitterName,
+      deadline: data.deadline,
+    }),
+  };
+}
+
 export function renderSubmissionConfirmationEmail(data: SubmissionConfirmationEmailData) {
   const paymentAdviceButton = data.paymentMode !== "CASH" && data.paymentAdvicePdfLink
     ? `<tr><td align="center">${button("{{payment_advice_pdf_link}}", "Download Payment Advice")}</td></tr>`

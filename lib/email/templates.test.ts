@@ -3,6 +3,7 @@ import {
   renderAuthorityApprovalEmail,
   renderSentBackEmail,
   renderSubmissionConfirmationEmail,
+  renderVendorMsmeRequestEmail,
   renderVerifiedEmail,
   renderPaymentDoneEmail,
   renderPaymentEntryEmail,
@@ -325,6 +326,45 @@ describe("renderPaymentEntryEmail", () => {
       ...base,
       remarks: "<script>alert(1)</script>",
       isFinal: false,
+    });
+    expect(message.html).not.toContain("<script>alert(1)</script>");
+    expect(message.html).toContain("&lt;script&gt;");
+  });
+});
+
+describe("renderVendorMsmeRequestEmail", () => {
+  const base = {
+    vendorName: "Example Vendor Pvt Ltd",
+    submitterName: "Jane Submitter",
+    deadline: "08/10/2026",
+  };
+
+  it("renders the exact subject with an em dash", () => {
+    const message = renderVendorMsmeRequestEmail(base);
+    expect(message.subject).toBe("MSME Status Declaration Required — Example Vendor Pvt Ltd");
+  });
+
+  it("fills vendor name, submitter name, and the deadline into the body", () => {
+    const message = renderVendorMsmeRequestEmail(base);
+    expect(message.html).toContain("Dear Example Vendor Pvt Ltd,");
+    expect(message.html).toContain("Jane Submitter");
+    expect(message.html).toContain("08/10/2026");
+    expect(message.html).toContain(
+      "Specified Companies (Furnishing of information about payment to micro and small enterprise suppliers) Order, 2019",
+    );
+    expect(message.html).toContain("Mahratta Chamber of Commerce, Industries &amp; Agriculture");
+  });
+
+  it("uses the shared house template shell (MCCIA header/footer)", () => {
+    const message = renderVendorMsmeRequestEmail(base);
+    expect(message.html).toContain("Mahratta Chamber of Commerce, Industries &amp; Agriculture");
+    expect(message.html).toContain("This is an automated notification from the MCCIA Payment Advice system.");
+  });
+
+  it("escapes HTML in the vendor/submitter names", () => {
+    const message = renderVendorMsmeRequestEmail({
+      ...base,
+      vendorName: "<script>alert(1)</script>",
     });
     expect(message.html).not.toContain("<script>alert(1)</script>");
     expect(message.html).toContain("&lt;script&gt;");

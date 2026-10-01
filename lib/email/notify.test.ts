@@ -29,6 +29,7 @@ import {
   notifySubmissionRecommended,
   notifySubmissionRejected,
   notifyVerified,
+  sendVendorMsmeRequestEmail,
 } from "./notify";
 
 const submissionConfirmationData = {
@@ -478,6 +479,81 @@ describe("lib/email/notify.ts", () => {
       mocks.resendSend.mockRejectedValue(new Error("boom"));
       const result = await notifySentBack(sentBackData, "submitter@example.com");
       expect(result.subject).toBe("Action Required: Payment Advice MCCIA/2026-27/0002 Sent Back");
+    });
+  });
+
+  describe("sendVendorMsmeRequestEmail", () => {
+    const vendorMsmeData = {
+      vendorName: "Example Vendor Pvt Ltd",
+      submitterName: "Jane Submitter",
+      deadline: "08/10/2026",
+    };
+    const attachments = [
+      { filename: "mca-notification.pdf", content: Buffer.from("pdf-bytes") },
+      { filename: "declaration-template.docx", content: Buffer.from("docx-bytes") },
+    ];
+
+    it("previews (no network call) when not in live mode, same as every other notify function", async () => {
+      const result = await sendVendorMsmeRequestEmail(
+        vendorMsmeData,
+        "vendor@example.com",
+        ["submitter@example.com", "sunils@mcciapune.com"],
+        attachments,
+      );
+      expect(mocks.gmailSendMail).not.toHaveBeenCalled();
+      expect(mocks.resendSend).not.toHaveBeenCalled();
+      expect(result.messageId).toBeUndefined();
+      expect(infoSpy).toHaveBeenCalledWith(
+        expect.stringContaining("[Email preview: vendor MSME request]"),
+        expect.anything(),
+      );
+    });
+
+    describe("live mode", () => {
+      beforeEach(() => {
+        vi.stubEnv("EMAIL_MODE", "live");
+        vi.stubEnv("GMAIL_USER", "mcciaexplore@gmail.com");
+        vi.stubEnv("GMAIL_APP_PASSWORD", "test-app-password");
+        mocks.gmailSendMail.mockResolvedValue({ messageId: "<msme-abc123@gmail.com>" });
+      });
+
+      it("sends to the vendor, CC'd to the submitter and Sunil Salunke, with both attachments", async () => {
+        const result = await sendVendorMsmeRequestEmail(
+          vendorMsmeData,
+          "vendor@example.com",
+          ["submitter@example.com", "sunils@mcciapune.com"],
+          attachments,
+        );
+        expect(mocks.gmailSendMail).toHaveBeenCalledWith({
+          from: "mcciaexplore@gmail.com",
+          to: "vendor@example.com",
+          cc: ["submitter@example.com", "sunils@mcciapune.com"],
+          subject: "MSME Status Declaration Required — Example Vendor Pvt Ltd",
+          html: expect.stringContaining("Example Vendor Pvt Ltd"),
+          attachments,
+        });
+        expect(result.messageId).toBe("<msme-abc123@gmail.com>");
+      });
+
+      it("drops CC (does not redirect it) when EMAIL_TEST_OVERRIDE_RECIPIENT is set", async () => {
+        vi.stubEnv("EMAIL_TEST_OVERRIDE_RECIPIENT", "tester@example.com");
+        await sendVendorMsmeRequestEmail(
+          vendorMsmeData,
+          "vendor@example.com",
+          ["submitter@example.com", "sunils@mcciapune.com"],
+          attachments,
+        );
+        expect(mocks.gmailSendMail).toHaveBeenCalledWith(
+          expect.objectContaining({ to: "tester@example.com", cc: undefined }),
+        );
+      });
+
+      it("rethrows a provider failure — unlike every notify*() function, this is the primary action, not a side notification", async () => {
+        mocks.gmailSendMail.mockRejectedValue(new Error("SMTP connection refused"));
+        await expect(
+          sendVendorMsmeRequestEmail(vendorMsmeData, "vendor@example.com", [], attachments),
+        ).rejects.toThrow("SMTP connection refused");
+      });
     });
   });
 });
