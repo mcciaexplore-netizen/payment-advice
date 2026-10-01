@@ -210,9 +210,23 @@ export const paymentAdviceFormSchema = z
     // vendor selection), so only the vendor-request-specific extras live
     // here. See lib/advice/vendor-requests.ts.
     isNewVendorRequest: z.boolean().default(false),
+    // Mandatory when isNewVendorRequest is true (enforced below in the
+    // superRefine, since it's optional at the object-shape level like every
+    // other vendor-request field) - 2026-10-01 revision: the app now sends
+    // the MSME request email itself rather than handing the submitter a
+    // mailto: link, so a real vendor email is required to send to, not
+    // just useful-on-record.
+    vendorRequestVendorEmail: optionalTrimmed().pipe(
+      z.string().email("Enter a valid vendor email").optional(),
+    ),
     vendorRequestMsmeStatus: z
       .enum(["MICRO", "SMALL", "MEDIUM", "NOT_REGISTERED", "UNKNOWN"])
       .default("UNKNOWN"),
+    // Populated client-side only after a successful "Send Email" - carried
+    // through to the server exactly like the MSME document fields below, so
+    // the vendor_requests row created at PA submission already has them.
+    vendorRequestMsmeEmailSentAt: optionalTrimmed(),
+    vendorRequestMsmeEmailMessageId: optionalTrimmed(),
     // Populated client-side only after the optional MSME document has
     // already been uploaded direct-to-Blob (same pattern/route as every
     // other attachment). Carries the raw blob reference through to the
@@ -319,6 +333,18 @@ export const paymentAdviceFormSchema = z
         code: "custom",
         path: ["submittedByDepartmentOption"],
         message: "Select your department",
+      });
+    }
+
+    // isNewVendorRequest isn't NEFT-specific (the "Request to add vendor"
+    // toggle is available for Cash Voucher too), so this check sits outside
+    // the NEFT-only block below — a vendor email is required to send the
+    // MSME request email to, regardless of payment mode.
+    if (data.isNewVendorRequest && !data.vendorRequestVendorEmail) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["vendorRequestVendorEmail"],
+        message: "Vendor email is required",
       });
     }
 

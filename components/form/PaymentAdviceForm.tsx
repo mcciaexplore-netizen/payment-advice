@@ -95,6 +95,11 @@ export function PaymentAdviceForm({
   const [vendorRequestDocumentType, setVendorRequestDocumentType] = useState<
     "UDYAM_CERTIFICATE" | "NON_MSME_DECLARATION"
   >("UDYAM_CERTIFICATE");
+  // Set once "Send Email" succeeds on the request panel - carried through
+  // to the server at final PA submission (vendor_requests.msme_email_sent_at
+  // etc.), same pattern as the MSME document's own Blob fields above.
+  const [vendorRequestMsmeEmailSentAt, setVendorRequestMsmeEmailSentAt] = useState<string | null>(null);
+  const [vendorRequestMsmeEmailMessageId, setVendorRequestMsmeEmailMessageId] = useState<string | null>(null);
   const [approvalBudget, setApprovalBudget] = useState<File[]>([]);
   const [purchaseOrder, setPurchaseOrder] = useState<File[]>([]);
   const [deliveryChallanFile, setDeliveryChallanFile] = useState<File[]>([]);
@@ -157,6 +162,7 @@ export function PaymentAdviceForm({
   const payeeName = useWatch({ control, name: "payeeName" }) ?? "";
   const vendorId = useWatch({ control, name: "vendorId" });
   const isNewVendorRequest = useWatch({ control, name: "isNewVendorRequest" }) ?? false;
+  const vendorRequestVendorEmail = useWatch({ control, name: "vendorRequestVendorEmail" }) ?? "";
   const vendorRequestMsmeStatus = useWatch({ control, name: "vendorRequestMsmeStatus" }) ?? "UNKNOWN";
   const submittedByName = useWatch({ control, name: "submittedByName" }) ?? "";
   const submittedByEmail = useWatch({ control, name: "submittedByEmail" }) ?? "";
@@ -556,6 +562,12 @@ export function PaymentAdviceForm({
         formData.append("vendorRequestMsmeDocumentSizeBytes", String(file.size));
         formData.append("vendorRequestMsmeDocumentType", vendorRequestDocumentType);
       }
+      if (values.isNewVendorRequest && vendorRequestMsmeEmailSentAt) {
+        formData.append("vendorRequestMsmeEmailSentAt", vendorRequestMsmeEmailSentAt);
+        if (vendorRequestMsmeEmailMessageId) {
+          formData.append("vendorRequestMsmeEmailMessageId", vendorRequestMsmeEmailMessageId);
+        }
+      }
 
       setUploadingAttachments(false);
       formData.append("uploadedAttachments", JSON.stringify(uploadedAttachments));
@@ -781,6 +793,9 @@ export function PaymentAdviceForm({
                 onClick={() => {
                   if (isNewVendorRequest) {
                     setValue("isNewVendorRequest", false);
+                    setValue("vendorRequestVendorEmail", "");
+                    setVendorRequestMsmeEmailSentAt(null);
+                    setVendorRequestMsmeEmailMessageId(null);
                   } else {
                     setValue("isNewVendorRequest", true, { shouldValidate: true });
                     setValue("vendorId", undefined);
@@ -822,12 +837,25 @@ export function PaymentAdviceForm({
           <VendorRequestPanel
             payeeName={payeeName}
             submittedByName={submittedByName}
+            submittedByEmail={submittedByEmail}
+            vendorEmail={vendorRequestVendorEmail}
+            onVendorEmailChange={(v) => {
+              setValue("vendorRequestVendorEmail", v, { shouldValidate: true });
+              setVendorRequestMsmeEmailSentAt(null);
+              setVendorRequestMsmeEmailMessageId(null);
+            }}
+            vendorEmailError={errors.vendorRequestVendorEmail?.message}
             msmeStatus={vendorRequestMsmeStatus}
             onMsmeStatusChange={(v) => setValue("vendorRequestMsmeStatus", v as "MICRO" | "SMALL" | "MEDIUM" | "NOT_REGISTERED" | "UNKNOWN")}
             msmeDocument={vendorRequestMsmeDocument}
             onMsmeDocumentChange={setVendorRequestMsmeDocument}
             documentType={vendorRequestDocumentType}
             onDocumentTypeChange={setVendorRequestDocumentType}
+            msmeEmailSentAt={vendorRequestMsmeEmailSentAt}
+            onEmailSent={(sentAt, messageId) => {
+              setVendorRequestMsmeEmailSentAt(sentAt);
+              setVendorRequestMsmeEmailMessageId(messageId);
+            }}
           />
         ) : null}
       </Section> : null}

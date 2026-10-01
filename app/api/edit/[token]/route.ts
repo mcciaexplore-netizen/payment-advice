@@ -392,9 +392,14 @@ export async function POST(
               requestedName: values.payeeName,
               requestedAddress: values.payeeAddress ?? "",
               requestedGstin: values.payeeGstin ?? null,
+              requestedVendorEmail: values.vendorRequestVendorEmail!,
               msmeStatus: values.vendorRequestMsmeStatus,
               msmeDocumentUrl: vendorRequestMsmeDocument?.blobUrl ?? null,
               msmeDocumentType: values.vendorRequestMsmeDocumentType ?? null,
+              msmeEmailSentAt: values.vendorRequestMsmeEmailSentAt
+                ? new Date(values.vendorRequestMsmeEmailSentAt)
+                : null,
+              msmeEmailMessageId: values.vendorRequestMsmeEmailMessageId ?? null,
               sentBackAt: null,
               sentBackBy: null,
               sentBackRemarks: null,
@@ -420,12 +425,17 @@ export async function POST(
               requestedName: values.payeeName,
               requestedAddress: values.payeeAddress ?? "",
               requestedGstin: values.payeeGstin ?? null,
+              requestedVendorEmail: values.vendorRequestVendorEmail!,
               msmeStatus: values.vendorRequestMsmeStatus,
               msmeDocumentUrl: vendorRequestMsmeDocument?.blobUrl ?? null,
               msmeDocumentType: values.vendorRequestMsmeDocumentType ?? null,
               requestedByName: values.submittedByName,
               requestedByEmail: values.submittedByEmail,
               paymentAdviceId: advice.id,
+              msmeEmailSentAt: values.vendorRequestMsmeEmailSentAt
+                ? new Date(values.vendorRequestMsmeEmailSentAt)
+                : null,
+              msmeEmailMessageId: values.vendorRequestMsmeEmailMessageId ?? null,
             })
             .returning({ id: vendorRequests.id });
 
