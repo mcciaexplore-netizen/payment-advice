@@ -41,6 +41,12 @@ Mahratta Chamber of Commerce, Industries & Agriculture`;
 
 export function buildMsmeMailtoHref(input: { vendorEmail?: string; subject: string; body: string }): string {
   const to = input.vendorEmail ? encodeURIComponent(input.vendorEmail) : "";
-  const params = new URLSearchParams({ subject: input.subject, body: input.body });
-  return `mailto:${to}?${params.toString()}`;
+  // RFC 6068 mailto: URIs use plain percent-encoding (spaces as %20) - NOT
+  // application/x-www-form-urlencoded (spaces as "+"), which is all
+  // URLSearchParams produces. Some mail clients take that "+" literally
+  // and insert it into the body instead of a space, so encodeURIComponent
+  // is used directly rather than URLSearchParams.
+  const subject = encodeURIComponent(input.subject);
+  const body = encodeURIComponent(input.body);
+  return `mailto:${to}?subject=${subject}&body=${body}`;
 }

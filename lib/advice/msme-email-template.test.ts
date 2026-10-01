@@ -40,4 +40,13 @@ describe("buildMsmeMailtoHref", () => {
     const href = buildMsmeMailtoHref({ vendorEmail: "vendor@example.com", subject: "S", body: "B" });
     expect(href.startsWith("mailto:vendor%40example.com?")).toBe(true);
   });
+
+  it("encodes spaces as %20, not + (RFC 6068, not application/x-www-form-urlencoded)", () => {
+    // Some mail clients take a literal "+" from a URLSearchParams-style
+    // encoding and insert it into the body instead of a space.
+    const href = buildMsmeMailtoHref({ subject: "Two Words", body: "Body with spaces" });
+    expect(href).not.toContain("+");
+    expect(href).toContain("subject=Two%20Words");
+    expect(href).toContain("body=Body%20with%20spaces");
+  });
 });
