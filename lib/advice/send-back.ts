@@ -5,6 +5,8 @@ import { paymentAdvices, auditLog } from "@/lib/db/schema";
 
 export const EDIT_TOKEN_TTL_MS = 14 * 24 * 60 * 60 * 1000; // 14 days
 
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
 /**
  * Shared by Admin's own "Send Back" action and the Recommending Authority's
  * "Send Back" action on the recommendation page — both put the submission back in
@@ -21,12 +23,19 @@ export async function performSendBack({
   actor,
   ipAddress,
   authorityRejection = false,
+  onTransaction,
 }: {
   adviceId: string;
   remarks: string;
   actor: string;
   ipAddress: string | null;
   authorityRejection?: boolean;
+  /** Optional extra work run inside the same transaction, right before it
+   * commits - e.g. the vendor-request send-back route also marks the
+   * linked vendor_requests row sent-back atomically with the PA itself,
+   * rather than as a separate, non-atomic follow-up write. Every existing
+   * caller omits this and is completely unaffected. */
+  onTransaction?: (tx: Tx) => Promise<void>;
 }): Promise<string> {
   const editToken = randomBytes(32).toString("base64url");
   const now = new Date();
@@ -55,6 +64,8 @@ export async function performSendBack({
       ipAddress,
       details: { adminRemarks: remarks },
     });
+
+    if (onTransaction) await onTransaction(tx);
   });
 
   return editToken;
