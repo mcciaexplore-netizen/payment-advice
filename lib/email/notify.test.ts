@@ -528,7 +528,7 @@ describe("lib/email/notify.ts", () => {
           from: "mcciaexplore@gmail.com",
           to: "vendor@example.com",
           cc: ["submitter@example.com", "sunils@mcciapune.com"],
-          subject: "MSME Status Declaration Required — Example Vendor Pvt Ltd",
+          subject: "MSME Status Declaration Required: Example Vendor Pvt Ltd",
           html: expect.stringContaining("Example Vendor Pvt Ltd"),
           attachments,
         });

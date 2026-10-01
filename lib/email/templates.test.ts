@@ -10,6 +10,21 @@ import {
 } from "./templates";
 
 describe("email templates", () => {
+  it("every template's shared shell() uses this app's own logo URL, not the hotlinked mcciapune.com one that rendered as a broken image (fixed 2026-10-01)", () => {
+    const message = renderSentBackEmail({
+      displayNo: "MCCIA/2026-27/0002",
+      documentLabel: "Payment Advice",
+      submittedByName: "Priya Sharma",
+      sentBackBy: "Admin",
+      remarks: "Please fix the amount",
+      payeeName: "Acme Supplies",
+      amount: "850.00",
+      editLink: "https://example.test/edit/token",
+    });
+    expect(message.html).toContain("https://payment-advice.vercel.app/mccia-logo.png");
+    expect(message.html).not.toContain("mcciapune.com/media");
+  });
+
   it("renders a fully substituted authority recommendation email with the expected subject", () => {
     const message = renderAuthorityApprovalEmail({
       displayNo: "MCCIA/2026-27/0001",
@@ -339,9 +354,21 @@ describe("renderVendorMsmeRequestEmail", () => {
     deadline: "08/10/2026",
   };
 
-  it("renders the exact subject with an em dash", () => {
+  it("renders the exact subject, with a colon rather than an em dash", () => {
     const message = renderVendorMsmeRequestEmail(base);
-    expect(message.subject).toBe("MSME Status Declaration Required — Example Vendor Pvt Ltd");
+    expect(message.subject).toBe("MSME Status Declaration Required: Example Vendor Pvt Ltd");
+  });
+
+  it("contains no em dashes anywhere in subject or body (2026-10-01 fix)", () => {
+    const message = renderVendorMsmeRequestEmail(base);
+    expect(message.subject).not.toContain("—");
+    expect(message.html).not.toContain("—");
+  });
+
+  it("uses the app's own domain for the logo, not a hotlinked mcciapune.com URL", () => {
+    const message = renderVendorMsmeRequestEmail(base);
+    expect(message.html).toContain("https://payment-advice.vercel.app/mccia-logo.png");
+    expect(message.html).not.toContain("mcciapune.com/media");
   });
 
   it("fills vendor name, submitter name, and the deadline into the body", () => {

@@ -119,7 +119,7 @@ export function VendorRequestPanel({
         <strong>
           You must submit the vendor&apos;s Udyam Registration Certificate or signed Non-MSME
           Declaration. The Accounts team will not approve this vendor without one of these
-          documents — submissions missing this will be sent back for resubmission.
+          documents. Submissions missing this will be sent back for resubmission.
         </strong>
       </div>
 
