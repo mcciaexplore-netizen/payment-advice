@@ -27,6 +27,11 @@ export const forwardingMemoSchema = z.object({
     .max(999_999_999_999.99, "Amount exceeds the supported limit"),
   // Keep the typed name inside the PDF's physical-signature block.
   submittedByName: requiredText("Enter the submitter's name").max(200, "Use at most 200 characters for the submitter's name"),
+  // Optional - for a future receipt/confirmation notification, not wired to
+  // send anything yet. Same optional-email pattern as payeeEmail elsewhere.
+  submittedByEmail: optionalText.pipe(
+    z.string().email("Enter a valid email").optional(),
+  ),
 });
 
 export type ForwardingMemoFormValues = z.input<typeof forwardingMemoSchema>;
