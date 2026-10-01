@@ -58,4 +58,16 @@ describe("Forwarding Memo validation", () => {
     expect(forwardingMemoSchema.safeParse({ ...memo, submittedByName: "W".repeat(200) }).success).toBe(true);
     expect(forwardingMemoSchema.safeParse({ ...memo, submittedByName: "W".repeat(201) }).success).toBe(false);
   });
+
+  it("submittedByEmail is optional - absent, blank, or whitespace all pass and normalize to undefined", () => {
+    expect(forwardingMemoSchema.parse({ ...memo }).submittedByEmail).toBeUndefined();
+    expect(forwardingMemoSchema.parse({ ...memo, submittedByEmail: "" }).submittedByEmail).toBeUndefined();
+    expect(forwardingMemoSchema.parse({ ...memo, submittedByEmail: "  " }).submittedByEmail).toBeUndefined();
+  });
+
+  it("accepts a valid submittedByEmail and rejects an invalid one", () => {
+    const parsed = forwardingMemoSchema.parse({ ...memo, submittedByEmail: " submitter@example.com " });
+    expect(parsed.submittedByEmail).toBe("submitter@example.com");
+    expect(forwardingMemoSchema.safeParse({ ...memo, submittedByEmail: "not-an-email" }).success).toBe(false);
+  });
 });

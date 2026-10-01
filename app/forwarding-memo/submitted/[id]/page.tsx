@@ -1,4 +1,10 @@
 import Link from "next/link";
+import { eq } from "drizzle-orm";
+import { notFound } from "next/navigation";
+import { db } from "@/lib/db";
+import { forwardingMemos } from "@/lib/db/schema";
+
+export const dynamic = "force-dynamic";
 
 export default async function ForwardingMemoSubmittedPage({
   params,
@@ -7,11 +13,18 @@ export default async function ForwardingMemoSubmittedPage({
 }) {
   const { id } = await params;
 
+  const [memo] = await db
+    .select({ serialNo: forwardingMemos.serialNo })
+    .from(forwardingMemos)
+    .where(eq(forwardingMemos.id, id))
+    .limit(1);
+  if (!memo) notFound();
+
   return (
     <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-8 px-6 py-16">
       <section className="space-y-4 text-center">
         <p className="text-sm font-medium text-[#2e8b57]">Forwarding Memo submitted</p>
-        <h1 className="font-heading text-4xl text-[#0b1f3a]">Submission received</h1>
+        <h1 className="font-heading text-4xl text-[#0b1f3a]">{memo.serialNo}</h1>
         <p className="text-gray-600">Your forwarding memo was saved successfully.</p>
       </section>
       <div className="flex flex-wrap justify-center gap-3">

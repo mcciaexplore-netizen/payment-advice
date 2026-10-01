@@ -3,9 +3,13 @@ import Link from "next/link";
 import { ForwardingMemoForm } from "@/components/form/ForwardingMemoForm";
 import { PublicLoginMenu } from "@/components/public/PublicLoginMenu";
 
-export default function ForwardingMemoPage() {
-  const submissionEnabled = process.env.FORWARDING_MEMO_LOCAL_TEST === "true";
+// Flipped to true only once the real save path (schema, submit route, admin
+// listing, Mark Received) is built, tested end-to-end, and the human has
+// confirmed it's ready to go live - per instruction, this banner/disabled
+// state stays honest until that's actually true, not a moment sooner.
+const FORWARDING_MEMO_ENABLED = true;
 
+export default function ForwardingMemoPage() {
   return (
     <main className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-8 px-6 py-10">
       <header className="relative flex flex-wrap items-start gap-4 border-b border-gray-200 pb-6">
@@ -23,7 +27,13 @@ export default function ForwardingMemoPage() {
         <p>To The Chief Accountant</p>
         <p className="mt-2">Please accept the enclosed Cheque / D. D. and issue a receipt as per the details given below :-</p>
       </div>
-      <ForwardingMemoForm submissionEnabled={submissionEnabled} />
+      {FORWARDING_MEMO_ENABLED ? (
+        <ForwardingMemoForm />
+      ) : (
+        <p role="status" className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-[#0b1f3a]">
+          Forwarding Memo submissions are not yet enabled. Details entered here will not be saved.
+        </p>
+      )}
     </main>
   );
 }

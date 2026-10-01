@@ -19,7 +19,12 @@ type Snapshot = {
 };
 
 const migrationsDir = path.join(process.cwd(), "lib/db/migrations");
-const migrationSql = fs.readFileSync(path.join(migrationsDir, "0025_forwarding_memos.sql"), "utf8");
+// Regenerated fresh via `drizzle-kit generate` (not hand-edited) once the
+// serial_no/financial_year/submitted_by_email/received_at/received_by
+// columns were added - the colleague's original, never-applied
+// 0025_forwarding_memos.sql draft was deleted rather than edited in place,
+// so this filename is the real, current migration 25.
+const migrationSql = fs.readFileSync(path.join(migrationsDir, "0025_fixed_wasp.sql"), "utf8");
 const previous: Snapshot = JSON.parse(fs.readFileSync(path.join(migrationsDir, "meta/0024_snapshot.json"), "utf8"));
 const current: Snapshot = JSON.parse(fs.readFileSync(path.join(migrationsDir, "meta/0025_snapshot.json"), "utf8"));
 
@@ -33,6 +38,20 @@ describe("Forwarding Memo migration safety", () => {
     expect(statements[1]).toBe('ALTER TABLE "audit_log" ADD COLUMN "forwarding_memo_id" uuid');
     expect(statements[2]).toBe('ALTER TABLE "audit_log" ADD CONSTRAINT "audit_log_forwarding_memo_id_forwarding_memos_id_fk" FOREIGN KEY ("forwarding_memo_id") REFERENCES "public"."forwarding_memos"("id") ON DELETE no action ON UPDATE no action');
     expect(migrationSql).not.toMatch(/\b(?:INSERT\s+INTO|UPDATE\s+"|DELETE\s+FROM|DROP\s+|TRUNCATE\s+|RENAME\s+)\b/i);
+  });
+
+  it("gives serial_no its own gapless series - unique, not null, independent of the other three", () => {
+    const memo = current.tables["public.forwarding_memos"];
+    expect(memo.columns.serial_no).toMatchObject({ type: "text", notNull: true });
+    expect(migrationSql).toContain('CONSTRAINT "forwarding_memos_serial_no_unique" UNIQUE("serial_no")');
+    expect(memo.columns.financial_year).toMatchObject({ type: "text", notNull: true });
+  });
+
+  it("adds submitted_by_email/received_at/received_by as nullable - no pipeline status enum", () => {
+    const memo = current.tables["public.forwarding_memos"];
+    expect(memo.columns.submitted_by_email).toMatchObject({ type: "text", notNull: false });
+    expect(memo.columns.received_at).toMatchObject({ type: "timestamp with time zone", notNull: false });
+    expect(memo.columns.received_by).toMatchObject({ type: "text", notNull: false });
   });
 
   it("preserves every existing table, including payment data and counters", () => {

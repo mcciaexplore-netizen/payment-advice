@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { todayInIst } from "@/lib/date-time";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -12,17 +13,11 @@ import {
   type ForwardingMemoInput,
 } from "@/lib/validation/forwarding-memo";
 
-// A submission handler must be supplied by the confirmed memo workflow.
-// Rendering this component alone never sends or persists financial data.
-export function ForwardingMemoForm({
-  onSubmit,
-  submissionEnabled = false,
-}: {
-  onSubmit?: (values: ForwardingMemoInput) => Promise<void>;
-  submissionEnabled?: boolean;
-}) {
+export function ForwardingMemoForm() {
+  const router = useRouter();
+  const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string>();
-  const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<ForwardingMemoFormValues, unknown, ForwardingMemoInput>({
+  const { register, handleSubmit, formState: { errors } } = useForm<ForwardingMemoFormValues, unknown, ForwardingMemoInput>({
     resolver: zodResolver(forwardingMemoSchema),
     defaultValues: {
       memoDate: todayInIst(),
@@ -35,50 +30,36 @@ export function ForwardingMemoForm({
       instrumentDate: "",
       drawnOnBank: "",
       submittedByName: "",
+      submittedByEmail: "",
     },
   });
+
   async function submit(values: ForwardingMemoInput) {
-    if (!onSubmit && !submissionEnabled) return;
     setSubmitError(undefined);
+    setSubmitting(true);
     try {
-      if (onSubmit) {
-        await onSubmit(values);
-      } else {
-        // Local mode deliberately renders a PDF without requiring a database.
-        const popup = window.open("about:blank", "_blank");
-        const response = await fetch("/api/forwarding-memo/preview", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(values),
-        });
-        if (!response.ok) {
-          popup?.close();
-          const result = await response.json().catch(() => null) as { error?: string } | null;
-          throw new Error(result?.error ?? "The memo PDF could not be generated.");
-        }
-        const pdfUrl = URL.createObjectURL(await response.blob());
-        if (popup) {
-          popup.location.href = pdfUrl;
-        } else {
-          const link = document.createElement("a");
-          link.href = pdfUrl;
-          link.target = "_blank";
-          link.rel = "noreferrer";
-          link.click();
-        }
+      const response = await fetch("/api/forwarding-memo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(values),
+      });
+      const data = await response.json().catch(() => null) as { id?: string; error?: string } | null;
+      if (!response.ok || !data?.id) {
+        setSubmitError(data?.error ?? "The memo could not be submitted. Please try again.");
+        window.scrollTo({ top: 0, behavior: "smooth" });
+        return;
       }
-    } catch (error) {
-      setSubmitError(error instanceof Error ? error.message : "The memo could not be submitted. Please try again.");
+      router.push(`/forwarding-memo/submitted/${data.id}`);
+    } catch {
+      setSubmitError("Could not reach the server. Please check your connection and try again.");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } finally {
+      setSubmitting(false);
     }
   }
 
   return (
     <form noValidate onSubmit={handleSubmit(submit)} className="space-y-10">
-      {!onSubmit && !submissionEnabled && (
-        <p id="memo-submission-status" role="status" className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-[#0b1f3a]">
-          Forwarding Memo submissions are not yet enabled. Details entered here will not be saved.
-        </p>
-      )}
       <section className="space-y-6" aria-labelledby="memo-party-heading">
         <h2 id="memo-party-heading" className="font-heading text-2xl text-[#0b1f3a]">1. Party details</h2>
         <div className="grid gap-6 sm:grid-cols-2">
@@ -132,14 +113,19 @@ export function ForwardingMemoForm({
 
       <section className="space-y-6" aria-labelledby="memo-signatures-heading">
         <h2 id="memo-signatures-heading" className="font-heading text-2xl text-[#0b1f3a]">3. Submitted by — Name &amp; Signature</h2>
-        <Field label="Submitted by — Name" htmlFor="submittedByName" required error={errors.submittedByName?.message}>
-          <Input id="submittedByName" {...register("submittedByName")} hasError={!!errors.submittedByName} aria-invalid={!!errors.submittedByName} />
-        </Field>
+        <div className="grid gap-6 sm:grid-cols-2">
+          <Field label="Submitted by — Name" htmlFor="submittedByName" required error={errors.submittedByName?.message}>
+            <Input id="submittedByName" {...register("submittedByName")} hasError={!!errors.submittedByName} aria-invalid={!!errors.submittedByName} />
+          </Field>
+          <Field label="Email" htmlFor="submittedByEmail" error={errors.submittedByEmail?.message} help="Optional - for a future confirmation receipt.">
+            <Input id="submittedByEmail" type="email" {...register("submittedByEmail")} hasError={!!errors.submittedByEmail} aria-invalid={!!errors.submittedByEmail} />
+          </Field>
+        </div>
       </section>
 
       {submitError && <p role="alert" className="text-sm text-[#b3261e]">{submitError}</p>}
-      <button type="submit" disabled={(!onSubmit && !submissionEnabled) || isSubmitting} aria-describedby={!onSubmit && !submissionEnabled ? "memo-submission-status" : undefined} className="rounded-md bg-[#2e8b57] px-6 py-3 text-sm font-medium text-white transition hover:bg-[#267348] disabled:cursor-not-allowed disabled:opacity-50">
-        {isSubmitting ? "Submitting…" : "Submit Forwarding Memo"}
+      <button type="submit" disabled={submitting} className="rounded-md bg-[#2e8b57] px-6 py-3 text-sm font-medium text-white transition hover:bg-[#267348] disabled:cursor-not-allowed disabled:opacity-50">
+        {submitting ? "Submitting…" : "Submit Forwarding Memo"}
       </button>
     </form>
   );

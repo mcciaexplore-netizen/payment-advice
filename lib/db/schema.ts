@@ -486,6 +486,12 @@ export const forwardingMemos = pgTable(
   "forwarding_memos",
   {
     id: uuid("id").primaryKey().defaultRandom(),
+    // Own independent gapless series (FM/MCCIA/<FY>/NNNN), allocated via the
+    // same lib/serial.ts SELECT ... FOR UPDATE primitive as the other three
+    // series — see allocateForwardingMemoNumber(). Never reused, same as
+    // serial_no/cash_voucher_no/advance_no.
+    serialNo: text("serial_no").notNull().unique(),
+    financialYear: text("financial_year").notNull(),
     memoDate: date("memo_date").notNull(),
     partyName: text("party_name").notNull(),
     partyAddress: text("party_address").notNull(),
@@ -498,6 +504,14 @@ export const forwardingMemos = pgTable(
     drawnOnBank: text("drawn_on_bank").notNull(),
     amount: numeric("amount", { precision: 14, scale: 2 }).notNull(),
     submittedByName: text("submitted_by_name").notNull(),
+    // Optional - not wired to send anything yet (no notification code exists
+    // for Forwarding Memos), captured now for a future receipt/confirmation
+    // email once that's built.
+    submittedByEmail: text("submitted_by_email"),
+    // Single-step acknowledgment (not a staged pipeline like Cash Voucher) -
+    // both null until a Finance Admin marks it received; both set together.
+    receivedAt: timestamp("received_at", { withTimezone: true }),
+    receivedBy: text("received_by"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
