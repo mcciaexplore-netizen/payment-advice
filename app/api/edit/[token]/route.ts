@@ -10,6 +10,7 @@ import {
   cashVoucherItems,
   advanceParticulars,
   recommendingAuthorities,
+  vendorRequests,
 } from "@/lib/db/schema";
 import { notifyAuthorityApproval } from "@/lib/email/notify";
 import { generateAuthorityToken } from "@/lib/advice/authority-token";
@@ -80,7 +81,12 @@ export async function POST(
 
   // Same active-vendor guard as /api/submit — a resubmission can just as
   // easily arrive via a direct API call with a bypassed/stale vendorId.
-  if (values.paymentMode === "NEFT" && !values.isAdvance && !(await isActiveVendor(values.vendorId!))) {
+  if (
+    values.paymentMode === "NEFT" &&
+    !values.isAdvance &&
+    !values.isNewVendorRequest &&
+    !(await isActiveVendor(values.vendorId!))
+  ) {
     return NextResponse.json(
       { error: "Select a vendor from the list - free-text payee names are no longer accepted" },
       { status: 400 },
@@ -130,7 +136,28 @@ export async function POST(
   const verificationError = await verifyUploadedAttachments(newAttachments, !values.isAdvance);
   if (verificationError) return NextResponse.json({ error: verificationError }, { status: 400 });
 
+  // Vendor request's own optional MSME document - same Blob verification as
+  // every other attachment (see app/api/submit/route.ts for the same block).
+  const vendorRequestMsmeDocument =
+    values.isNewVendorRequest &&
+    values.vendorRequestMsmeDocumentUrl &&
+    values.vendorRequestMsmeDocumentPathname &&
+    values.vendorRequestMsmeDocumentFileName &&
+    values.vendorRequestMsmeDocumentSizeBytes
+      ? {
+          fileName: values.vendorRequestMsmeDocumentFileName,
+          blobPathname: values.vendorRequestMsmeDocumentPathname,
+          blobUrl: values.vendorRequestMsmeDocumentUrl,
+          sizeBytes: values.vendorRequestMsmeDocumentSizeBytes,
+        }
+      : null;
+  if (vendorRequestMsmeDocument) {
+    const msmeVerificationError = await verifyUploadedAttachments([vendorRequestMsmeDocument], true);
+    if (msmeVerificationError) return NextResponse.json({ error: msmeVerificationError }, { status: 400 });
+  }
+
   const uploadedPathnames = newAttachments.map((attachment) => attachment.blobPathname);
+  if (vendorRequestMsmeDocument) uploadedPathnames.push(vendorRequestMsmeDocument.blobPathname);
   try {
     const newAttachmentRecords = newAttachments.map((attachment) => ({
       ...attachment,
@@ -274,7 +301,7 @@ export async function POST(
         })
         .where(eq(paymentAdvices.id, advice.id));
 
-      if (values.paymentMode === "NEFT" && !values.isAdvance) {
+      if (values.paymentMode === "NEFT" && !values.isAdvance && !values.isNewVendorRequest) {
         await captureVendorBankAccount(tx, {
           vendorId: values.vendorId!,
           bankAccountNo: values.bankAccountNo!,
@@ -349,6 +376,85 @@ export async function POST(
             sortOrder,
           })),
         );
+      }
+
+      if (values.isNewVendorRequest) {
+        if (advice.pendingVendorRequestId) {
+          // Most common case: Finance sent back this very vendor request
+          // (see lib/advice/vendor-requests.ts) and the submitter is now
+          // correcting it - update the existing row in place rather than
+          // creating a second one, and clear its sent-back markers since
+          // it's live for review again, same reset the PA's own
+          // authority/finance fields get above.
+          await tx
+            .update(vendorRequests)
+            .set({
+              requestedName: values.payeeName,
+              requestedAddress: values.payeeAddress ?? "",
+              requestedGstin: values.payeeGstin ?? null,
+              msmeStatus: values.vendorRequestMsmeStatus,
+              msmeDocumentUrl: vendorRequestMsmeDocument?.blobUrl ?? null,
+              msmeDocumentType: values.vendorRequestMsmeDocumentType ?? null,
+              sentBackAt: null,
+              sentBackBy: null,
+              sentBackRemarks: null,
+            })
+            .where(eq(vendorRequests.id, advice.pendingVendorRequestId));
+
+          await tx.insert(auditLog).values({
+            paymentAdviceId: advice.id,
+            vendorRequestId: advice.pendingVendorRequestId,
+            action: "VENDOR_REQUEST_SUBMITTED",
+            actor: values.submittedByName,
+            ipAddress: clientIp(req),
+            details: { requestedName: values.payeeName, resubmission: true },
+          });
+        } else {
+          // Less common: this PA originally had a real vendor (or no
+          // vendor request at all) and only now, on resubmission, does the
+          // submitter ask for a new vendor to be added - same creation
+          // path as a fresh submission.
+          const [request] = await tx
+            .insert(vendorRequests)
+            .values({
+              requestedName: values.payeeName,
+              requestedAddress: values.payeeAddress ?? "",
+              requestedGstin: values.payeeGstin ?? null,
+              msmeStatus: values.vendorRequestMsmeStatus,
+              msmeDocumentUrl: vendorRequestMsmeDocument?.blobUrl ?? null,
+              msmeDocumentType: values.vendorRequestMsmeDocumentType ?? null,
+              requestedByName: values.submittedByName,
+              requestedByEmail: values.submittedByEmail,
+              paymentAdviceId: advice.id,
+            })
+            .returning({ id: vendorRequests.id });
+
+          await tx
+            .update(paymentAdvices)
+            .set({ pendingVendorRequestId: request.id })
+            .where(eq(paymentAdvices.id, advice.id));
+
+          await tx.insert(auditLog).values({
+            paymentAdviceId: advice.id,
+            vendorRequestId: request.id,
+            action: "VENDOR_REQUEST_SUBMITTED",
+            actor: values.submittedByName,
+            ipAddress: clientIp(req),
+            details: { requestedName: values.payeeName },
+          });
+        }
+      } else if (advice.pendingVendorRequestId) {
+        // Submitter switched away from the pending vendor request on
+        // resubmit (e.g. picked a real vendor instead) - detach it from
+        // this PA so a later approval can't silently overwrite the vendor
+        // this PA now actually uses. The vendor_requests row itself is
+        // left as-is for the audit trail; approveVendorRequest's own guard
+        // refuses to act on a request that's no longer the PA's current
+        // pending one.
+        await tx
+          .update(paymentAdvices)
+          .set({ pendingVendorRequestId: null })
+          .where(eq(paymentAdvices.id, advice.id));
       }
 
       await tx.insert(auditLog).values({

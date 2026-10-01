@@ -1,10 +1,19 @@
 import { get, head } from "@vercel/blob";
 import { MAX_FILE_SIZE_BYTES } from "@/lib/validation/payment-advice";
-import type { UploadedAttachment } from "@/lib/attachments/client-upload";
 
 const ALLOWED_CONTENT_TYPES = ["application/pdf", "image/jpeg", "image/png"];
 
-export async function verifyUploadedAttachments(uploads: UploadedAttachment[], allowImages = false) {
+/** Only the fields this function actually checks - any upload record with a
+ * blob reference to verify qualifies, not just the shared attachments table's
+ * UploadedAttachment (e.g. a vendor request's standalone MSME document). */
+type VerifiableUpload = {
+  fileName: string;
+  blobPathname: string;
+  blobUrl: string;
+  sizeBytes: number;
+};
+
+export async function verifyUploadedAttachments(uploads: VerifiableUpload[], allowImages = false) {
   for (const upload of uploads) {
     let metadata;
     try {

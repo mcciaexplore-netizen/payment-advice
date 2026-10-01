@@ -20,6 +20,7 @@ export function parsePaymentAdviceFormData(formData: FormData) {
       cashVoucherItems = undefined;
     }
   }
+  const rawVendorRequestMsmeDocumentSizeBytes = str(formData, "vendorRequestMsmeDocumentSizeBytes");
   const rawIsAdvance = str(formData, "isAdvance");
   const rawPreviousPendingAdvanceAmount = str(formData, "previousPendingAdvanceAmount");
   const rawAdvanceParticulars = str(formData, "advanceParticulars");
@@ -39,6 +40,15 @@ export function parsePaymentAdviceFormData(formData: FormData) {
     branch: str(formData, "branch"),
     recommendingAuthorityId: str(formData, "recommendingAuthorityId"),
     vendorId: str(formData, "vendorId"),
+    isNewVendorRequest: str(formData, "isNewVendorRequest") === "true",
+    vendorRequestMsmeStatus: str(formData, "vendorRequestMsmeStatus"),
+    vendorRequestMsmeDocumentUrl: str(formData, "vendorRequestMsmeDocumentUrl"),
+    vendorRequestMsmeDocumentPathname: str(formData, "vendorRequestMsmeDocumentPathname"),
+    vendorRequestMsmeDocumentFileName: str(formData, "vendorRequestMsmeDocumentFileName"),
+    vendorRequestMsmeDocumentSizeBytes: rawVendorRequestMsmeDocumentSizeBytes
+      ? Number(rawVendorRequestMsmeDocumentSizeBytes)
+      : undefined,
+    vendorRequestMsmeDocumentType: str(formData, "vendorRequestMsmeDocumentType"),
     payeeName: str(formData, "payeeName"),
     payeeAddress: str(formData, "payeeAddress"),
     payeeContactPerson: str(formData, "payeeContactPerson"),

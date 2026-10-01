@@ -203,6 +203,27 @@ export const paymentAdviceFormSchema = z
 
     // Section 2 — payee
     vendorId: z.string().uuid().optional(),
+    // Set instead of vendorId when the submitter used "Can't find your
+    // vendor? Request to add them." - payeeName/payeeAddress/payeeGstin
+    // above are reused directly as the requested vendor's own name/address/
+    // GSTIN (same fields, same snapshot-onto-the-PA behavior as an existing
+    // vendor selection), so only the vendor-request-specific extras live
+    // here. See lib/advice/vendor-requests.ts.
+    isNewVendorRequest: z.boolean().default(false),
+    vendorRequestMsmeStatus: z
+      .enum(["MICRO", "SMALL", "MEDIUM", "NOT_REGISTERED", "UNKNOWN"])
+      .default("UNKNOWN"),
+    // Populated client-side only after the optional MSME document has
+    // already been uploaded direct-to-Blob (same pattern/route as every
+    // other attachment). Carries the raw blob reference through to the
+    // server - NOT yet verified at this point, same as uploadedAttachments
+    // elsewhere in this schema; the API route re-verifies pathname/url/size
+    // against Blob storage before trusting any of it (see verify-uploaded.ts).
+    vendorRequestMsmeDocumentUrl: optionalTrimmed().pipe(z.string().url().optional()),
+    vendorRequestMsmeDocumentPathname: optionalTrimmed(),
+    vendorRequestMsmeDocumentFileName: optionalTrimmed(),
+    vendorRequestMsmeDocumentSizeBytes: z.number().int().positive().optional(),
+    vendorRequestMsmeDocumentType: z.enum(["UDYAM_CERTIFICATE", "NON_MSME_DECLARATION"]).optional(),
     payeeName: requiredTrimmed("Payee / company name is required"),
     payeeAddress: optionalTrimmed(),
     payeeContactPerson: optionalTrimmed(),
@@ -309,14 +330,17 @@ export const paymentAdviceFormSchema = z
       // A regular Payment Advice must name a real vendor selected from the
       // list — free-text payee names are no longer accepted here (Advance
       // Payment is unaffected: payee is always the submitter there, via a
-      // plain editable field, never this typeahead). This only enforces
-      // presence; that the id actually belongs to a real, active vendor is
-      // checked server-side against the database, since Zod alone can't.
-      if (!data.vendorId) {
+      // plain editable field, never this typeahead) — UNLESS the submitter
+      // used "Request to add" (isNewVendorRequest), the one other sanctioned
+      // way to name a payee not yet on the list. This only enforces
+      // presence; that a supplied vendorId actually belongs to a real,
+      // active vendor is checked server-side against the database, since
+      // Zod alone can't.
+      if (!data.vendorId && !data.isNewVendorRequest) {
         ctx.addIssue({
           code: "custom",
           path: ["payeeName"],
-          message: "Select a vendor from the list - free-text payee names are no longer accepted",
+          message: "Select a vendor from the list, or use \"Request to add\" if it's genuinely not there yet",
         });
       }
       if (!data.enclosures) {

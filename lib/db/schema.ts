@@ -590,7 +590,7 @@ export const auditLog = pgTable("audit_log", {
   ),
   forwardingMemoId: uuid("forwarding_memo_id").references(() => forwardingMemos.id),
   vendorRequestId: uuid("vendor_request_id").references(() => vendorRequests.id),
-  action: text("action").notNull(), // 'SUBMITTED' | 'RESUBMITTED' | 'APPROVED' | 'SENT_BACK' | 'PDF_GENERATED' | 'EXPORTED'
+  action: text("action").notNull(), // 'SUBMITTED' | 'RESUBMITTED' | 'APPROVED' | 'SENT_BACK' | 'PDF_GENERATED' | 'EXPORTED' | 'VENDOR_REQUEST_SUBMITTED' | 'VENDOR_REQUEST_APPROVED' | 'VENDOR_REQUEST_SENT_BACK'
   actor: text("actor").notNull(),
   ipAddress: text("ip_address"),
   details: jsonb("details"),

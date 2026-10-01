@@ -8,6 +8,7 @@ import { upload } from "@vercel/blob/client";
 import { Field } from "@/components/ui/Field";
 import { Input, Select, Textarea } from "@/components/ui/Input";
 import { VendorTypeahead, VendorSearchResult } from "@/components/form/VendorTypeahead";
+import { VendorRequestPanel } from "@/components/form/VendorRequestPanel";
 import { VendorBankAccountFields } from "@/components/form/VendorBankAccountFields";
 import { StaffNameTypeahead, StaffSearchResult } from "@/components/form/StaffNameTypeahead";
 import { RecommendingAuthorityField } from "@/components/form/RecommendingAuthorityField";
@@ -90,6 +91,10 @@ export function PaymentAdviceForm({
     bankAccountNo: string | null;
     bankIfsc: string | null;
   } | null>(null);
+  const [vendorRequestMsmeDocument, setVendorRequestMsmeDocument] = useState<File[]>([]);
+  const [vendorRequestDocumentType, setVendorRequestDocumentType] = useState<
+    "UDYAM_CERTIFICATE" | "NON_MSME_DECLARATION"
+  >("UDYAM_CERTIFICATE");
   const [approvalBudget, setApprovalBudget] = useState<File[]>([]);
   const [purchaseOrder, setPurchaseOrder] = useState<File[]>([]);
   const [deliveryChallanFile, setDeliveryChallanFile] = useState<File[]>([]);
@@ -151,6 +156,8 @@ export function PaymentAdviceForm({
   const hasBankDetailsMismatch = useWatch({ control, name: "bankDetailsMismatch" }) ?? false;
   const payeeName = useWatch({ control, name: "payeeName" }) ?? "";
   const vendorId = useWatch({ control, name: "vendorId" });
+  const isNewVendorRequest = useWatch({ control, name: "isNewVendorRequest" }) ?? false;
+  const vendorRequestMsmeStatus = useWatch({ control, name: "vendorRequestMsmeStatus" }) ?? "UNKNOWN";
   const submittedByName = useWatch({ control, name: "submittedByName" }) ?? "";
   const submittedByEmail = useWatch({ control, name: "submittedByEmail" }) ?? "";
   const submittedByDepartmentOption = useWatch({ control, name: "submittedByDepartmentOption" });
@@ -475,6 +482,7 @@ export function PaymentAdviceForm({
 
     setSubmitting(true);
     const uploadedAttachments: UploadedAttachment[] = [];
+    let vendorRequestMsmeBlob: { blobPathname: string } | null = null;
     try {
       setUploadingAttachments(true);
       const uploadBatchId = crypto.randomUUID();
@@ -525,6 +533,30 @@ export function PaymentAdviceForm({
           });
         }
       }
+      // Vendor request's optional MSME document - direct-to-Blob, same
+      // pattern as every other attachment, but not part of the shared
+      // attachments table/uploadedAttachments array (it belongs to the
+      // vendor_requests row, not to this payment_advices row's document
+      // set) - so it's tracked and appended separately.
+      if (values.isNewVendorRequest && vendorRequestMsmeDocument.length === 1) {
+        const file = vendorRequestMsmeDocument[0];
+        const blob = await upload(
+          `pending-uploads/${uploadBatchId}/VENDOR_REQUEST_MSME-${safeUploadFileName(file.name)}`,
+          file,
+          {
+            access: "private",
+            handleUploadUrl: "/api/attachments/upload",
+            multipart: file.size > 4 * 1024 * 1024,
+          },
+        );
+        vendorRequestMsmeBlob = { blobPathname: blob.pathname };
+        formData.append("vendorRequestMsmeDocumentUrl", blob.url);
+        formData.append("vendorRequestMsmeDocumentPathname", blob.pathname);
+        formData.append("vendorRequestMsmeDocumentFileName", file.name);
+        formData.append("vendorRequestMsmeDocumentSizeBytes", String(file.size));
+        formData.append("vendorRequestMsmeDocumentType", vendorRequestDocumentType);
+      }
+
       setUploadingAttachments(false);
       formData.append("uploadedAttachments", JSON.stringify(uploadedAttachments));
 
@@ -535,6 +567,7 @@ export function PaymentAdviceForm({
       const { data, sizeError } = await readSubmitResponse(res);
       if (!res.ok) {
         await cleanupPendingUploads(uploadedAttachments);
+        if (vendorRequestMsmeBlob) await cleanupPendingBlob(vendorRequestMsmeBlob.blobPathname);
         setSubmitError(
           sizeError
             ? ATTACHMENT_SIZE_ERROR
@@ -567,6 +600,7 @@ export function PaymentAdviceForm({
       router.push(`/submitted/${encodeURIComponent(data.serialNo!)}`);
     } catch (error) {
       await cleanupPendingUploads(uploadedAttachments);
+      if (vendorRequestMsmeBlob) await cleanupPendingBlob(vendorRequestMsmeBlob.blobPathname);
       const message = error instanceof Error ? error.message : "";
       setSubmitError(
         /too large|size|413|maximum/i.test(message)
@@ -716,17 +750,19 @@ export function PaymentAdviceForm({
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
           <div className="sm:col-span-2">
             <Field
-              label="Payee / Company Name"
+              label={isNewVendorRequest ? "Vendor Name (new vendor request)" : "Payee / Company Name"}
               required
               htmlFor="payeeName"
               error={errors.payeeName?.message}
               help={
                 isAdvance
                   ? "Auto-filled from Your Name above - an advance is paid to you, the requester. Edit if needed."
-                  : "Search for an existing payee and select them from the list. Can't find this vendor? Contact Accounts department for listing."
+                  : isNewVendorRequest
+                    ? "This vendor isn't in our list yet - Finance will review this request alongside your submission."
+                    : "Search for an existing payee and select them from the list."
               }
             >
-              {isAdvance ? (
+              {isAdvance || isNewVendorRequest ? (
                 <Input id="payeeName" hasError={!!errors.payeeName} {...register("payeeName")} />
               ) : (
                 <VendorTypeahead
@@ -739,6 +775,26 @@ export function PaymentAdviceForm({
                 />
               )}
             </Field>
+            {!isAdvance ? (
+              <button
+                type="button"
+                onClick={() => {
+                  if (isNewVendorRequest) {
+                    setValue("isNewVendorRequest", false);
+                  } else {
+                    setValue("isNewVendorRequest", true, { shouldValidate: true });
+                    setValue("vendorId", undefined);
+                    setValue("payeeName", "");
+                    setValue("payeeAddress", "");
+                  }
+                }}
+                className="mt-2 text-sm font-medium text-[#0b1f3a] underline hover:no-underline"
+              >
+                {isNewVendorRequest
+                  ? "← Back to vendor search instead"
+                  : "Can't find your vendor? Request to add them."}
+              </button>
+            ) : null}
           </div>
           <div className="sm:col-span-2">
             <Field label="Address" required error={errors.payeeAddress?.message}>
@@ -761,6 +817,19 @@ export function PaymentAdviceForm({
             <Input hasError={!!errors.payeeUdyamNumber} {...register("payeeUdyamNumber")} />
           </Field>
         </div>
+
+        {isNewVendorRequest && !isAdvance ? (
+          <VendorRequestPanel
+            payeeName={payeeName}
+            submittedByName={submittedByName}
+            msmeStatus={vendorRequestMsmeStatus}
+            onMsmeStatusChange={(v) => setValue("vendorRequestMsmeStatus", v as "MICRO" | "SMALL" | "MEDIUM" | "NOT_REGISTERED" | "UNKNOWN")}
+            msmeDocument={vendorRequestMsmeDocument}
+            onMsmeDocumentChange={setVendorRequestMsmeDocument}
+            documentType={vendorRequestDocumentType}
+            onDocumentTypeChange={setVendorRequestDocumentType}
+          />
+        ) : null}
       </Section> : null}
 
       <Section title={isAdvance ? "3. Advance details" : isCashVoucher ? "2. Bill & reference" : "3. Bill & reference"}>
@@ -1110,10 +1179,15 @@ export function PaymentAdviceForm({
 
 async function cleanupPendingUploads(uploads: UploadedAttachment[]) {
   if (uploads.length === 0) return;
+  await cleanupPendingBlob(...uploads.map((upload) => upload.blobPathname));
+}
+
+async function cleanupPendingBlob(...pathnames: string[]) {
+  if (pathnames.length === 0) return;
   await fetch("/api/attachments/cleanup", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ pathnames: uploads.map((upload) => upload.blobPathname) }),
+    body: JSON.stringify({ pathnames }),
   }).catch(() => undefined);
 }
 

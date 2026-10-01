@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { normalizedVendorName, scoreVendorsByName } from "@/lib/advice/vendor-name-matching";
 
 /**
  * This is deliberately conservative: an extracted company name must be an
@@ -38,39 +39,6 @@ export const invoiceExtractionSchema = z.object({
 
 export type InvoiceExtraction = z.infer<typeof invoiceExtractionSchema>;
 
-function normalizedVendorName(value: string) {
-  return value
-    .toLowerCase()
-    // MCCIA's own internal Tally/ledger tags (~9% of the vendor master
-    // carries one of these, e.g. "...LLP-CR"), never part of a real
-    // invoice's printed company name — strip before comparing, not just
-    // legal-entity suffixes, or every tagged vendor's real invoices
-    // silently fail to match.
-    .replace(/(-(cr|new|jw))+$/i, "")
-    .replace(/\b(private|pvt|limited|ltd|llp|incorporated|inc|co|company)\b/g, " ")
-    .replace(/[^a-z0-9]+/g, " ")
-    .trim()
-    .replace(/\s+/g, " ");
-}
-
-function levenshtein(left: string, right: string) {
-  const previous = Array.from({ length: right.length + 1 }, (_, index) => index);
-  for (let i = 1; i <= left.length; i += 1) {
-    let diagonal = previous[0];
-    previous[0] = i;
-    for (let j = 1; j <= right.length; j += 1) {
-      const above = previous[j];
-      previous[j] = Math.min(
-        previous[j] + 1,
-        previous[j - 1] + 1,
-        diagonal + (left[i - 1] === right[j - 1] ? 0 : 1),
-      );
-      diagonal = above;
-    }
-  }
-  return previous[right.length];
-}
-
 /**
  * Exact normalized matches are accepted. For a true fuzzy match, require at
  * least 95% similarity *and* a unique best candidate. Near names (which are
@@ -84,15 +52,7 @@ export function findConfidentInvoiceVendor(
   const query = normalizedVendorName(extractedName);
   if (query.length < 4) return null;
 
-  const scored = vendors
-    .map((vendor) => {
-      const name = normalizedVendorName(vendor.companyName);
-      if (!name) return { vendor, score: 0 };
-      if (name === query) return { vendor, score: 1 };
-      const distance = levenshtein(query, name);
-      return { vendor, score: 1 - distance / Math.max(query.length, name.length) };
-    })
-    .sort((a, b) => b.score - a.score);
+  const scored = scoreVendorsByName(extractedName, vendors);
 
   const best = scored[0];
   const next = scored[1];
