@@ -215,8 +215,22 @@ export const vendorRequests = pgTable("vendor_requests", {
   // specific payment_advices row's document set.
   msmeDocumentUrl: text("msme_document_url"),
   msmeDocumentType: text("msme_document_type"), // 'UDYAM_CERTIFICATE' | 'NON_MSME_DECLARATION'
+  // The vendor's own email - mandatory (2026-10-01 revision), since the app
+  // now sends the MSME request email itself rather than handing the
+  // submitter a mailto: link. Not optional like requestedGstin: there is no
+  // real-document-already-in-hand path that needs a vendor email, but every
+  // genuinely-new-vendor path does.
+  requestedVendorEmail: text("requested_vendor_email").notNull(),
   requestedByName: text("requested_by_name").notNull(),
   requestedByEmail: text("requested_by_email").notNull(),
+  // Set when the app's own MSME request email send succeeds - lets Finance
+  // see whether the ball is in the vendor's court. Null until a submitter
+  // clicks "Send Email" on the request panel; never set for a request where
+  // they skipped straight to uploading a document they already had.
+  msmeEmailSentAt: timestamp("msme_email_sent_at", { withTimezone: true }),
+  // The SMTP/provider's message id - same traceability pattern as every
+  // other email this app sends (see lib/email/notify.ts's `dispatch()`).
+  msmeEmailMessageId: text("msme_email_message_id"),
   paymentAdviceId: uuid("payment_advice_id")
     .notNull()
     .references((): AnyPgColumn => paymentAdvices.id),
@@ -590,7 +604,7 @@ export const auditLog = pgTable("audit_log", {
   ),
   forwardingMemoId: uuid("forwarding_memo_id").references(() => forwardingMemos.id),
   vendorRequestId: uuid("vendor_request_id").references(() => vendorRequests.id),
-  action: text("action").notNull(), // 'SUBMITTED' | 'RESUBMITTED' | 'APPROVED' | 'SENT_BACK' | 'PDF_GENERATED' | 'EXPORTED' | 'VENDOR_REQUEST_SUBMITTED' | 'VENDOR_REQUEST_APPROVED' | 'VENDOR_REQUEST_SENT_BACK'
+  action: text("action").notNull(), // 'SUBMITTED' | 'RESUBMITTED' | 'APPROVED' | 'SENT_BACK' | 'PDF_GENERATED' | 'EXPORTED' | 'VENDOR_REQUEST_SUBMITTED' | 'VENDOR_REQUEST_APPROVED' | 'VENDOR_REQUEST_SENT_BACK' | 'VENDOR_MSME_EMAIL_SENT'
   actor: text("actor").notNull(),
   ipAddress: text("ip_address"),
   details: jsonb("details"),
