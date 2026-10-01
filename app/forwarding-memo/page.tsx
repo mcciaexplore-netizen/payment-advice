@@ -7,7 +7,7 @@ import { PublicLoginMenu } from "@/components/public/PublicLoginMenu";
 // listing, Mark Received) is built, tested end-to-end, and the human has
 // confirmed it's ready to go live - per instruction, this banner/disabled
 // state stays honest until that's actually true, not a moment sooner.
-const FORWARDING_MEMO_ENABLED = false;
+const FORWARDING_MEMO_ENABLED = true;
 
 export default function ForwardingMemoPage() {
   return (
