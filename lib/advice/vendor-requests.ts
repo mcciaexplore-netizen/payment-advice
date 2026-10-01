@@ -120,6 +120,10 @@ export async function approveVendorRequest(input: {
         companyName,
         address,
         gstin: trimmedOrNull(input.editedGstin ?? request.requestedGstin),
+        // The vendor's own email is mandatory on a request (2026-10-01) -
+        // carried onto the new vendor record itself, same as GSTIN above,
+        // so Finance doesn't have to re-find/re-enter it later.
+        email: trimmedOrNull(request.requestedVendorEmail),
         isMsme: isMsmeFromStatus(msmeStatus),
         isActive: true,
       })

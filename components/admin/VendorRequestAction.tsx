@@ -10,12 +10,14 @@ export function VendorRequestAction({
   currentName,
   currentAddress,
   currentGstin,
+  hasMsmeDocument,
   duplicates,
 }: {
   requestId: string;
   currentName: string;
   currentAddress: string;
   currentGstin: string | null;
+  hasMsmeDocument: boolean;
   duplicates: { companyName: string; score: number }[];
 }) {
   const router = useRouter();
@@ -28,6 +30,12 @@ export function VendorRequestAction({
   const [error, setError] = useState<string | null>(null);
 
   async function approve() {
+    if (
+      !hasMsmeDocument &&
+      !window.confirm("This vendor has no MSME document attached. Approve anyway?")
+    ) {
+      return;
+    }
     setError(null);
     setSaving(true);
     try {

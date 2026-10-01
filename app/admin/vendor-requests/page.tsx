@@ -35,8 +35,10 @@ export default async function VendorRequestsPage() {
         requestedName: vendorRequests.requestedName,
         requestedAddress: vendorRequests.requestedAddress,
         requestedGstin: vendorRequests.requestedGstin,
+        requestedVendorEmail: vendorRequests.requestedVendorEmail,
         msmeStatus: vendorRequests.msmeStatus,
         msmeDocumentUrl: vendorRequests.msmeDocumentUrl,
+        msmeEmailSentAt: vendorRequests.msmeEmailSentAt,
         requestedByName: vendorRequests.requestedByName,
         requestedByEmail: vendorRequests.requestedByEmail,
         approvedAt: vendorRequests.approvedAt,
@@ -105,6 +107,7 @@ export default async function VendorRequestsPage() {
                       ) : null}
                     </div>
                     <p className="mt-1 whitespace-pre-wrap text-sm text-gray-600">{row.requestedAddress}</p>
+                    <p className="mt-1 text-xs text-gray-500">Vendor email: {row.requestedVendorEmail}</p>
                     {row.requestedGstin ? (
                       <p className="mt-1 text-xs text-gray-500">GSTIN: {row.requestedGstin}</p>
                     ) : null}
@@ -150,6 +153,12 @@ export default async function VendorRequestsPage() {
                   </a>
                 ) : null}
 
+                {row.msmeEmailSentAt ? (
+                  <p className="mt-2 text-sm text-gray-600">
+                    MSME request emailed to vendor on {formatIstDateTime(row.msmeEmailSentAt)}.
+                  </p>
+                ) : null}
+
                 {state === "Sent Back" && row.sentBackRemarks ? (
                   <p className="mt-3 rounded-md bg-gray-50 p-3 text-sm text-gray-700">
                     <span className="font-medium">Sent back:</span> {row.sentBackRemarks}
@@ -162,6 +171,7 @@ export default async function VendorRequestsPage() {
                     currentName={row.requestedName}
                     currentAddress={row.requestedAddress}
                     currentGstin={row.requestedGstin}
+                    hasMsmeDocument={!!row.msmeDocumentUrl}
                     duplicates={duplicates.map((d) => ({ companyName: d.vendor.companyName, score: d.score }))}
                   />
                 ) : null}
