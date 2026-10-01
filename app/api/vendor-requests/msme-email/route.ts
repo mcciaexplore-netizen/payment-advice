@@ -21,11 +21,11 @@ async function loadMsmeAttachments() {
   const dir = path.join(process.cwd(), "public", "msme");
   const [notification, declaration] = await Promise.all([
     fs.readFile(path.join(dir, "mca-notification.pdf")),
-    fs.readFile(path.join(dir, "non-msme-declaration-template.txt")),
+    fs.readFile(path.join(dir, "non-msme-declaration-template.docx")),
   ]);
   return [
     { filename: "MCA-Notification.pdf", content: notification },
-    { filename: "Non-MSME-Declaration-Template.txt", content: declaration },
+    { filename: "Non-MSME-Declaration-Template.docx", content: declaration },
   ];
 }
 
