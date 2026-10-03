@@ -794,6 +794,7 @@ export function PaymentAdviceForm({
                   if (isNewVendorRequest) {
                     setValue("isNewVendorRequest", false);
                     setValue("vendorRequestVendorEmail", "");
+                    setValue("payeeEmail", "");
                     setVendorRequestMsmeEmailSentAt(null);
                     setVendorRequestMsmeEmailMessageId(null);
                   } else {
@@ -801,6 +802,7 @@ export function PaymentAdviceForm({
                     setValue("vendorId", undefined);
                     setValue("payeeName", "");
                     setValue("payeeAddress", "");
+                    setValue("payeeEmail", "");
                   }
                 }}
                 className="mt-2 text-sm font-medium text-[#0b1f3a] underline hover:no-underline"
@@ -822,8 +824,22 @@ export function PaymentAdviceForm({
           <Field label="Contact Phone" error={errors.payeeContactPhone?.message}>
             <Input placeholder="10 digits, optionally +91" hasError={!!errors.payeeContactPhone} {...register("payeeContactPhone")} />
           </Field>
-          <Field label="E-mail ID" error={errors.payeeEmail?.message}>
-            <Input type="email" hasError={!!errors.payeeEmail} {...register("payeeEmail")} />
+          <Field
+            label="E-mail ID"
+            error={errors.payeeEmail?.message}
+            help={isNewVendorRequest ? "Same as the Vendor Email entered below." : undefined}
+          >
+            {isNewVendorRequest ? (
+              <Input
+                type="email"
+                readOnly
+                disabled
+                value={vendorRequestVendorEmail}
+                className="bg-gray-50"
+              />
+            ) : (
+              <Input type="email" hasError={!!errors.payeeEmail} {...register("payeeEmail")} />
+            )}
           </Field>
           <Field label="GSTIN" error={errors.payeeGstin?.message}>
             <Input placeholder="15-character GSTIN" hasError={!!errors.payeeGstin} {...register("payeeGstin")} />
@@ -841,6 +857,10 @@ export function PaymentAdviceForm({
             vendorEmail={vendorRequestVendorEmail}
             onVendorEmailChange={(v) => {
               setValue("vendorRequestVendorEmail", v, { shouldValidate: true });
+              // Same underlying value as Payee details' own E-mail ID field
+              // for a new vendor - synced here rather than asked twice; see
+              // that field's read-only rendering above.
+              setValue("payeeEmail", v);
               setVendorRequestMsmeEmailSentAt(null);
               setVendorRequestMsmeEmailMessageId(null);
             }}
