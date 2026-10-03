@@ -96,8 +96,15 @@ export function VendorRequestPanel({
   return (
     <div className="mt-4 flex flex-col gap-6 rounded-md border border-[#0b1f3a]/20 bg-[#0b1f3a]/5 p-4">
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-        <Field label="Vendor Email" required error={vendorEmailError} help="Required - the MSME request email is sent here.">
+        <Field
+          label="Vendor Email"
+          required
+          htmlFor="vendorRequestVendorEmail"
+          error={vendorEmailError}
+          help="Required - the MSME request email is sent here."
+        >
           <Input
+            id="vendorRequestVendorEmail"
             type="email"
             value={vendorEmail}
             onChange={(e) => onVendorEmailChange(e.target.value)}

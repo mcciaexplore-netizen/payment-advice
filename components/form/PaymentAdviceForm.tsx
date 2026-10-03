@@ -2,13 +2,14 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useForm, useWatch } from "react-hook-form";
+import { useForm, useWatch, type FieldErrors } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { upload } from "@vercel/blob/client";
 import { Field } from "@/components/ui/Field";
 import { Input, Select, Textarea } from "@/components/ui/Input";
 import { VendorTypeahead, VendorSearchResult } from "@/components/form/VendorTypeahead";
 import { VendorRequestPanel } from "@/components/form/VendorRequestPanel";
+import { VendorRequestModal } from "@/components/form/VendorRequestModal";
 import { VendorBankAccountFields } from "@/components/form/VendorBankAccountFields";
 import { StaffNameTypeahead, StaffSearchResult } from "@/components/form/StaffNameTypeahead";
 import { RecommendingAuthorityField } from "@/components/form/RecommendingAuthorityField";
@@ -100,6 +101,13 @@ export function PaymentAdviceForm({
   // etc.), same pattern as the MSME document's own Blob fields above.
   const [vendorRequestMsmeEmailSentAt, setVendorRequestMsmeEmailSentAt] = useState<string | null>(null);
   const [vendorRequestMsmeEmailMessageId, setVendorRequestMsmeEmailMessageId] = useState<string | null>(null);
+  // Controls only whether the "Request to add vendor" modal overlay is on
+  // screen - isNewVendorRequest (form state) is the separate, persistent
+  // "we're in new-vendor mode" flag. Closing the modal via "Done" leaves
+  // isNewVendorRequest true and shows the collapsed pending-approval summary
+  // below; every other close path (X, backdrop, Escape, "Back to vendor
+  // search instead") discards the whole request via cancelNewVendorRequest.
+  const [vendorRequestModalOpen, setVendorRequestModalOpen] = useState(false);
   const [approvalBudget, setApprovalBudget] = useState<File[]>([]);
   const [purchaseOrder, setPurchaseOrder] = useState<File[]>([]);
   const [deliveryChallanFile, setDeliveryChallanFile] = useState<File[]>([]);
@@ -626,9 +634,56 @@ export function PaymentAdviceForm({
     }
   }
 
-  function onInvalid() {
+  function onInvalid(formErrors: FieldErrors<PaymentAdviceFormInput>) {
+    // Vendor Name/Address/GSTIN/Email now live inside the "Request to add
+    // vendor" modal rather than inline, so if any of them fail validation
+    // on a submit attempt, reopen the modal - otherwise those errors would
+    // be set but invisible, since the fields they belong to aren't on screen.
+    // Also reopens on a raw-value presence check, not just formErrors: the
+    // vendor-email/address "required" rules live in this schema's
+    // superRefine, and a pre-existing, unrelated zod quirk (confirmed
+    // separately, not introduced here) skips superRefine entirely whenever
+    // an unrelated required enum elsewhere in the form - e.g. Branch or
+    // Department - is also still unset, which would otherwise leave the
+    // vendor fields with no recorded error AND no visible field to notice
+    // the blank in, now that they're hidden behind a closed modal.
+    if (
+      isNewVendorRequest &&
+      (formErrors.payeeName ||
+        formErrors.payeeAddress ||
+        formErrors.payeeGstin ||
+        formErrors.vendorRequestVendorEmail ||
+        !getValues("payeeName")?.trim() ||
+        !getValues("payeeAddress")?.trim() ||
+        !getValues("vendorRequestVendorEmail")?.trim())
+    ) {
+      setVendorRequestModalOpen(true);
+    }
     setSubmitError("Please complete the highlighted required fields, then submit again.");
     window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function startNewVendorRequest() {
+    setValue("isNewVendorRequest", true, { shouldValidate: true });
+    setValue("vendorId", undefined);
+    setValue("payeeName", "");
+    setValue("payeeAddress", "");
+    setValue("payeeEmail", "");
+    setVendorRequestModalOpen(true);
+  }
+
+  // Discards the in-progress vendor request entirely and returns to normal
+  // vendor search - identical to the previous inline "Back to vendor search
+  // instead" toggle-off logic, just invoked from the modal's close paths
+  // (X, backdrop, Escape, and the "Back to vendor search instead" button)
+  // instead of an inline button.
+  function cancelNewVendorRequest() {
+    setValue("isNewVendorRequest", false);
+    setValue("vendorRequestVendorEmail", "");
+    setValue("payeeEmail", "");
+    setVendorRequestMsmeEmailSentAt(null);
+    setVendorRequestMsmeEmailMessageId(null);
+    setVendorRequestModalOpen(false);
   }
 
   return (
@@ -774,8 +829,21 @@ export function PaymentAdviceForm({
                     : "Search for an existing payee and select them from the list."
               }
             >
-              {isAdvance || isNewVendorRequest ? (
+              {isAdvance ? (
                 <Input id="payeeName" hasError={!!errors.payeeName} {...register("payeeName")} />
+              ) : isNewVendorRequest ? (
+                <div className="flex items-center justify-between gap-3 rounded-md border border-[#0b1f3a]/20 bg-[#0b1f3a]/5 px-3 py-2">
+                  <span className="truncate text-sm font-medium text-[#0b1f3a]">
+                    {payeeName.trim() || "New vendor"} — pending approval
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setVendorRequestModalOpen(true)}
+                    className="shrink-0 text-sm font-medium text-[#0b1f3a] underline hover:no-underline"
+                  >
+                    Edit
+                  </button>
+                </div>
               ) : (
                 <VendorTypeahead
                   id="payeeName"
@@ -787,37 +855,23 @@ export function PaymentAdviceForm({
                 />
               )}
             </Field>
-            {!isAdvance ? (
+            {!isAdvance && !isNewVendorRequest ? (
               <button
                 type="button"
-                onClick={() => {
-                  if (isNewVendorRequest) {
-                    setValue("isNewVendorRequest", false);
-                    setValue("vendorRequestVendorEmail", "");
-                    setValue("payeeEmail", "");
-                    setVendorRequestMsmeEmailSentAt(null);
-                    setVendorRequestMsmeEmailMessageId(null);
-                  } else {
-                    setValue("isNewVendorRequest", true, { shouldValidate: true });
-                    setValue("vendorId", undefined);
-                    setValue("payeeName", "");
-                    setValue("payeeAddress", "");
-                    setValue("payeeEmail", "");
-                  }
-                }}
-                className="mt-2 text-sm font-medium text-[#0b1f3a] underline hover:no-underline"
+                onClick={startNewVendorRequest}
+                className="mt-2 inline-flex items-center gap-1.5 rounded-full border-2 border-[#0b1f3a] bg-white px-4 py-1.5 text-sm font-bold text-[#0b1f3a] hover:bg-[#0b1f3a]/5"
               >
-                {isNewVendorRequest
-                  ? "← Back to vendor search instead"
-                  : "Can't find your vendor? Request to add them."}
+                Can&apos;t find your vendor? Request to add them.
               </button>
             ) : null}
           </div>
-          <div className="sm:col-span-2">
-            <Field label="Address" required error={errors.payeeAddress?.message}>
-              <Textarea rows={2} hasError={!!errors.payeeAddress} {...register("payeeAddress")} />
-            </Field>
-          </div>
+          {!isNewVendorRequest ? (
+            <div className="sm:col-span-2">
+              <Field label="Address" required error={errors.payeeAddress?.message}>
+                <Textarea rows={2} hasError={!!errors.payeeAddress} {...register("payeeAddress")} />
+              </Field>
+            </div>
+          ) : null}
           <Field label="Contact Person" error={errors.payeeContactPerson?.message}>
             <Input hasError={!!errors.payeeContactPerson} {...register("payeeContactPerson")} />
           </Field>
@@ -827,7 +881,7 @@ export function PaymentAdviceForm({
           <Field
             label="E-mail ID"
             error={errors.payeeEmail?.message}
-            help={isNewVendorRequest ? "Same as the Vendor Email entered below." : undefined}
+            help={isNewVendorRequest ? "Same as the Vendor Email entered in the vendor request." : undefined}
           >
             {isNewVendorRequest ? (
               <Input
@@ -841,42 +895,55 @@ export function PaymentAdviceForm({
               <Input type="email" hasError={!!errors.payeeEmail} {...register("payeeEmail")} />
             )}
           </Field>
-          <Field label="GSTIN" error={errors.payeeGstin?.message}>
-            <Input placeholder="15-character GSTIN" hasError={!!errors.payeeGstin} {...register("payeeGstin")} />
-          </Field>
+          {!isNewVendorRequest ? (
+            <Field label="GSTIN" error={errors.payeeGstin?.message}>
+              <Input placeholder="15-character GSTIN" hasError={!!errors.payeeGstin} {...register("payeeGstin")} />
+            </Field>
+          ) : null}
           <Field label="Udyam / MSME No." error={errors.payeeUdyamNumber?.message}>
             <Input hasError={!!errors.payeeUdyamNumber} {...register("payeeUdyamNumber")} />
           </Field>
         </div>
 
-        {isNewVendorRequest && !isAdvance ? (
-          <VendorRequestPanel
-            payeeName={payeeName}
-            submittedByName={submittedByName}
-            submittedByEmail={submittedByEmail}
-            vendorEmail={vendorRequestVendorEmail}
-            onVendorEmailChange={(v) => {
-              setValue("vendorRequestVendorEmail", v, { shouldValidate: true });
-              // Same underlying value as Payee details' own E-mail ID field
-              // for a new vendor - synced here rather than asked twice; see
-              // that field's read-only rendering above.
-              setValue("payeeEmail", v);
-              setVendorRequestMsmeEmailSentAt(null);
-              setVendorRequestMsmeEmailMessageId(null);
-            }}
-            vendorEmailError={errors.vendorRequestVendorEmail?.message}
-            msmeStatus={vendorRequestMsmeStatus}
-            onMsmeStatusChange={(v) => setValue("vendorRequestMsmeStatus", v as "MICRO" | "SMALL" | "MEDIUM" | "NOT_REGISTERED" | "UNKNOWN")}
-            msmeDocument={vendorRequestMsmeDocument}
-            onMsmeDocumentChange={setVendorRequestMsmeDocument}
-            documentType={vendorRequestDocumentType}
-            onDocumentTypeChange={setVendorRequestDocumentType}
-            msmeEmailSentAt={vendorRequestMsmeEmailSentAt}
-            onEmailSent={(sentAt, messageId) => {
-              setVendorRequestMsmeEmailSentAt(sentAt);
-              setVendorRequestMsmeEmailMessageId(messageId);
-            }}
-          />
+        {isNewVendorRequest && vendorRequestModalOpen && !isAdvance ? (
+          <VendorRequestModal
+            onClose={cancelNewVendorRequest}
+            onDone={() => setVendorRequestModalOpen(false)}
+            payeeNameRegister={register("payeeName")}
+            payeeNameError={errors.payeeName?.message}
+            payeeAddressRegister={register("payeeAddress")}
+            payeeAddressError={errors.payeeAddress?.message}
+            payeeGstinRegister={register("payeeGstin")}
+            payeeGstinError={errors.payeeGstin?.message}
+          >
+            <VendorRequestPanel
+              payeeName={payeeName}
+              submittedByName={submittedByName}
+              submittedByEmail={submittedByEmail}
+              vendorEmail={vendorRequestVendorEmail}
+              onVendorEmailChange={(v) => {
+                setValue("vendorRequestVendorEmail", v, { shouldValidate: true });
+                // Same underlying value as Payee details' own E-mail ID field
+                // for a new vendor - synced here rather than asked twice; see
+                // that field's read-only rendering above.
+                setValue("payeeEmail", v);
+                setVendorRequestMsmeEmailSentAt(null);
+                setVendorRequestMsmeEmailMessageId(null);
+              }}
+              vendorEmailError={errors.vendorRequestVendorEmail?.message}
+              msmeStatus={vendorRequestMsmeStatus}
+              onMsmeStatusChange={(v) => setValue("vendorRequestMsmeStatus", v as "MICRO" | "SMALL" | "MEDIUM" | "NOT_REGISTERED" | "UNKNOWN")}
+              msmeDocument={vendorRequestMsmeDocument}
+              onMsmeDocumentChange={setVendorRequestMsmeDocument}
+              documentType={vendorRequestDocumentType}
+              onDocumentTypeChange={setVendorRequestDocumentType}
+              msmeEmailSentAt={vendorRequestMsmeEmailSentAt}
+              onEmailSent={(sentAt, messageId) => {
+                setVendorRequestMsmeEmailSentAt(sentAt);
+                setVendorRequestMsmeEmailMessageId(messageId);
+              }}
+            />
+          </VendorRequestModal>
         ) : null}
       </Section> : null}
 
