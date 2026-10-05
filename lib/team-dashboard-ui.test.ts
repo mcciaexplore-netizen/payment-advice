@@ -16,6 +16,13 @@ describe("Team Dashboard scoped views", () => {
     expect(source).toContain('view === "my-submissions" ? ownSubmissions');
   });
 
+  it("SELF (individual-scope grant, 2026-10) reuses the same ownSubmissions predicate rather than its own matching logic, and is always forced into the My Submissions view", () => {
+    expect(source).toContain('activeGrant.role === "SELF"\n        ? ownSubmissions');
+    expect(source).toContain('const isSelfOnly = activeGrant.role === "SELF"');
+    expect(source).toContain('isSelfOnly || params.view === "my-submissions" ? "my-submissions" : "team-submissions"');
+    expect(source).not.toContain('activeGrant.role === "SELF"\n        ? caseInsensitiveEq');
+  });
+
   it("keeps Team Submissions read-only while Authority rows retain View actions", () => {
     expect(source).toContain('isAuthority && view === "pending"');
     expect(source).toContain('<ViewLink adviceId={row.id} from="pending" />');

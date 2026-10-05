@@ -17,6 +17,7 @@ const ROLE_LABELS: Record<AdminRole, string> = {
   AUTHORITY: "an Authority",
   BRANCH: "a Branch dashboard",
   DEPARTMENT: "a Department dashboard",
+  SELF: "an individual My Submissions",
 };
 
 export type PaymentEntryDisplay = {

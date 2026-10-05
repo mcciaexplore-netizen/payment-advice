@@ -127,4 +127,9 @@ describe("hasRole / hasFinanceRole", () => {
     expect(hasTeamDashboardRole({ roles: ["BRANCH"] })).toBe(true);
     expect(hasTeamDashboardRole({ roles: ["DEPARTMENT"] })).toBe(true);
   });
+
+  it("SELF (individual-scope Team Dashboard grant, 2026-10) is a Team Dashboard role, never a Finance role", () => {
+    expect(hasTeamDashboardRole({ roles: ["SELF"] })).toBe(true);
+    expect(hasFinanceRole({ roles: ["SELF"] })).toBe(false);
+  });
 });

@@ -13,11 +13,20 @@ import { SignJWT, jwtVerify } from "jose";
 export const ADMIN_SESSION_COOKIE = "mccia_admin_session";
 export const ADMIN_SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 7; // 7 days
 
-export const ADMIN_ROLES = ["PAYMENT_ADVICE", "CASH_VOUCHER", "ALL", "AUTHORITY", "BRANCH", "DEPARTMENT"] as const;
+export const ADMIN_ROLES = ["PAYMENT_ADVICE", "CASH_VOUCHER", "ALL", "AUTHORITY", "BRANCH", "DEPARTMENT", "SELF"] as const;
 export type AdminRole = (typeof ADMIN_ROLES)[number];
 
 export const FINANCE_ROLES: readonly AdminRole[] = ["PAYMENT_ADVICE", "CASH_VOUCHER", "ALL"];
-export const TEAM_DASHBOARD_ROLES: readonly AdminRole[] = ["AUTHORITY", "BRANCH", "DEPARTMENT"];
+// SELF — a Team Dashboard grant scoped to just the account holder's own
+// submissions (matched by their login email, the same `ownSubmissions`
+// predicate every other Team Dashboard role's "My Submissions" tab already
+// uses), for roles that don't map onto an existing Branch or Department
+// (e.g. a librarian, a one-person Marketing desk). Unlike BRANCH/DEPARTMENT,
+// SELF carries no scopeValue — the scope is simply "this account's own
+// email" — so it needs no schema change: admin_user_roles' existing check
+// constraint already requires scope_value to be null for any role other
+// than BRANCH/DEPARTMENT, which SELF satisfies as-is.
+export const TEAM_DASHBOARD_ROLES: readonly AdminRole[] = ["AUTHORITY", "BRANCH", "DEPARTMENT", "SELF"];
 
 /**
  * Multi-role session (see admin_user_roles / AGENT_HANDOFF.md) — a session
