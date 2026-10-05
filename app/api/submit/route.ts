@@ -10,6 +10,7 @@ import {
   cashVoucherItems,
   advanceParticulars,
   recommendingAuthorities,
+  vendorRequests,
 } from "@/lib/db/schema";
 import { notifyAuthorityApproval, notifySubmissionConfirmation } from "@/lib/email/notify";
 import { generateAuthorityToken } from "@/lib/advice/authority-token";
@@ -57,8 +58,14 @@ export async function POST(req: NextRequest) {
   // Zod only checked vendorId is a UUID-shaped string; confirm it's an
   // actual, currently-active vendor before writing anything — closes the
   // direct-API-bypass path where a caller skips the typeahead entirely and
-  // posts an arbitrary or stale id.
-  if (values.paymentMode === "NEFT" && !values.isAdvance && !(await isActiveVendor(values.vendorId!))) {
+  // posts an arbitrary or stale id. Skipped when isNewVendorRequest is set:
+  // vendorId is deliberately null there, pending Finance's review.
+  if (
+    values.paymentMode === "NEFT" &&
+    !values.isAdvance &&
+    !values.isNewVendorRequest &&
+    !(await isActiveVendor(values.vendorId!))
+  ) {
     return NextResponse.json(
       { error: "Select a vendor from the list - free-text payee names are no longer accepted" },
       { status: 400 },
@@ -80,6 +87,26 @@ export async function POST(req: NextRequest) {
   const verificationError = await verifyUploadedAttachments(attachmentInputs, !values.isAdvance);
   if (verificationError) return NextResponse.json({ error: verificationError }, { status: 400 });
 
+  // Vendor request's own optional MSME document - same Blob verification as
+  // every other attachment, just not part of the shared attachments table.
+  const vendorRequestMsmeDocument =
+    values.isNewVendorRequest &&
+    values.vendorRequestMsmeDocumentUrl &&
+    values.vendorRequestMsmeDocumentPathname &&
+    values.vendorRequestMsmeDocumentFileName &&
+    values.vendorRequestMsmeDocumentSizeBytes
+      ? {
+          fileName: values.vendorRequestMsmeDocumentFileName,
+          blobPathname: values.vendorRequestMsmeDocumentPathname,
+          blobUrl: values.vendorRequestMsmeDocumentUrl,
+          sizeBytes: values.vendorRequestMsmeDocumentSizeBytes,
+        }
+      : null;
+  if (vendorRequestMsmeDocument) {
+    const msmeVerificationError = await verifyUploadedAttachments([vendorRequestMsmeDocument], true);
+    if (msmeVerificationError) return NextResponse.json({ error: msmeVerificationError }, { status: 400 });
+  }
+
   const now = new Date();
   // Never trust an editable/tampered client value for this system-owned
   // business date. All three submission types use today's calendar date in
@@ -92,6 +119,7 @@ export async function POST(req: NextRequest) {
   let billNo = values.billNo ?? "";
 
   const uploadedPathnames = attachmentInputs.map((attachment) => attachment.blobPathname);
+  if (vendorRequestMsmeDocument) uploadedPathnames.push(vendorRequestMsmeDocument.blobPathname);
   try {
     const attachmentRecords = attachmentInputs.map((attachment) => ({
       ...attachment,
@@ -193,7 +221,7 @@ export async function POST(req: NextRequest) {
         })
         .returning();
 
-      if (values.paymentMode === "NEFT" && !values.isAdvance) {
+      if (values.paymentMode === "NEFT" && !values.isAdvance && !values.isNewVendorRequest) {
         await captureVendorBankAccount(tx, {
           vendorId: values.vendorId!,
           bankAccountNo: values.bankAccountNo!,
@@ -248,6 +276,46 @@ export async function POST(req: NextRequest) {
         ipAddress: clientIp(req),
         details: { serialNo },
       });
+
+      if (values.isNewVendorRequest) {
+        // vendor_requests.payment_advice_id is NOT NULL, so this row can
+        // only be created after the advice row above exists; the advice's
+        // own pending_vendor_request_id is then backfilled in a second
+        // update, same circular-FK ordering the schema was built for.
+        const [request] = await tx
+          .insert(vendorRequests)
+          .values({
+            requestedName: values.payeeName,
+            requestedAddress: values.payeeAddress ?? "",
+            requestedGstin: values.payeeGstin ?? null,
+            requestedVendorEmail: values.vendorRequestVendorEmail!,
+            msmeStatus: values.vendorRequestMsmeStatus,
+            msmeDocumentUrl: vendorRequestMsmeDocument?.blobUrl ?? null,
+            msmeDocumentType: values.vendorRequestMsmeDocumentType ?? null,
+            requestedByName: values.submittedByName,
+            requestedByEmail: values.submittedByEmail,
+            paymentAdviceId: advice.id,
+            msmeEmailSentAt: values.vendorRequestMsmeEmailSentAt
+              ? new Date(values.vendorRequestMsmeEmailSentAt)
+              : null,
+            msmeEmailMessageId: values.vendorRequestMsmeEmailMessageId ?? null,
+          })
+          .returning({ id: vendorRequests.id });
+
+        await tx
+          .update(paymentAdvices)
+          .set({ pendingVendorRequestId: request.id })
+          .where(eq(paymentAdvices.id, advice.id));
+
+        await tx.insert(auditLog).values({
+          paymentAdviceId: advice.id,
+          vendorRequestId: request.id,
+          action: "VENDOR_REQUEST_SUBMITTED",
+          actor: values.submittedByName,
+          ipAddress: clientIp(req),
+          details: { requestedName: values.payeeName },
+        });
+      }
 
       return advice.id;
     });

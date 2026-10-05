@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import { Resend } from "resend";
 import nodemailer from "nodemailer";
 import { db } from "@/lib/db";
@@ -10,7 +12,9 @@ import {
   type SubmissionConfirmationEmailData,
   type SubmissionRecommendedEmailData,
   type SubmissionRejectedEmailData,
+  type VendorMsmeRequestEmailData,
   type VerifiedEmailData,
+  LOGO_CID,
   renderAuthorityApprovalEmail,
   renderPaymentDoneEmail,
   renderPaymentEntryEmail,
@@ -18,11 +22,27 @@ import {
   renderSubmissionConfirmationEmail,
   renderSubmissionRecommendedEmail,
   renderSubmissionRejectedEmail,
+  renderVendorMsmeRequestEmail,
   renderVerifiedEmail,
 } from "@/lib/email/templates";
 
 type EmailMessage = { subject: string; html: string };
+type EmailAttachment = { filename: string; content: Buffer };
 type EmailProvider = "gmail" | "resend";
+
+// Loaded once and cached, same lazy-singleton pattern as the provider
+// clients below - every email's shared shell() references this image via
+// `cid:${LOGO_CID}`, so dispatch() attaches it inline on every send,
+// regardless of which template or call site. See the comment on LOGO_CID
+// in templates.ts for why this is a CID attachment rather than a hotlinked
+// URL.
+let cachedLogoBuffer: Buffer | null = null;
+function getLogoBuffer(): Buffer {
+  if (!cachedLogoBuffer) {
+    cachedLogoBuffer = fs.readFileSync(path.join(process.cwd(), "public", "mccia-logo.png"));
+  }
+  return cachedLogoBuffer;
+}
 
 function isLiveMode(): boolean {
   return process.env.EMAIL_MODE === "live";
@@ -109,12 +129,24 @@ async function dispatch(
   to: string,
   subject: string,
   html: string,
+  options?: { cc?: string[]; attachments?: EmailAttachment[] },
 ): Promise<{ id?: string }> {
+  const cc = options?.cc?.length ? options.cc : undefined;
+  const callerAttachments = options?.attachments?.length ? options.attachments : [];
+  const logoBuffer = getLogoBuffer();
   if (getProvider() === "gmail") {
-    const info = await getGmailTransport().sendMail({ from, to, subject, html });
+    const attachments = [
+      { filename: "mccia-logo.png", content: logoBuffer, cid: LOGO_CID },
+      ...callerAttachments,
+    ];
+    const info = await getGmailTransport().sendMail({ from, to, cc, subject, html, attachments });
     return { id: info.messageId };
   }
-  const result = await getResendClient().emails.send({ from, to, subject, html });
+  const attachments = [
+    { filename: "mccia-logo.png", content: logoBuffer, contentId: LOGO_CID },
+    ...callerAttachments,
+  ];
+  const result = await getResendClient().emails.send({ from, to, cc, subject, html, attachments });
   if (result.error) {
     throw new Error(`Resend error: ${JSON.stringify(result.error)}`);
   }
@@ -189,6 +221,49 @@ async function send(
       }
     }
   }
+}
+
+/**
+ * Sends the MSME statutory-notice email directly to a vendor, on the
+ * submitter's behalf (2026-10-01 revision — previously a mailto: link the
+ * submitter sent themselves; see AGENT_HANDOFF.md). Unlike every notify*()
+ * function below, this call IS the primary action the caller is taking —
+ * "Send Email" button pressed, expects to know if it actually sent — not a
+ * side notification of an already-completed workflow step. So, unlike
+ * send(), a live-mode provider failure is rethrown rather than swallowed;
+ * the API route this is called from turns that into a real error response
+ * rather than a false-success confirmation. Preview mode (the default
+ * everywhere in this file, including here) behaves identically to every
+ * other notify*() function below — console log only, no network call,
+ * treated as success.
+ */
+export async function sendVendorMsmeRequestEmail(
+  data: VendorMsmeRequestEmailData,
+  to: string,
+  cc: string[],
+  attachments: EmailAttachment[],
+): Promise<{ messageId?: string }> {
+  const message = renderVendorMsmeRequestEmail(data);
+  if (!isLiveMode()) {
+    preview("vendor MSME request", message);
+    return {};
+  }
+
+  const override = process.env.EMAIL_TEST_OVERRIDE_RECIPIENT;
+  const recipient = override || to;
+  // Dropped, not redirected, when overriding — CC'ing the real submitter
+  // and Sunil Salunke on a test send would defeat the override's purpose.
+  const ccRecipients = override ? [] : cc;
+  const subject = override ? `[TEST - would go to: ${to}] ${message.subject}` : message.subject;
+
+  const result = await dispatch(getFrom(), recipient, subject, message.html, {
+    cc: ccRecipients,
+    attachments,
+  });
+  console.info(
+    `[Email sent: vendor MSME request] to ${recipient}${override ? ` (redirected from ${to})` : ""}, cc ${ccRecipients.join(", ") || "(none)"}, id ${result.id}`,
+  );
+  return { messageId: result.id };
 }
 
 export async function notifyAuthorityApproval(

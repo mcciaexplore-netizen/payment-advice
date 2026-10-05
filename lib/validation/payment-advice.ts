@@ -203,6 +203,41 @@ export const paymentAdviceFormSchema = z
 
     // Section 2 — payee
     vendorId: z.string().uuid().optional(),
+    // Set instead of vendorId when the submitter used "Can't find your
+    // vendor? Request to add them." - payeeName/payeeAddress/payeeGstin
+    // above are reused directly as the requested vendor's own name/address/
+    // GSTIN (same fields, same snapshot-onto-the-PA behavior as an existing
+    // vendor selection), so only the vendor-request-specific extras live
+    // here. See lib/advice/vendor-requests.ts.
+    isNewVendorRequest: z.boolean().default(false),
+    // Mandatory when isNewVendorRequest is true (enforced below in the
+    // superRefine, since it's optional at the object-shape level like every
+    // other vendor-request field) - 2026-10-01 revision: the app now sends
+    // the MSME request email itself rather than handing the submitter a
+    // mailto: link, so a real vendor email is required to send to, not
+    // just useful-on-record.
+    vendorRequestVendorEmail: optionalTrimmed().pipe(
+      z.string().email("Enter a valid vendor email").optional(),
+    ),
+    vendorRequestMsmeStatus: z
+      .enum(["MICRO", "SMALL", "MEDIUM", "NOT_REGISTERED", "UNKNOWN"])
+      .default("UNKNOWN"),
+    // Populated client-side only after a successful "Send Email" - carried
+    // through to the server exactly like the MSME document fields below, so
+    // the vendor_requests row created at PA submission already has them.
+    vendorRequestMsmeEmailSentAt: optionalTrimmed(),
+    vendorRequestMsmeEmailMessageId: optionalTrimmed(),
+    // Populated client-side only after the optional MSME document has
+    // already been uploaded direct-to-Blob (same pattern/route as every
+    // other attachment). Carries the raw blob reference through to the
+    // server - NOT yet verified at this point, same as uploadedAttachments
+    // elsewhere in this schema; the API route re-verifies pathname/url/size
+    // against Blob storage before trusting any of it (see verify-uploaded.ts).
+    vendorRequestMsmeDocumentUrl: optionalTrimmed().pipe(z.string().url().optional()),
+    vendorRequestMsmeDocumentPathname: optionalTrimmed(),
+    vendorRequestMsmeDocumentFileName: optionalTrimmed(),
+    vendorRequestMsmeDocumentSizeBytes: z.number().int().positive().optional(),
+    vendorRequestMsmeDocumentType: z.enum(["UDYAM_CERTIFICATE", "NON_MSME_DECLARATION"]).optional(),
     payeeName: requiredTrimmed("Payee / company name is required"),
     payeeAddress: optionalTrimmed(),
     payeeContactPerson: optionalTrimmed(),
@@ -301,6 +336,18 @@ export const paymentAdviceFormSchema = z
       });
     }
 
+    // isNewVendorRequest isn't NEFT-specific (the "Request to add vendor"
+    // toggle is available for Cash Voucher too), so this check sits outside
+    // the NEFT-only block below — a vendor email is required to send the
+    // MSME request email to, regardless of payment mode.
+    if (data.isNewVendorRequest && !data.vendorRequestVendorEmail) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["vendorRequestVendorEmail"],
+        message: "Vendor email is required",
+      });
+    }
+
     // Bank details are required for a regular NEFT submission, but NOT for
     // an NEFT-routed advance — Finance already has the submitter's bank
     // details on file as staff, and the fields stay visible/editable on the
@@ -309,14 +356,17 @@ export const paymentAdviceFormSchema = z
       // A regular Payment Advice must name a real vendor selected from the
       // list — free-text payee names are no longer accepted here (Advance
       // Payment is unaffected: payee is always the submitter there, via a
-      // plain editable field, never this typeahead). This only enforces
-      // presence; that the id actually belongs to a real, active vendor is
-      // checked server-side against the database, since Zod alone can't.
-      if (!data.vendorId) {
+      // plain editable field, never this typeahead) — UNLESS the submitter
+      // used "Request to add" (isNewVendorRequest), the one other sanctioned
+      // way to name a payee not yet on the list. This only enforces
+      // presence; that a supplied vendorId actually belongs to a real,
+      // active vendor is checked server-side against the database, since
+      // Zod alone can't.
+      if (!data.vendorId && !data.isNewVendorRequest) {
         ctx.addIssue({
           code: "custom",
           path: ["payeeName"],
-          message: "Select a vendor from the list - free-text payee names are no longer accepted",
+          message: "Select a vendor from the list, or use \"Request to add\" if it's genuinely not there yet",
         });
       }
       if (!data.enclosures) {
