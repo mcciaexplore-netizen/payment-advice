@@ -11,7 +11,7 @@ import { db } from "../lib/db";
 import { adminUserRoles, adminUsers, staffMembers } from "../lib/db/schema";
 import { hashPassword } from "../lib/admin-users";
 
-type TeamGrant = { role: "BRANCH" | "DEPARTMENT"; scopeValue: string };
+type TeamGrant = { role: "BRANCH" | "DEPARTMENT"; scopeValue: string } | { role: "SELF"; scopeValue?: undefined };
 type TeamAccount = { fullName: string; email: string; loginStem: string; grants: TeamGrant[]; staffName?: string };
 
 const ACCOUNTS: TeamAccount[] = [
@@ -33,6 +33,15 @@ const ACCOUNTS: TeamAccount[] = [
   { fullName: "Saahil Amritkar", email: "saahila@mcciapune.com", loginStem: "saahil", grants: [{ role: "DEPARTMENT", scopeValue: "MEMBERSHIP" }] },
   { fullName: "Rachita Waghamare", email: "rachitaw@mcciapune.com", loginStem: "rachita", grants: [{ role: "DEPARTMENT", scopeValue: "MEMBERSHIP" }] },
   { fullName: "PARIKSHIT DAS", email: "parikshitd@mcciapune.com", loginStem: "parikshit", grants: [{ role: "DEPARTMENT", scopeValue: "MEMBERSHIP" }] },
+  // SELF grants (October 2026) — neither role maps onto an existing Branch
+  // or Department, so each gets the new individual-scope role instead of a
+  // Department value invented just for them. See AGENT_HANDOFF.md.
+  { fullName: "DNYANESHWAR BANDRE", email: "dnyaneshwarb@mcciapune.com", loginStem: "dnyaneshwar", grants: [{ role: "SELF" }] },
+  // Email corrected from the stale puneexpo@mcciapune.com on record in
+  // staff_members — this script's own sync step below updates that row to
+  // match, same as it already does whenever an account's email differs
+  // from staff_members' on file.
+  { fullName: "Advika Mangrulkar", email: "advikam@mcciapune.com", loginStem: "advika", grants: [{ role: "SELF" }] },
 ];
 
 async function main() {

@@ -21,7 +21,7 @@ export const dynamic = "force-dynamic";
 
 type AuthorityView = "pending" | "history" | "my-submissions";
 type TeamView = "team-submissions" | "my-submissions";
-type DashboardRole = "AUTHORITY" | "BRANCH" | "DEPARTMENT";
+type DashboardRole = "AUTHORITY" | "BRANCH" | "DEPARTMENT" | "SELF";
 type DashboardGrant = { role: DashboardRole; recommendingAuthorityId: string | null; scopeValue: string | null };
 
 function date(value: Date | string) { return formatIstDate(value); }
@@ -29,10 +29,12 @@ function caseInsensitiveEq(column: typeof paymentAdvices.branch | typeof payment
   return sql`lower(${column}) = lower(${value})`;
 }
 function isDashboardRole(value: string | undefined): value is DashboardRole {
-  return value === "AUTHORITY" || value === "BRANCH" || value === "DEPARTMENT";
+  return value === "AUTHORITY" || value === "BRANCH" || value === "DEPARTMENT" || value === "SELF";
 }
 function roleLabel(grant: DashboardGrant): string {
-  return grant.role === "AUTHORITY" ? "Recommendations" : `${grant.role === "BRANCH" ? "Branch" : "Department"}: ${grant.scopeValue}`;
+  return grant.role === "AUTHORITY" ? "Recommendations"
+    : grant.role === "SELF" ? "My Submissions"
+    : `${grant.role === "BRANCH" ? "Branch" : "Department"}: ${grant.scopeValue}`;
 }
 
 export default async function TeamDashboard({ searchParams }: { searchParams: Promise<{ view?: string; role?: string; stage?: string }> }) {
@@ -51,7 +53,8 @@ export default async function TeamDashboard({ searchParams }: { searchParams: Pr
   if (!account) return null;
   const grants = roleRows.filter((row): row is DashboardGrant =>
     (row.role === "AUTHORITY" && Boolean(row.recommendingAuthorityId)) ||
-    ((row.role === "BRANCH" || row.role === "DEPARTMENT") && Boolean(row.scopeValue)),
+    ((row.role === "BRANCH" || row.role === "DEPARTMENT") && Boolean(row.scopeValue)) ||
+    row.role === "SELF",
   );
   if (grants.length === 0) return null;
 
@@ -59,10 +62,15 @@ export default async function TeamDashboard({ searchParams }: { searchParams: Pr
   const requestedRole = isDashboardRole(params.role) ? params.role : undefined;
   const activeGrant = grants.find((grant) => grant.role === requestedRole) ?? grants[0];
   const isAuthority = activeGrant.role === "AUTHORITY";
+  // SELF has no broader "team" to show — every view is My Submissions,
+  // always, regardless of the ?view= param, and the Team/My Submissions
+  // tab switcher below is hidden entirely rather than offering a toggle
+  // between two tabs that would show the exact same rows.
+  const isSelfOnly = activeGrant.role === "SELF";
   const isDg = isAuthority && authorityRows[0]?.authorityName.trim().toUpperCase() === "DG";
   if (isDg && (!params.view || params.view === "executive")) return loadDgExecutiveDashboard();
   const authorityView: AuthorityView = params.view === "history" ? "history" : params.view === "my-submissions" ? "my-submissions" : "pending";
-  const teamView: TeamView = params.view === "my-submissions" ? "my-submissions" : "team-submissions";
+  const teamView: TeamView = isSelfOnly || params.view === "my-submissions" ? "my-submissions" : "team-submissions";
   const view = isAuthority ? authorityView : teamView;
 
   const ownSubmissions = eq(paymentAdvices.submittedByEmail, account.email);
@@ -71,7 +79,9 @@ export default async function TeamDashboard({ searchParams }: { searchParams: Pr
     ? caseInsensitiveEq(paymentAdvices.branch, activeGrant.scopeValue!)
     : activeGrant.role === "DEPARTMENT"
       ? caseInsensitiveEq(paymentAdvices.submittedByDepartment, activeGrant.scopeValue!)
-      : authorityScope;
+      : activeGrant.role === "SELF"
+        ? ownSubmissions
+        : authorityScope;
   const scopeWhere = view === "my-submissions" ? ownSubmissions : isAuthority
     ? and(authorityScope, view === "history"
       ? or(isNotNull(paymentAdvices.authorityApprovedAt), isNotNull(paymentAdvices.authorityRejectedAt), eq(paymentAdvices.status, "REJECTED"))
@@ -127,7 +137,7 @@ export default async function TeamDashboard({ searchParams }: { searchParams: Pr
       : `${rows.length} submission${rows.length === 1 ? "" : "s"} in ${activeGrant.scopeValue}`;
 
   return <div className="flex flex-col gap-6">
-    <header><h1 className="font-heading text-3xl text-[#0b1f3a]">{isAuthority ? "Authority Recommendations" : "Team Submissions"}</h1><p className="mt-1 text-sm text-gray-600">{subtitle}</p></header>
+    <header><h1 className="font-heading text-3xl text-[#0b1f3a]">{isAuthority ? "Authority Recommendations" : isSelfOnly ? "My Submissions" : "Team Submissions"}</h1><p className="mt-1 text-sm text-gray-600">{subtitle}</p></header>
     {grants.length > 1 ? <nav aria-label="Dashboard role" className="flex flex-wrap gap-2 rounded-lg bg-gray-100 p-1.5">
       {grants.map((grant) => <Link key={grant.role} href={`/authority?role=${grant.role}`} className={`rounded-md px-3 py-2 text-sm font-medium ${grant.role === activeGrant.role ? "bg-white text-[#0b1f3a] shadow-sm" : "text-gray-600 hover:text-[#0b1f3a]"}`}>{roleLabel(grant)}</Link>)}
     </nav> : null}
@@ -136,7 +146,11 @@ export default async function TeamDashboard({ searchParams }: { searchParams: Pr
         <Tab href={`/authority?role=AUTHORITY${isDg ? "&view=pending" : ""}`} active={view === "pending"}>Pending My Recommendation</Tab>
         <Tab href="/authority?role=AUTHORITY&view=history" active={view === "history"}>History</Tab>
         <Tab href="/authority?role=AUTHORITY&view=my-submissions" active={view === "my-submissions"}>My Submissions</Tab>
-      </> : <>
+      </> : isSelfOnly ? (
+        // No separate "Team Submissions" tab - SELF has no broader team,
+        // so there is only ever the one view, already active.
+        <Tab href={`/authority?role=${activeGrant.role}`} active>My Submissions</Tab>
+      ) : <>
         <Tab href={`/authority?role=${activeGrant.role}`} active={view === "team-submissions"}>Team Submissions</Tab>
         <Tab href={`/authority?role=${activeGrant.role}&view=my-submissions`} active={view === "my-submissions"}>My Submissions</Tab>
       </>}

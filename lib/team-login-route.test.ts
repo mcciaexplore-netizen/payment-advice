@@ -40,4 +40,13 @@ describe("POST /api/team/login", () => {
     ]);
     expect((await POST(req())).status).toBe(200);
   });
+
+  it("signs in a SELF (individual-scope, 2026-10) account, needing no scopeValue unlike Branch/Department", async () => {
+    mocks.findActiveAdminUserByEmail.mockResolvedValue({ id: "dnyaneshwar-1", fullName: "DNYANESHWAR BANDRE", passwordHash: "hash" });
+    mocks.verifyPassword.mockResolvedValue(true);
+    mocks.getRolesForAdminUser.mockResolvedValue([{ role: "SELF", recommendingAuthorityId: null, scopeValue: null }]);
+    const response = await POST(req());
+    expect(response.status).toBe(200);
+    expect(mocks.recordAdminLogin).toHaveBeenCalledWith("dnyaneshwar-1");
+  });
 });

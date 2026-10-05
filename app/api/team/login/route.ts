@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
   const roleGrants = await getRolesForAdminUser(user.id);
   const authorityGrant = roleGrants.find((role) => role.role === "AUTHORITY");
   const hasTeamScope = roleGrants.some(
-    (role) => (role.role === "BRANCH" || role.role === "DEPARTMENT") && role.scopeValue,
+    (role) => ((role.role === "BRANCH" || role.role === "DEPARTMENT") && role.scopeValue) || role.role === "SELF",
   );
   if (!hasTeamScope) {
     return NextResponse.json(
