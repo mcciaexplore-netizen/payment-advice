@@ -859,7 +859,7 @@ export function PaymentAdviceForm({
               <button
                 type="button"
                 onClick={startNewVendorRequest}
-                className="mt-2 inline-flex items-center gap-1.5 rounded-full border-2 border-[#0b1f3a] bg-white px-4 py-1.5 text-sm font-bold text-[#0b1f3a] hover:bg-[#0b1f3a]/5"
+                className="mt-2 inline-flex items-center gap-1.5 rounded-md border-2 border-[#0b1f3a] bg-white px-4 py-1.5 text-sm font-bold text-[#0b1f3a] hover:bg-[#0b1f3a]/5"
               >
                 Can&apos;t find your vendor? Request to add them.
               </button>

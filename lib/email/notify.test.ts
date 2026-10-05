@@ -199,12 +199,25 @@ describe("lib/email/notify.ts", () => {
 
     it("sends with GMAIL_USER as the from address, the real recipient, correct subject and HTML", async () => {
       await notifySubmissionConfirmation(submissionConfirmationData, "submitter@example.com");
-      expect(mocks.gmailSendMail).toHaveBeenCalledWith({
-        from: "mcciaexplore@gmail.com",
-        to: "submitter@example.com",
-        subject: "Payment Advice MCCIA/2026-27/0001 Submitted",
-        html: expect.stringContaining("Acme Supplies"),
-      });
+      expect(mocks.gmailSendMail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          from: "mcciaexplore@gmail.com",
+          to: "submitter@example.com",
+          subject: "Payment Advice MCCIA/2026-27/0001 Submitted",
+          html: expect.stringContaining("Acme Supplies"),
+        }),
+      );
+    });
+
+    it("attaches the logo inline via CID on every send, not just the ones with their own attachments", async () => {
+      await notifySubmissionConfirmation(submissionConfirmationData, "submitter@example.com");
+      expect(mocks.gmailSendMail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          attachments: expect.arrayContaining([
+            expect.objectContaining({ filename: "mccia-logo.png", cid: "mccia-logo" }),
+          ]),
+        }),
+      );
     });
 
     it("ignores EMAIL_FROM — Gmail SMTP always sends from GMAIL_USER, since the authenticated account and 'from' must match", async () => {
@@ -423,12 +436,25 @@ describe("lib/email/notify.ts", () => {
 
     it("calls Resend with the real recipient, correct subject, HTML, and the default from address", async () => {
       await notifySubmissionConfirmation(submissionConfirmationData, "submitter@example.com");
-      expect(mocks.resendSend).toHaveBeenCalledWith({
-        from: "onboarding@resend.dev",
-        to: "submitter@example.com",
-        subject: "Payment Advice MCCIA/2026-27/0001 Submitted",
-        html: expect.stringContaining("Acme Supplies"),
-      });
+      expect(mocks.resendSend).toHaveBeenCalledWith(
+        expect.objectContaining({
+          from: "onboarding@resend.dev",
+          to: "submitter@example.com",
+          subject: "Payment Advice MCCIA/2026-27/0001 Submitted",
+          html: expect.stringContaining("Acme Supplies"),
+        }),
+      );
+    });
+
+    it("attaches the logo inline via contentId on Resend too", async () => {
+      await notifySubmissionConfirmation(submissionConfirmationData, "submitter@example.com");
+      expect(mocks.resendSend).toHaveBeenCalledWith(
+        expect.objectContaining({
+          attachments: expect.arrayContaining([
+            expect.objectContaining({ filename: "mccia-logo.png", contentId: "mccia-logo" }),
+          ]),
+        }),
+      );
     });
 
     it("uses EMAIL_FROM instead of the default when set", async () => {
@@ -517,7 +543,7 @@ describe("lib/email/notify.ts", () => {
         mocks.gmailSendMail.mockResolvedValue({ messageId: "<msme-abc123@gmail.com>" });
       });
 
-      it("sends to the vendor, CC'd to the submitter and Sunil Salunke, with both attachments", async () => {
+      it("sends to the vendor, CC'd to the submitter and Sunil Salunke, with both attachments plus the inline logo", async () => {
         const result = await sendVendorMsmeRequestEmail(
           vendorMsmeData,
           "vendor@example.com",
@@ -530,7 +556,10 @@ describe("lib/email/notify.ts", () => {
           cc: ["submitter@example.com", "sunils@mcciapune.com"],
           subject: "MSME Status Declaration Required: Example Vendor Pvt Ltd",
           html: expect.stringContaining("Example Vendor Pvt Ltd"),
-          attachments,
+          attachments: [
+            expect.objectContaining({ filename: "mccia-logo.png", cid: "mccia-logo" }),
+            ...attachments,
+          ],
         });
         expect(result.messageId).toBe("<msme-abc123@gmail.com>");
       });

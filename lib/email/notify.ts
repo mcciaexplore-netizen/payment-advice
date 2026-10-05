@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import { Resend } from "resend";
 import nodemailer from "nodemailer";
 import { db } from "@/lib/db";
@@ -12,6 +14,7 @@ import {
   type SubmissionRejectedEmailData,
   type VendorMsmeRequestEmailData,
   type VerifiedEmailData,
+  LOGO_CID,
   renderAuthorityApprovalEmail,
   renderPaymentDoneEmail,
   renderPaymentEntryEmail,
@@ -26,6 +29,20 @@ import {
 type EmailMessage = { subject: string; html: string };
 type EmailAttachment = { filename: string; content: Buffer };
 type EmailProvider = "gmail" | "resend";
+
+// Loaded once and cached, same lazy-singleton pattern as the provider
+// clients below - every email's shared shell() references this image via
+// `cid:${LOGO_CID}`, so dispatch() attaches it inline on every send,
+// regardless of which template or call site. See the comment on LOGO_CID
+// in templates.ts for why this is a CID attachment rather than a hotlinked
+// URL.
+let cachedLogoBuffer: Buffer | null = null;
+function getLogoBuffer(): Buffer {
+  if (!cachedLogoBuffer) {
+    cachedLogoBuffer = fs.readFileSync(path.join(process.cwd(), "public", "mccia-logo.png"));
+  }
+  return cachedLogoBuffer;
+}
 
 function isLiveMode(): boolean {
   return process.env.EMAIL_MODE === "live";
@@ -115,11 +132,20 @@ async function dispatch(
   options?: { cc?: string[]; attachments?: EmailAttachment[] },
 ): Promise<{ id?: string }> {
   const cc = options?.cc?.length ? options.cc : undefined;
-  const attachments = options?.attachments?.length ? options.attachments : undefined;
+  const callerAttachments = options?.attachments?.length ? options.attachments : [];
+  const logoBuffer = getLogoBuffer();
   if (getProvider() === "gmail") {
+    const attachments = [
+      { filename: "mccia-logo.png", content: logoBuffer, cid: LOGO_CID },
+      ...callerAttachments,
+    ];
     const info = await getGmailTransport().sendMail({ from, to, cc, subject, html, attachments });
     return { id: info.messageId };
   }
+  const attachments = [
+    { filename: "mccia-logo.png", content: logoBuffer, contentId: LOGO_CID },
+    ...callerAttachments,
+  ];
   const result = await getResendClient().emails.send({ from, to, cc, subject, html, attachments });
   if (result.error) {
     throw new Error(`Resend error: ${JSON.stringify(result.error)}`);

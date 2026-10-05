@@ -17,17 +17,22 @@ function replaceTokens(template: string, values: Record<string, string | number 
   );
 }
 
-// Served from this app's own domain (public/mccia-logo.png - the same
-// asset the Payment Advice/Cash Voucher/Forwarding Memo PDFs already embed,
-// not a second copy), not hotlinked from mcciapune.com directly - a third
-// party's site isn't a reliable long-term image host for outbound email,
-// and the previous hotlinked URL was already rendering as a broken image
-// icon in real inboxes (fixed 2026-10-01). Real width/height (1085x258)
-// preserved at this same ~4.2:1 ratio to avoid distortion.
-const LOGO_URL = "https://payment-advice.vercel.app/mccia-logo.png";
+// Referenced as a CID (Content-ID) inline attachment, not hotlinked over
+// HTTPS - the hotlink (first a third-party mcciapune.com URL, then this
+// app's own https://payment-advice.vercel.app/mccia-logo.png) kept
+// rendering as a broken image in real inboxes (Outlook and others block
+// externally-fetched images by default for unfamiliar senders, showing a
+// broken-icon placeholder instead). A `cid:` reference needs no network
+// fetch at all - the bytes travel with the email as a real MIME
+// attachment - so there is nothing for that image-blocking behavior to
+// block. notify.ts's dispatch() attaches public/mccia-logo.png under this
+// exact CID on every email it sends, regardless of template. Real
+// width/height (1085x258) preserved at this same ~4.2:1 ratio to avoid
+// distortion.
+export const LOGO_CID = "mccia-logo";
 
 function shell(accent: "#E8A33D" | "#2E8B57", body: string): string {
-  return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head><body style="margin:0;padding:0;background-color:#F4F5F7;font-family:'Segoe UI',Arial,sans-serif;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#F4F5F7;padding:32px 16px;"><tr><td align="center"><table role="presentation" width="600" cellpadding="0" cellspacing="0" style="background-color:#FFFFFF;border-radius:8px;overflow:hidden;max-width:600px;width:100%;"><tr><td style="background-color:#0B1F3A;padding:28px 32px;"><img src="${LOGO_URL}" alt="MCCIA" width="160" height="38" style="display:block;width:160px;height:38px;border:0;"><div style="font-family:Georgia,'Times New Roman',serif;color:#FFFFFF;font-size:18px;font-weight:bold;letter-spacing:.3px;margin-top:14px;">Mahratta Chamber of Commerce, Industries &amp; Agriculture</div><div style="color:#C9D3E0;font-size:12px;padding-top:4px;">Senapati Bapat Road, Pune 411 016</div></td></tr><tr><td style="background-color:${accent};height:4px;line-height:4px;font-size:0;">&nbsp;</td></tr>${body}<tr><td style="background-color:#F9FAFB;padding:20px 32px;border-top:1px solid #E5E7EB;"><p style="margin:0;font-size:12px;color:#9CA3AF;text-align:center;">This is an automated notification from the MCCIA Payment Advice system.<br>Please do not reply directly to this email.</p></td></tr></table></td></tr></table></body></html>`;
+  return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head><body style="margin:0;padding:0;background-color:#F4F5F7;font-family:'Segoe UI',Arial,sans-serif;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#F4F5F7;padding:32px 16px;"><tr><td align="center"><table role="presentation" width="600" cellpadding="0" cellspacing="0" style="background-color:#FFFFFF;border-radius:8px;overflow:hidden;max-width:600px;width:100%;"><tr><td style="background-color:#0B1F3A;padding:28px 32px;"><img src="cid:${LOGO_CID}" alt="MCCIA" width="160" height="38" style="display:block;width:160px;height:38px;border:0;"><div style="font-family:Georgia,'Times New Roman',serif;color:#FFFFFF;font-size:18px;font-weight:bold;letter-spacing:.3px;margin-top:14px;">Mahratta Chamber of Commerce, Industries &amp; Agriculture</div><div style="color:#C9D3E0;font-size:12px;padding-top:4px;">Senapati Bapat Road, Pune 411 016</div></td></tr><tr><td style="background-color:${accent};height:4px;line-height:4px;font-size:0;">&nbsp;</td></tr>${body}<tr><td style="background-color:#F9FAFB;padding:20px 32px;border-top:1px solid #E5E7EB;"><p style="margin:0;font-size:12px;color:#9CA3AF;text-align:center;">This is an automated notification from the MCCIA Payment Advice system.<br>Please do not reply directly to this email.</p></td></tr></table></td></tr></table></body></html>`;
 }
 
 function details(rows: [string, string][]): string {
