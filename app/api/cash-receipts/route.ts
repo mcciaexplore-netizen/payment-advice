@@ -6,7 +6,7 @@ import { cashReceiptSchema } from "@/lib/validation/cash-receipt";
 import { todayInIst } from "@/lib/date-time";
 import { BRANCH_OPTIONS } from "@/lib/validation/payment-advice";
 import { getAdminSession } from "@/lib/admin-session";
-import { hasRole } from "@/lib/auth";
+import { hasCashReceiptRole } from "@/lib/auth";
 import { allocateCashReceiptNumber, financialYearFor } from "@/lib/serial";
 import { createLocalCashReceipt } from "@/lib/cash-receipt-local-store";
 import { formatCashReceiptNumber, getCashReceiptFinancialYear } from "@/lib/cash-receipt-number";
@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Enter valid receipt details." }, { status: 400 });
   }
   const session = await getAdminSession();
-  if (!session?.branchScope || !hasRole(session, "BRANCH") || !BRANCH_OPTIONS.includes(session.branchScope as typeof BRANCH_OPTIONS[number])) {
+  if (!session?.branchScope || !hasCashReceiptRole(session) || !BRANCH_OPTIONS.includes(session.branchScope as typeof BRANCH_OPTIONS[number])) {
     return NextResponse.json({ error: "Sign in with an authorized branch account to create Cash Receipts." }, { status: 401 });
   }
   const branch = session.branchScope;
@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
   const totalPaise = items.reduce((sum, item) => sum + Math.round(Number(item.amount) * 100), 0);
   const total = (totalPaise / 100).toFixed(2);
 
-  if (process.env.NODE_ENV !== "production") {
+  if (process.env.NODE_ENV !== "production" && !process.env.DATABASE_URL) {
     try {
       const receipt = await createLocalCashReceipt({
         branch,

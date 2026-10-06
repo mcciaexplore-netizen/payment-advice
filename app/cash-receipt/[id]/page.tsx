@@ -6,7 +6,7 @@ import { cashReceipts } from "@/lib/db/schema";
 import { formatDateOnly } from "@/lib/date-time";
 import { PrintButton } from "@/components/form/PrintButton";
 import { getAdminSession } from "@/lib/admin-session";
-import { hasFinanceRole, hasRole } from "@/lib/auth";
+import { hasFinanceRole, hasCashReceiptRole } from "@/lib/auth";
 import { canAccessCashReceipt } from "@/lib/advice/cash-receipt-access";
 import { getLocalCashReceipt } from "@/lib/cash-receipt-local-store";
 import { formatCashReceiptNumber } from "@/lib/cash-receipt-number";
@@ -19,12 +19,12 @@ export default async function CashReceiptPrintPage({ params }: { params: Promise
   const session = await getAdminSession();
   const isProd = process.env.NODE_ENV === "production";
 
-  if (!isProd) {
+  if (!isProd && !process.env.DATABASE_URL) {
     // Local dev fallback (no DB connection) - same branch-only check this
     // path has always used, since LocalCashReceipt carries no real
     // admin_users id to check person-level ownership against.
     const isFinanceAdmin = hasFinanceRole(session);
-    const isBranchAccount = Boolean(session?.branchScope) && hasRole(session, "BRANCH");
+    const isBranchAccount = Boolean(session?.branchScope) && hasCashReceiptRole(session);
     if (!session || (!isFinanceAdmin && !isBranchAccount)) redirect("/cash-receipt/login");
     const receipt = await getLocalCashReceipt(id);
     if (!receipt || (!isFinanceAdmin && receipt.branch !== session.branchScope)) notFound();

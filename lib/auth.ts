@@ -13,7 +13,7 @@ import { SignJWT, jwtVerify } from "jose";
 export const ADMIN_SESSION_COOKIE = "mccia_admin_session";
 export const ADMIN_SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 7; // 7 days
 
-export const ADMIN_ROLES = ["PAYMENT_ADVICE", "CASH_VOUCHER", "ALL", "AUTHORITY", "BRANCH", "DEPARTMENT", "SELF"] as const;
+export const ADMIN_ROLES = ["PAYMENT_ADVICE", "CASH_VOUCHER", "ALL", "AUTHORITY", "BRANCH", "DEPARTMENT", "SELF", "CASH_RECEIPT"] as const;
 export type AdminRole = (typeof ADMIN_ROLES)[number];
 
 export const FINANCE_ROLES: readonly AdminRole[] = ["PAYMENT_ADVICE", "CASH_VOUCHER", "ALL"];
@@ -52,6 +52,13 @@ export function hasRole(
   role: AdminRole,
 ): boolean {
   return session?.roles.includes(role) ?? false;
+}
+
+/** Cash Receipt access is separate from Team Dashboard branch visibility. */
+export function hasCashReceiptRole(
+  session: Pick<AdminSessionPayload, "roles"> | null | undefined,
+): boolean {
+  return hasRole(session, "BRANCH") || hasRole(session, "CASH_RECEIPT");
 }
 
 /** True only for Finance roles (PAYMENT_ADVICE / CASH_VOUCHER / ALL).

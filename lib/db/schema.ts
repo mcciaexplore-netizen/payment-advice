@@ -64,7 +64,8 @@ export const adminUserRoles = pgTable(
       () => recommendingAuthorities.id,
     ),
     // Exact payment_advices.branch / submitted_by_department value for
-    // BRANCH and DEPARTMENT grants. Null for every other role.
+    // BRANCH and DEPARTMENT grants; Cash Receipt's assigned receipt branch
+    // for CASH_RECEIPT. Null for other roles.
     scopeValue: text("scope_value"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   },
@@ -72,7 +73,7 @@ export const adminUserRoles = pgTable(
     unique().on(table.adminUserId, table.role),
     check(
       "admin_user_roles_scope_value_check",
-      sql`(${table.role} in ('BRANCH', 'DEPARTMENT') and ${table.scopeValue} is not null) or (${table.role} not in ('BRANCH', 'DEPARTMENT') and ${table.scopeValue} is null)`,
+      sql`(${table.role} in ('BRANCH', 'DEPARTMENT', 'CASH_RECEIPT') and ${table.scopeValue} is not null) or (${table.role} not in ('BRANCH', 'DEPARTMENT', 'CASH_RECEIPT') and ${table.scopeValue} is null)`,
     ),
   ],
 );
