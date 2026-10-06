@@ -597,6 +597,31 @@ export const serialCounters = pgTable(
   (table) => [primaryKey({ columns: [table.financialYear, table.series] })],
 );
 
+/** Independent sequential Cash Receipt series for each branch and financial year. */
+export const cashReceiptCounters = pgTable(
+  "cash_receipt_counters",
+  {
+    branch: text("branch").notNull(),
+    financialYear: text("financial_year").notNull(),
+    lastNumber: integer("last_number").default(0).notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.branch, table.financialYear] })],
+);
+
+export const cashReceipts = pgTable("cash_receipts", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  branch: text("branch").notNull(),
+  financialYear: text("financial_year").notNull(),
+  receiptNumber: integer("receipt_number").notNull(),
+  receiptDate: date("receipt_date").notNull(),
+  partyName: text("party_name").notNull(),
+  gstin: text("gstin"),
+  items: jsonb("items").$type<Array<{ particulars: string; copies: number; price: string; amount: string; billNo?: string; billDate?: string }>>().notNull(),
+  total: numeric("total", { precision: 14, scale: 2 }).notNull(),
+  issuedBy: text("issued_by").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [unique().on(table.branch, table.financialYear, table.receiptNumber)]);
+
 export const auditLog = pgTable("audit_log", {
   id: uuid("id").primaryKey().defaultRandom(),
   paymentAdviceId: uuid("payment_advice_id").references(

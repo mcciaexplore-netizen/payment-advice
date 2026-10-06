@@ -61,3 +61,7 @@ scripts/team-dashboard-users-report.md
 
 # local safety exports made before production data maintenance
 .local-backups/
+
+# Local development Cash Receipt data (not shared with the production app)
+.local-cash-receipts.json
+.local-cash-receipt-users.json

@@ -41,6 +41,8 @@ export type AdminSessionPayload = {
   fullName: string;
   roles: AdminRole[];
   recommendingAuthorityId: string | null;
+  /** Present on Cash Receipt sessions to bind the login to its assigned branch. */
+  branchScope?: string;
 };
 
 /** True if the session holds the given role — the replacement for every
@@ -68,7 +70,9 @@ export function hasTeamDashboardRole(
 }
 
 function getSecretKey() {
-  const secret = process.env.AUTH_SECRET;
+  const secret = process.env.AUTH_SECRET ?? (process.env.NODE_ENV !== "production"
+    ? "mccia-local-cash-receipt-development-session-secret"
+    : undefined);
   if (!secret) {
     throw new Error("AUTH_SECRET environment variable is not set");
   }
@@ -96,6 +100,7 @@ export async function decodeAdminSessionToken(
   try {
     const { payload } = await jwtVerify(token, getSecretKey());
     const { adminUserId, fullName, roles } = payload;
+    const branchScope = payload.branchScope;
     if (
       typeof adminUserId !== "string" ||
       typeof fullName !== "string" ||
@@ -105,7 +110,8 @@ export async function decodeAdminSessionToken(
       !(typeof payload.recommendingAuthorityId === "string" ||
         payload.recommendingAuthorityId === null) ||
       (roles.includes("AUTHORITY") && typeof payload.recommendingAuthorityId !== "string") ||
-      (!roles.includes("AUTHORITY") && payload.recommendingAuthorityId !== null)
+      (!roles.includes("AUTHORITY") && payload.recommendingAuthorityId !== null) ||
+      (branchScope !== undefined && typeof branchScope !== "string")
     ) {
       return null;
     }
@@ -114,6 +120,7 @@ export async function decodeAdminSessionToken(
       fullName,
       roles: roles as AdminRole[],
       recommendingAuthorityId: payload.recommendingAuthorityId,
+      ...(typeof branchScope === "string" ? { branchScope } : {}),
     };
   } catch {
     return null;

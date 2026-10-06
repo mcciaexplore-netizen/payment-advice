@@ -15,6 +15,7 @@
     "import:master-data": "tsx scripts/import-master-data.ts",
     "backfill:staff-emails": "tsx scripts/backfill-staff-authority-emails.ts",
     "seed:admin-users": "tsx scripts/seed-admin-users.ts",
+    "cash-receipt:add-user": "tsx scripts/add-cash-receipt-user.ts",
     "seed:team-dashboard-users": "tsx scripts/seed-team-dashboard-users.ts"
   },
   "dependencies": {
