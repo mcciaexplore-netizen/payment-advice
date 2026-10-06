@@ -7,7 +7,9 @@ import {
   allocateSerialNumber,
   allocateCashVoucherNumber,
   allocateAdvanceNumber,
+  allocateCashReceiptNumber,
 } from "./serial";
+import { formatCashReceiptNumber } from "./cash-receipt-number";
 
 describe("financialYearFor", () => {
   it("uses the IST boundary when UTC is still on March 31", () => {
@@ -69,6 +71,17 @@ describe("formatAdvanceNo", () => {
 
   it("does not truncate a 5-digit sequence", () => {
     expect(formatAdvanceNo("2026-27", 10000)).toBe("ADV/MCCIA/2026-27/10000");
+  });
+});
+
+describe("formatCashReceiptNumber", () => {
+  it("zero-pads the sequence to 4 digits, using the branch's code", () => {
+    expect(formatCashReceiptNumber("Tilak Road Office", "2026-10-06", 1)).toBe("CR/TRB/2026-27/0001");
+    expect(formatCashReceiptNumber("Bhosari Office", "2026-10-06", 42)).toBe("CR/BHO/2026-27/0042");
+  });
+
+  it("throws for a branch with no configured code, rather than silently omitting it", () => {
+    expect(() => formatCashReceiptNumber("Unknown Office", "2026-10-06", 1)).toThrow();
   });
 });
 
@@ -228,6 +241,71 @@ describe.skipIf(!testDbUrl)("allocateSerialNumber / allocateCashVoucherNumber (i
       const secondAdvanceNo = await db.transaction((tx) => allocateAdvanceNumber(tx, financialYear));
       expect(firstAdvanceNo).toBe(`ADV/MCCIA/${financialYear}/0001`);
       expect(secondAdvanceNo).toBe(`ADV/MCCIA/${financialYear}/0002`);
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it("issues 1 as the first Cash Receipt number of a new financial year for a branch", async () => {
+    const financialYear = financialYearFor(TEST_DATE);
+    const { db, pool } = await freshTestDb([financialYear]);
+    try {
+      const sequence = await db.transaction((tx) =>
+        allocateCashReceiptNumber(tx, financialYear, "Tilak Road Office"),
+      );
+      expect(sequence).toBe(1);
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it("keeps each branch's Cash Receipt series independent — one branch's numbering never advances another's", async () => {
+    const financialYear = financialYearFor(TEST_DATE);
+    const { db, pool } = await freshTestDb([financialYear]);
+    try {
+      await db.transaction((tx) => allocateCashReceiptNumber(tx, financialYear, "Tilak Road Office"));
+      await db.transaction((tx) => allocateCashReceiptNumber(tx, financialYear, "Tilak Road Office"));
+      // Bhosari's series starts fresh at 1 regardless of Tilak Road's count.
+      const bhosariFirst = await db.transaction((tx) =>
+        allocateCashReceiptNumber(tx, financialYear, "Bhosari Office"),
+      );
+      expect(bhosariFirst).toBe(1);
+      const tilakRoadThird = await db.transaction((tx) =>
+        allocateCashReceiptNumber(tx, financialYear, "Tilak Road Office"),
+      );
+      expect(tilakRoadThird).toBe(3);
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it("never issues the same Cash Receipt number twice for the same branch under concurrent allocation", async () => {
+    const financialYear = financialYearFor(TEST_DATE);
+    const { db, pool } = await freshTestDb([financialYear]);
+    try {
+      const results = await Promise.all(
+        Array.from({ length: 10 }, () =>
+          db.transaction((tx) => allocateCashReceiptNumber(tx, financialYear, "Hadapsar Office")),
+        ),
+      );
+      expect(new Set(results).size).toBe(results.length);
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it("keeps the Cash Receipt series independent of every other series within the same FY", async () => {
+    const financialYear = financialYearFor(TEST_DATE);
+    const { db, pool } = await freshTestDb([financialYear]);
+    try {
+      await db.transaction((tx) => allocateSerialNumber(tx, TEST_DATE));
+      await db.transaction((tx) => allocateCashVoucherNumber(tx, financialYear));
+      await db.transaction((tx) => allocateAdvanceNumber(tx, financialYear));
+
+      const sequence = await db.transaction((tx) =>
+        allocateCashReceiptNumber(tx, financialYear, "Ahilyanagar Office"),
+      );
+      expect(sequence).toBe(1);
     } finally {
       await pool.end();
     }

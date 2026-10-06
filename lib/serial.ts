@@ -130,3 +130,20 @@ export async function allocateForwardingMemoNumber(
   const nextNumber = await allocateNumber(tx, financialYear, FORWARDING_MEMO_SERIES);
   return formatForwardingMemoNo(financialYear, nextNumber);
 }
+
+/** Allocates the next Cash Receipt number for a given branch — one
+ * independent gapless series per branch, not one shared series across all
+ * branches, since each branch's receipt book is numbered on its own. Same
+ * SELECT ... FOR UPDATE primitive as every other series here; the
+ * per-branch scoping lives entirely in the series key
+ * ("CASH_RECEIPT:<branch name>"), not in a second allocation mechanism.
+ * Returns the raw sequence number - pass it to formatCashReceiptNumber()
+ * (lib/cash-receipt-number.ts) for the branch-coded display string
+ * (CR/<branchCode>/<FY>/NNNN). */
+export async function allocateCashReceiptNumber(
+  tx: Executor,
+  financialYear: string,
+  branch: string,
+): Promise<number> {
+  return allocateNumber(tx, financialYear, `CASH_RECEIPT:${branch}`);
+}

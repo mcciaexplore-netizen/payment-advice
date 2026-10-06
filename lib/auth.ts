@@ -70,9 +70,7 @@ export function hasTeamDashboardRole(
 }
 
 function getSecretKey() {
-  const secret = process.env.AUTH_SECRET ?? (process.env.NODE_ENV !== "production"
-    ? "mccia-local-cash-receipt-development-session-secret"
-    : undefined);
+  const secret = process.env.AUTH_SECRET;
   if (!secret) {
     throw new Error("AUTH_SECRET environment variable is not set");
   }

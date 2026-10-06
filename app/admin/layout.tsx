@@ -71,6 +71,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
               <Link href="/admin/forwarding-memos" className="hover:text-white">
                 Forwarding Memos
               </Link>
+              <Link href="/admin/cash-receipts" className="hover:text-white">
+                Cash Receipts
+              </Link>
               {hasRole(session, "AUTHORITY") ? (
                 <Link href="/authority" className="hover:text-white">
                   My Recommendations

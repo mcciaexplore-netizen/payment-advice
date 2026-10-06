@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Input } from "@/components/ui/Input";
@@ -51,7 +52,7 @@ export function CashReceiptLoginForm() {
       <div className="flex flex-col gap-1.5"><label htmlFor="cash-receipt-email" className="text-sm font-medium text-[#0b1f3a]">Email</label><Input id="cash-receipt-email" type="email" required autoFocus autoComplete="username" value={email} onChange={(event) => setEmail(event.target.value)} /></div>
       <div className="flex flex-col gap-1.5"><label htmlFor="cash-receipt-password" className="text-sm font-medium text-[#0b1f3a]">Password</label><Input id="cash-receipt-password" type="password" required autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} /></div>
       <button disabled={submitting} className="rounded-md bg-[#0b1f3a] px-6 py-2.5 font-medium text-white disabled:opacity-50">{submitting ? "Signing in…" : "Sign in"}</button>
-      <a href="/" className="text-center text-sm text-gray-600 underline">Back to Payment Desk</a>
+      <Link href="/" className="text-center text-sm text-gray-600 underline">Back to Payment Desk</Link>
     </form>
   </main>;
 }

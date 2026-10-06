@@ -1,5 +1,5 @@
 {
-  "id": "8ea761a7-c30e-46a9-8349-f7d912042f00",
+  "id": "59499a24-01c5-44b9-a684-e5652c4b459d",
   "prevId": "d0ab0e26-e604-4cfe-9705-648f37b27edd",
   "version": "7",
   "dialect": "postgresql",
@@ -359,6 +359,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "cash_receipt_id": {
+          "name": "cash_receipt_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "action": {
           "name": "action",
           "type": "text",
@@ -431,49 +437,22 @@
           ],
           "onDelete": "no action",
           "onUpdate": "no action"
+        },
+        "audit_log_cash_receipt_id_cash_receipts_id_fk": {
+          "name": "audit_log_cash_receipt_id_cash_receipts_id_fk",
+          "tableFrom": "audit_log",
+          "tableTo": "cash_receipts",
+          "columnsFrom": [
+            "cash_receipt_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.cash_receipt_counters": {
-      "name": "cash_receipt_counters",
-      "schema": "",
-      "columns": {
-        "branch": {
-          "name": "branch",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "financial_year": {
-          "name": "financial_year",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "last_number": {
-          "name": "last_number",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {
-        "cash_receipt_counters_branch_financial_year_pk": {
-          "name": "cash_receipt_counters_branch_financial_year_pk",
-          "columns": [
-            "branch",
-            "financial_year"
-          ]
-        }
-      },
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
@@ -490,8 +469,8 @@
           "notNull": true,
           "default": "gen_random_uuid()"
         },
-        "branch": {
-          "name": "branch",
+        "serial_no": {
+          "name": "serial_no",
           "type": "text",
           "primaryKey": false,
           "notNull": true
@@ -502,9 +481,9 @@
           "primaryKey": false,
           "notNull": true
         },
-        "receipt_number": {
-          "name": "receipt_number",
-          "type": "integer",
+        "branch": {
+          "name": "branch",
+          "type": "text",
           "primaryKey": false,
           "notNull": true
         },
@@ -538,11 +517,17 @@
           "primaryKey": false,
           "notNull": true
         },
-        "issued_by": {
-          "name": "issued_by",
+        "submitted_by_name": {
+          "name": "submitted_by_name",
           "type": "text",
           "primaryKey": false,
           "notNull": true
+        },
+        "submitted_by_email": {
+          "name": "submitted_by_email",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
         },
         "created_at": {
           "name": "created_at",
@@ -556,18 +541,25 @@
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
-        "cash_receipts_branch_financial_year_receipt_number_unique": {
-          "name": "cash_receipts_branch_financial_year_receipt_number_unique",
+        "cash_receipts_serial_no_unique": {
+          "name": "cash_receipts_serial_no_unique",
           "nullsNotDistinct": false,
           "columns": [
-            "branch",
-            "financial_year",
-            "receipt_number"
+            "serial_no"
           ]
         }
       },
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "cash_receipts_branch_check": {
+          "name": "cash_receipts_branch_check",
+          "value": "\"cash_receipts\".\"branch\" in ('SB Road Office', 'Tilak Road Office', 'Hadapsar Office', 'Bhosari Office', 'Ahilyanagar Office')"
+        },
+        "cash_receipts_total_positive_check": {
+          "name": "cash_receipts_total_positive_check",
+          "value": "\"cash_receipts\".\"total\" > 0"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.cash_voucher_items": {

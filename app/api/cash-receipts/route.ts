@@ -1,29 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
-import { z } from "zod";
-import { sql } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { cashReceiptCounters, cashReceipts } from "@/lib/db/schema";
+import { auditLog, cashReceipts } from "@/lib/db/schema";
+import { cashReceiptSchema } from "@/lib/validation/cash-receipt";
 import { todayInIst } from "@/lib/date-time";
 import { BRANCH_OPTIONS } from "@/lib/validation/payment-advice";
 import { getAdminSession } from "@/lib/admin-session";
 import { hasRole } from "@/lib/auth";
+import { allocateCashReceiptNumber, financialYearFor } from "@/lib/serial";
 import { createLocalCashReceipt } from "@/lib/cash-receipt-local-store";
-import { getCashReceiptFinancialYear } from "@/lib/cash-receipt-number";
+import { formatCashReceiptNumber, getCashReceiptFinancialYear } from "@/lib/cash-receipt-number";
 
-const bodySchema = z.object({
-  partyName: z.string().trim().min(1).max(200),
-  gstin: z.string().trim().max(15).optional().default(""),
-  items: z.array(z.object({
-    particulars: z.string().trim().min(1).max(200),
-    copies: z.number().int().min(0).max(100000),
-    price: z.number().min(0).max(100000000),
-    billNo: z.string().max(100).optional().default(""),
-    billDate: z.string().max(10).optional().default(""),
-  })).min(1).max(20),
-});
+export const runtime = "nodejs";
+
+function clientIp(req: NextRequest): string | null {
+  return req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null;
+}
 
 export async function POST(request: NextRequest) {
-  const parsed = bodySchema.safeParse(await request.json().catch(() => null));
+  const parsed = cashReceiptSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Enter valid receipt details." }, { status: 400 });
   }
@@ -32,9 +26,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Sign in with an authorized branch account to create Cash Receipts." }, { status: 401 });
   }
   const branch = session.branchScope;
+  // Receipt Date is system-controlled, same as every other document type in
+  // this app (Payment Advice's formDate, Forwarding Memo's memoDate) - a
+  // client-supplied date is never trusted for the record that actually gets
+  // numbered/saved.
   const receiptDate = todayInIst();
-  const financialYear = getCashReceiptFinancialYear(receiptDate);
-  const { partyName, gstin } = parsed.data;
+  const { partyName } = parsed.data;
+  const gstin = parsed.data.gstin || "";
   const items = parsed.data.items.map((item) => ({
     particulars: item.particulars,
     copies: item.copies,
@@ -43,13 +41,8 @@ export async function POST(request: NextRequest) {
     billNo: item.billNo,
     billDate: item.billDate,
   }));
-  if (!items.some((item) => item.copies > 0 && Number(item.price) > 0)) {
-    return NextResponse.json({ error: "Add at least one receipt item with copies and price." }, { status: 400 });
-  }
-  if (items.some((item) => item.copies > 0 && Number(item.price) === 0)) {
-    return NextResponse.json({ error: "Enter a price for each line with copies." }, { status: 400 });
-  }
-  const totalPaise = items.reduce((sum, item) => sum + (item.copies ? Math.round(Number(item.amount) * 100) : 0), 0);
+  const totalPaise = items.reduce((sum, item) => sum + Math.round(Number(item.amount) * 100), 0);
+  const total = (totalPaise / 100).toFixed(2);
 
   if (process.env.NODE_ENV !== "production") {
     try {
@@ -58,10 +51,13 @@ export async function POST(request: NextRequest) {
         partyName,
         gstin: gstin || null,
         items,
-        total: (totalPaise / 100).toFixed(2),
+        total,
         issuedBy: session.fullName,
       });
-      return NextResponse.json({ id: receipt.id, receiptNumber: receipt.receiptNumber }, { status: 201 });
+      return NextResponse.json({
+        id: receipt.id,
+        serialNo: formatCashReceiptNumber(receipt.branch, receipt.receiptDate, receipt.receiptNumber),
+      }, { status: 201 });
     } catch (error) {
       console.error("Local cash receipt save failed", error);
       return NextResponse.json({ error: "Could not save the local receipt. Please try again." }, { status: 500 });
@@ -69,25 +65,46 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    const financialYear = financialYearFor(new Date());
+    // getCashReceiptFinancialYear derives the same financial year from the
+    // server-computed IST date string - asserted equal here so the stored
+    // financial_year column and the series lookup can never silently drift
+    // apart if the two ever disagree at a financial-year boundary.
+    if (getCashReceiptFinancialYear(receiptDate) !== financialYear) {
+      console.error("[Cash Receipt] financial year mismatch between financialYearFor and getCashReceiptFinancialYear", { receiptDate, financialYear });
+    }
+
     const receipt = await db.transaction(async (tx) => {
-      await tx.execute(sql`insert into ${cashReceiptCounters} (branch, financial_year, last_number) values (${branch}, ${financialYear}, 0) on conflict (branch, financial_year) do nothing`);
-      const locked = await tx.execute<{ last_number: number }>(sql`select last_number from ${cashReceiptCounters} where branch = ${branch} and financial_year = ${financialYear} for update`);
-      const receiptNumber = Number(locked.rows[0]?.last_number ?? 0) + 1;
-      await tx.update(cashReceiptCounters).set({ lastNumber: receiptNumber }).where(sql`${cashReceiptCounters.branch} = ${branch} and ${cashReceiptCounters.financialYear} = ${financialYear}`);
+      const sequence = await allocateCashReceiptNumber(tx, financialYear, branch);
+      const serialNo = formatCashReceiptNumber(branch, receiptDate, sequence);
+
+      // Allocation and row creation deliberately share this transaction -
+      // if the insert below fails, the counter rolls back with it, same
+      // gapless-but-never-wasted-on-a-failed-write guarantee as the other
+      // four series.
       const [saved] = await tx.insert(cashReceipts).values({
-        branch,
+        serialNo,
         financialYear,
-        receiptNumber,
+        branch,
         receiptDate,
         partyName,
         gstin: gstin || null,
         items,
-        total: (totalPaise / 100).toFixed(2),
-        issuedBy: session.fullName,
-      }).returning({ id: cashReceipts.id });
-      return { id: saved.id, receiptNumber };
+        total,
+        submittedByName: session.fullName,
+      }).returning({ id: cashReceipts.id, serialNo: cashReceipts.serialNo });
+
+      await tx.insert(auditLog).values({
+        cashReceiptId: saved.id,
+        action: "CASH_RECEIPT_SUBMITTED",
+        actor: session.fullName,
+        ipAddress: clientIp(request),
+        details: { serialNo: saved.serialNo, branch, total },
+      });
+
+      return saved;
     });
-    return NextResponse.json(receipt, { status: 201 });
+    return NextResponse.json({ id: receipt.id, serialNo: receipt.serialNo }, { status: 201 });
   } catch (error) {
     console.error("Cash receipt save failed", error);
     return NextResponse.json({ error: "Could not save the receipt. Please try again." }, { status: 500 });

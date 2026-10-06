@@ -1,11 +1,12 @@
 import { eq } from "drizzle-orm";
 import { notFound, redirect } from "next/navigation";
+import Link from "next/link";
 import { db } from "@/lib/db";
-import { cashReceipts } from "@/lib/db/schema";
+import { auditLog, cashReceipts } from "@/lib/db/schema";
 import { formatDateOnly } from "@/lib/date-time";
 import { PrintButton } from "@/components/form/PrintButton";
 import { getAdminSession } from "@/lib/admin-session";
-import { hasRole } from "@/lib/auth";
+import { hasFinanceRole, hasRole } from "@/lib/auth";
 import { getLocalCashReceipt } from "@/lib/cash-receipt-local-store";
 import { formatCashReceiptNumber } from "@/lib/cash-receipt-number";
 import Image from "next/image";
@@ -15,16 +16,31 @@ export const dynamic = "force-dynamic";
 export default async function CashReceiptPrintPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const session = await getAdminSession();
-  if (!session?.branchScope || !hasRole(session, "BRANCH")) redirect("/cash-receipt/login");
-  const receipt = process.env.NODE_ENV !== "production"
+  // Two ways in: the branch's own Cash Receipt login (own branch only), or
+  // a Finance Admin session (any branch) - the same way the Finance Admin
+  // listing's "View PDF" link reaches this page.
+  const isFinanceAdmin = hasFinanceRole(session);
+  const isBranchAccount = Boolean(session?.branchScope) && hasRole(session, "BRANCH");
+  if (!session || (!isFinanceAdmin && !isBranchAccount)) redirect("/cash-receipt/login");
+  const isProd = process.env.NODE_ENV === "production";
+  const receipt = !isProd
     ? await getLocalCashReceipt(id)
     : (await db.select().from(cashReceipts).where(eq(cashReceipts.id, id)).limit(1))[0];
-  if (!receipt || receipt.branch !== session.branchScope) notFound();
+  if (!receipt || (!isFinanceAdmin && receipt.branch !== session.branchScope)) notFound();
   const items = receipt.items;
-  const number = formatCashReceiptNumber(receipt.branch, receipt.receiptDate, receipt.receiptNumber);
+  const number = "serialNo" in receipt ? receipt.serialNo : formatCashReceiptNumber(receipt.branch, receipt.receiptDate, receipt.receiptNumber);
+  const issuedBy = "serialNo" in receipt ? receipt.submittedByName : receipt.issuedBy;
+  if (isProd) {
+    await db.insert(auditLog).values({
+      cashReceiptId: receipt.id,
+      action: "CASH_RECEIPT_PDF_GENERATED",
+      actor: session.fullName,
+      details: { serialNo: number },
+    });
+  }
 
   return <main className="mx-auto max-w-4xl px-5 py-8 print:max-w-none print:p-0">
-    <div className="mb-5 flex flex-wrap justify-between gap-3 print:hidden"><a href="/cash-receipt" className="rounded-md border border-gray-300 px-4 py-2 text-sm text-[#0b1f3a]">New receipt</a><PrintButton /></div>
+    <div className="mb-5 flex flex-wrap justify-between gap-3 print:hidden"><Link href="/cash-receipt" className="rounded-md border border-gray-300 px-4 py-2 text-sm text-[#0b1f3a]">New receipt</Link><PrintButton /></div>
     <article className="receipt-paper border border-gray-400 bg-white px-7 py-6 text-black print:border-0 print:px-0 print:py-0">
       <Image src="/mccia-logo.png" alt="MCCIA logo" width={1085} height={258} priority className="mx-auto mb-2 h-6 w-auto" />
       <h1 className="text-center text-base font-bold">CASH RECEIPT</h1>
@@ -39,7 +55,7 @@ export default async function CashReceiptPrintPage({ params }: { params: Promise
         <tr className="font-bold"><td colSpan={3} className="text-right">Total</td><td className="text-right">{Number(receipt.total).toFixed(2)}</td></tr>
       </tbody></table>
       <div className="mt-5 print:mt-2 text-xs">
-        <div><div>Issued by</div><div className="mt-1 font-bold">{receipt.issuedBy}</div></div>
+        <div><div>Issued by</div><div className="mt-1 font-bold">{issuedBy}</div></div>
       </div>
     </article>
     <style>{`.receipt-table th, .receipt-table td { border: 1px solid #111; padding: 7px 8px; } .receipt-table tbody tr { height: 36px; } @media print { @page { size: A5 landscape; margin: 5mm; } .receipt-paper { min-height: 0; break-inside: avoid; } .receipt-table th, .receipt-table td { padding: 4px 5px; } .receipt-table tbody tr { height: 28px; } }`}</style>

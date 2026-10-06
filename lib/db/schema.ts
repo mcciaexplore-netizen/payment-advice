@@ -597,30 +597,40 @@ export const serialCounters = pgTable(
   (table) => [primaryKey({ columns: [table.financialYear, table.series] })],
 );
 
-/** Independent sequential Cash Receipt series for each branch and financial year. */
-export const cashReceiptCounters = pgTable(
-  "cash_receipt_counters",
+/** Own independent gapless series per branch (CR/<branchCode>/<FY>/NNNN),
+ * allocated via the same lib/serial.ts SELECT ... FOR UPDATE primitive as
+ * the other four series — see allocateCashReceiptNumber(). Uses the
+ * existing serialCounters table (series = "CASH_RECEIPT:<branchCode>", one
+ * row per branch per financial year), not a separate counters table — same
+ * allocation mechanism, just a per-branch series key. */
+export const cashReceipts = pgTable(
+  "cash_receipts",
   {
-    branch: text("branch").notNull(),
+    id: uuid("id").primaryKey().defaultRandom(),
+    serialNo: text("serial_no").notNull().unique(),
     financialYear: text("financial_year").notNull(),
-    lastNumber: integer("last_number").default(0).notNull(),
+    branch: text("branch").notNull(),
+    receiptDate: date("receipt_date").notNull(),
+    partyName: text("party_name").notNull(),
+    gstin: text("gstin"),
+    items: jsonb("items").$type<Array<{ particulars: string; copies: number; price: string; amount: string; billNo?: string; billDate?: string }>>().notNull(),
+    total: numeric("total", { precision: 14, scale: 2 }).notNull(),
+    submittedByName: text("submitted_by_name").notNull(),
+    // Not collected by the form today (the Cash Receipt login identifies the
+    // submitter, no separate email field exists) - present for the same
+    // forward-compat reason Forwarding Memo's own submittedByEmail exists:
+    // nothing populates it yet, no notification code reads it.
+    submittedByEmail: text("submitted_by_email"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
-  (table) => [primaryKey({ columns: [table.branch, table.financialYear] })],
+  (table) => [
+    check(
+      "cash_receipts_branch_check",
+      sql`${table.branch} in ('SB Road Office', 'Tilak Road Office', 'Hadapsar Office', 'Bhosari Office', 'Ahilyanagar Office')`,
+    ),
+    check("cash_receipts_total_positive_check", sql`${table.total} > 0`),
+  ],
 );
-
-export const cashReceipts = pgTable("cash_receipts", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  branch: text("branch").notNull(),
-  financialYear: text("financial_year").notNull(),
-  receiptNumber: integer("receipt_number").notNull(),
-  receiptDate: date("receipt_date").notNull(),
-  partyName: text("party_name").notNull(),
-  gstin: text("gstin"),
-  items: jsonb("items").$type<Array<{ particulars: string; copies: number; price: string; amount: string; billNo?: string; billDate?: string }>>().notNull(),
-  total: numeric("total", { precision: 14, scale: 2 }).notNull(),
-  issuedBy: text("issued_by").notNull(),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-}, (table) => [unique().on(table.branch, table.financialYear, table.receiptNumber)]);
 
 export const auditLog = pgTable("audit_log", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -629,7 +639,8 @@ export const auditLog = pgTable("audit_log", {
   ),
   forwardingMemoId: uuid("forwarding_memo_id").references(() => forwardingMemos.id),
   vendorRequestId: uuid("vendor_request_id").references(() => vendorRequests.id),
-  action: text("action").notNull(), // 'SUBMITTED' | 'RESUBMITTED' | 'APPROVED' | 'SENT_BACK' | 'PDF_GENERATED' | 'EXPORTED' | 'VENDOR_REQUEST_SUBMITTED' | 'VENDOR_REQUEST_APPROVED' | 'VENDOR_REQUEST_SENT_BACK' | 'VENDOR_MSME_EMAIL_SENT'
+  cashReceiptId: uuid("cash_receipt_id").references(() => cashReceipts.id),
+  action: text("action").notNull(), // 'SUBMITTED' | 'RESUBMITTED' | 'APPROVED' | 'SENT_BACK' | 'PDF_GENERATED' | 'EXPORTED' | 'VENDOR_REQUEST_SUBMITTED' | 'VENDOR_REQUEST_APPROVED' | 'VENDOR_REQUEST_SENT_BACK' | 'VENDOR_MSME_EMAIL_SENT' | 'CASH_RECEIPT_SUBMITTED' | 'CASH_RECEIPT_PDF_GENERATED'
   actor: text("actor").notNull(),
   ipAddress: text("ip_address"),
   details: jsonb("details"),

@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { todayInIst } from "@/lib/date-time";
@@ -171,7 +172,7 @@ export function CashReceiptForm({ branch, issuedBy }: { branch: string; issuedBy
                 </td>
                 <td className="border-b border-r border-gray-300 p-2"><input aria-label="Copies" type="number" min="1" step="1" value={line.copies} onChange={(event) => updateLine(line.id, "copies", event.target.value)} className={inputClass} /></td>
                 <td className="border-b border-r border-gray-300 p-2"><input aria-label="Price" type="number" min="0.01" step="0.01" value={line.price} readOnly={line.particulars === "Sale of Directory"} onChange={(event) => updateLine(line.id, "price", event.target.value)} className={`${inputClass} read-only:bg-gray-100`} /></td>
-                <td className="border-b border-gray-300 px-3 py-2 text-right">{amount ? amount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—"}</td>
+                <td className="border-b border-gray-300 px-3 py-2 text-right">{amount ? amount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : ""}</td>
               </tr>;
             })}
             <tr className="bg-gray-50 font-semibold"><td colSpan={3} className="border-r border-gray-300 px-3 py-3 text-right">Total</td><td className="px-3 py-3 text-right">{total.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td></tr>
@@ -180,7 +181,7 @@ export function CashReceiptForm({ branch, issuedBy }: { branch: string; issuedBy
       </div>
       <div className="flex flex-wrap items-center justify-between gap-3"><button type="button" disabled={lines.length >= 20} onClick={addLine} className="rounded-md border border-[#0b1f3a] px-4 py-2 text-sm font-medium text-[#0b1f3a] disabled:opacity-50">+ Add Particular</button>{lines.length > 1 ? <button type="button" onClick={() => setLines((current) => current.slice(0, -1))} className="text-sm text-gray-600 underline">Remove last row</button> : null}</div>
       {error ? <p role="alert" className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{error}</p> : null}
-      <div className="flex flex-wrap justify-end gap-3"><a href="/" className="rounded-md border border-gray-300 px-5 py-2.5 text-sm font-medium text-[#0b1f3a]">Cancel</a><button disabled={saving} className="rounded-md bg-[#0b1f3a] px-6 py-2.5 text-sm font-medium text-white disabled:opacity-50">{saving ? "Saving…" : "Save & Print Receipt"}</button></div>
+      <div className="flex flex-wrap justify-end gap-3"><Link href="/" className="rounded-md border border-gray-300 px-5 py-2.5 text-sm font-medium text-[#0b1f3a]">Cancel</Link><button disabled={saving} className="rounded-md bg-[#0b1f3a] px-6 py-2.5 text-sm font-medium text-white disabled:opacity-50">{saving ? "Saving…" : "Save & Print Receipt"}</button></div>
     </form>
   </main>;
 }
