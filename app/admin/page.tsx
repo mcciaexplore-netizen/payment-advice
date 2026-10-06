@@ -4,6 +4,7 @@ import { getAdminSession } from "@/lib/admin-session";
 import { defaultPaymentModeForRoles } from "@/lib/admin/role-scope";
 import { buildTabCondition } from "@/lib/admin/filters";
 import { PipelineSummary, PIPELINE_SUMMARY_STAGES } from "@/components/admin/PipelineSummary";
+import { CashReceiptsSection } from "@/components/admin/CashReceiptsSection";
 import { db } from "@/lib/db";
 import { paymentAdvices } from "@/lib/db/schema";
 import { financialYearFor } from "@/lib/serial";
@@ -178,6 +179,8 @@ export default async function AdminDashboardPage() {
           <TotalCard label="Still Pending" value={Math.max(0, totalSubmitted - totalPaid)} detail="Submitted amount less paid / settled" />
         </div>
       </section>
+
+      <CashReceiptsSection searchParams={{}} baseHref="/admin/cash-receipts" limit={10} viewAllHref="/admin/cash-receipts" />
     </div>
   );
 }

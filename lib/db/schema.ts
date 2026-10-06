@@ -599,9 +599,9 @@ export const serialCounters = pgTable(
 
 /** Own independent gapless series per branch (CR/<branchCode>/<FY>/NNNN),
  * allocated via the same lib/serial.ts SELECT ... FOR UPDATE primitive as
- * the other four series — see allocateCashReceiptNumber(). Uses the
+ * the other four series, see allocateCashReceiptNumber(). Uses the
  * existing serialCounters table (series = "CASH_RECEIPT:<branchCode>", one
- * row per branch per financial year), not a separate counters table — same
+ * row per branch per financial year), not a separate counters table, same
  * allocation mechanism, just a per-branch series key. */
 export const cashReceipts = pgTable(
   "cash_receipts",
@@ -615,11 +615,17 @@ export const cashReceipts = pgTable(
     gstin: text("gstin"),
     items: jsonb("items").$type<Array<{ particulars: string; copies: number; price: string; amount: string; billNo?: string; billDate?: string }>>().notNull(),
     total: numeric("total", { precision: 14, scale: 2 }).notNull(),
+    // The real identity behind this receipt - who was actually logged in at
+    // submit time, not a free-text name. Drives server-side access control
+    // (a branch account may only view/download receipts where this matches
+    // their own session, never another branch member's, even within the
+    // same branch) and the Team Dashboard's own "Cash Receipts" list.
+    issuedByUserId: uuid("issued_by_user_id").notNull().references(() => adminUsers.id),
+    // Display snapshots of the issuer at submit time - submittedByName kept
+    // for the printed receipt/listing without a join, submittedByEmail now
+    // populated from the session's real admin_users.email (previously
+    // nothing populated it; the form still collects no separate email).
     submittedByName: text("submitted_by_name").notNull(),
-    // Not collected by the form today (the Cash Receipt login identifies the
-    // submitter, no separate email field exists) - present for the same
-    // forward-compat reason Forwarding Memo's own submittedByEmail exists:
-    // nothing populates it yet, no notification code reads it.
     submittedByEmail: text("submitted_by_email"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },

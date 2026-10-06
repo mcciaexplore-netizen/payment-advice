@@ -1,14 +1,14 @@
 import Link from "next/link";
 import { and, count, desc, eq, inArray, isNotNull, isNull, or, sql, sum } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { adminUserRoles, adminUsers, paymentAdvices, paymentEntries, recommendingAuthorities } from "@/lib/db/schema";
+import { adminUserRoles, adminUsers, cashReceipts, paymentAdvices, paymentEntries, recommendingAuthorities } from "@/lib/db/schema";
 import { getAdminSession } from "@/lib/admin-session";
 import { displayNoFor } from "@/lib/advice/document-identity";
 import { pipelineStageFor } from "@/lib/advice/pipeline-stage";
 import { StageBadge } from "@/components/admin/StageBadge";
 import { StageLegend } from "@/components/admin/StageLegend";
 import { PaymentMode } from "@/lib/validation/payment-advice";
-import { formatIstDate } from "@/lib/date-time";
+import { formatDateOnly, formatIstDate } from "@/lib/date-time";
 import { buildTabCondition, isAdminTab } from "@/lib/admin/filters";
 import { PIPELINE_SUMMARY_STAGES, PipelineSummary } from "@/components/admin/PipelineSummary";
 import { StageAgingIndicator } from "@/components/admin/StageAgingIndicator";
@@ -20,7 +20,7 @@ import { submissionPdfHref } from "@/lib/advice/submission-pdf";
 export const dynamic = "force-dynamic";
 
 type AuthorityView = "pending" | "history" | "my-submissions";
-type TeamView = "team-submissions" | "my-submissions";
+type TeamView = "team-submissions" | "my-submissions" | "cash-receipts";
 type DashboardRole = "AUTHORITY" | "BRANCH" | "DEPARTMENT" | "SELF";
 type DashboardGrant = { role: DashboardRole; recommendingAuthorityId: string | null; scopeValue: string | null };
 
@@ -67,11 +67,21 @@ export default async function TeamDashboard({ searchParams }: { searchParams: Pr
   // tab switcher below is hidden entirely rather than offering a toggle
   // between two tabs that would show the exact same rows.
   const isSelfOnly = activeGrant.role === "SELF";
+  // Only a BRANCH grant can have issued Cash Receipts - the login that
+  // creates them requires exactly this role (see
+  // app/api/cash-receipt/login/route.ts).
+  const isBranchGrant = activeGrant.role === "BRANCH";
   const isDg = isAuthority && authorityRows[0]?.authorityName.trim().toUpperCase() === "DG";
   if (isDg && (!params.view || params.view === "executive")) return loadDgExecutiveDashboard();
   const authorityView: AuthorityView = params.view === "history" ? "history" : params.view === "my-submissions" ? "my-submissions" : "pending";
-  const teamView: TeamView = isSelfOnly || params.view === "my-submissions" ? "my-submissions" : "team-submissions";
+  const teamView: TeamView = isSelfOnly || params.view === "my-submissions" ? "my-submissions"
+    : isBranchGrant && params.view === "cash-receipts" ? "cash-receipts"
+    : "team-submissions";
   const view = isAuthority ? authorityView : teamView;
+
+  if (view === "cash-receipts") {
+    return loadCashReceiptsTab(activeGrant, grants, session.adminUserId);
+  }
 
   const ownSubmissions = eq(paymentAdvices.submittedByEmail, account.email);
   const authorityScope = eq(paymentAdvices.recommendingAuthorityId, activeGrant.recommendingAuthorityId!);
@@ -153,6 +163,7 @@ export default async function TeamDashboard({ searchParams }: { searchParams: Pr
       ) : <>
         <Tab href={`/authority?role=${activeGrant.role}`} active={view === "team-submissions"}>Team Submissions</Tab>
         <Tab href={`/authority?role=${activeGrant.role}&view=my-submissions`} active={view === "my-submissions"}>My Submissions</Tab>
+        {isBranchGrant ? <Tab href={`/authority?role=${activeGrant.role}&view=cash-receipts`} active={false}>Cash Receipts</Tab> : null}
       </>}
       <div className="ml-auto mb-1.5"><StageLegend /></div>
     </nav>
@@ -172,6 +183,55 @@ export default async function TeamDashboard({ searchParams }: { searchParams: Pr
         <td className="p-3">{isAuthority && view === "pending" ? <div className="flex flex-col items-start gap-2"><StageBadge stage="Waiting on Authority" /><StageAgingIndicator advice={row} /><ViewLink adviceId={row.id} from="pending" /></div> : isAuthority && view === "history" ? <div className="text-xs"><StageBadge stage={row.status === "REJECTED" ? "Rejected" : row.approvedAt ? "Awaiting Finance Review" : "Sent Back"} /><div className="mt-1 text-gray-500">{date(row.finalRejectedAt ?? row.approvedAt ?? row.rejectedAt!)}</div>{(row.finalRejectionRemarks ?? row.authorityRemarks) ? <div className="mt-1 max-w-xs text-gray-600">{row.finalRejectionRemarks ?? row.authorityRemarks}</div> : null}</div> : <div className="text-xs"><StageBadge stage={pipelineStageFor(row)} /><div><StageAgingIndicator advice={row} /></div>{row.adminRemarks ? <div className="mt-2 max-w-xs rounded bg-amber-50 px-2 py-1 text-amber-800">Sent-back remarks: {row.adminRemarks}</div> : null}</div>}</td>
         {view === "my-submissions" ? <td className="p-3"><a href={submissionPdfHref(row)} download className="inline-flex whitespace-nowrap rounded-md border border-[#0b1f3a] px-3 py-2 text-xs font-medium text-[#0b1f3a] hover:bg-[#0b1f3a]/5">Download PDF</a></td> : null}
         {isAuthority && view === "history" ? <td className="p-3"><ViewLink adviceId={row.id} from="history" /></td> : null}
+      </tr>)}</tbody>
+    </table></div>}
+  </div>;
+}
+
+function formatAmount(value: string): string {
+  return `₹ ${Number(value).toLocaleString("en-IN", { minimumFractionDigits: 2 })}`;
+}
+
+/** The Cash Receipts tab on a BRANCH account's Team Dashboard - only the
+ * receipts this specific person issued, never a colleague's even in the
+ * same branch, enforced here by the query itself (issuedByUserId =
+ * session.adminUserId), the same restriction the View/Download routes
+ * enforce server-side - this is not a UI-only filter layered on top of a
+ * broader query. */
+async function loadCashReceiptsTab(
+  activeGrant: DashboardGrant,
+  grants: DashboardGrant[],
+  adminUserId: string,
+) {
+  const rows = await db
+    .select()
+    .from(cashReceipts)
+    .where(eq(cashReceipts.issuedByUserId, adminUserId))
+    .orderBy(desc(cashReceipts.createdAt));
+
+  return <div className="flex flex-col gap-6">
+    <header><h1 className="font-heading text-3xl text-[#0b1f3a]">Cash Receipts</h1><p className="mt-1 text-sm text-gray-600">{rows.length} receipt{rows.length === 1 ? "" : "s"} you have issued.</p></header>
+    {grants.length > 1 ? <nav aria-label="Dashboard role" className="flex flex-wrap gap-2 rounded-lg bg-gray-100 p-1.5">
+      {grants.map((grant) => <Link key={grant.role} href={`/authority?role=${grant.role}`} className={`rounded-md px-3 py-2 text-sm font-medium ${grant.role === activeGrant.role ? "bg-white text-[#0b1f3a] shadow-sm" : "text-gray-600 hover:text-[#0b1f3a]"}`}>{roleLabel(grant)}</Link>)}
+    </nav> : null}
+    <nav className="flex flex-wrap items-center gap-2 border-b border-gray-200 pb-0">
+      <Tab href={`/authority?role=${activeGrant.role}`} active={false}>Team Submissions</Tab>
+      <Tab href={`/authority?role=${activeGrant.role}&view=my-submissions`} active={false}>My Submissions</Tab>
+      <Tab href={`/authority?role=${activeGrant.role}&view=cash-receipts`} active>Cash Receipts</Tab>
+    </nav>
+    {rows.length === 0 ? <div className="rounded-lg border border-gray-200 p-10 text-center text-sm text-gray-500">
+      You have not issued any Cash Receipts yet.
+    </div> : <div className="overflow-x-auto rounded-lg border border-gray-200"><table className="w-full text-left text-sm">
+      <thead className="bg-gray-50 text-xs uppercase text-gray-500"><tr><th className="p-3">Reference</th><th className="p-3">Party Name</th><th className="p-3">Amount</th><th className="p-3">Receipt Date</th><th className="p-3">Documents</th></tr></thead>
+      <tbody className="divide-y divide-gray-100">{rows.map((row) => <tr key={row.id} className="align-top">
+        <td className="p-3 font-medium text-[#0b1f3a]">{row.serialNo}</td>
+        <td className="p-3">{row.partyName}</td>
+        <td className="p-3 whitespace-nowrap">{formatAmount(row.total)}</td>
+        <td className="p-3 whitespace-nowrap">{formatDateOnly(row.receiptDate)}</td>
+        <td className="p-3"><div className="flex items-center gap-2">
+          <a href={`/cash-receipt/${row.id}`} target="_blank" rel="noreferrer" className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50">View</a>
+          <a href={`/api/cash-receipt/${row.id}/pdf`} className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50">Download</a>
+        </div></td>
       </tr>)}</tbody>
     </table></div>}
   </div>;

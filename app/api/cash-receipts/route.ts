@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { auditLog, cashReceipts } from "@/lib/db/schema";
+import { adminUsers, auditLog, cashReceipts } from "@/lib/db/schema";
 import { cashReceiptSchema } from "@/lib/validation/cash-receipt";
 import { todayInIst } from "@/lib/date-time";
 import { BRANCH_OPTIONS } from "@/lib/validation/payment-advice";
@@ -78,6 +79,16 @@ export async function POST(request: NextRequest) {
       const sequence = await allocateCashReceiptNumber(tx, financialYear, branch);
       const serialNo = formatCashReceiptNumber(branch, receiptDate, sequence);
 
+      // The real issuer, read from the authenticated account's own row, not
+      // trusted from the session's display name alone - this is what both
+      // the Team Dashboard's "Cash Receipts" list and the server-side
+      // access check (lib/advice/cash-receipt-access.ts) key off of.
+      const [issuer] = await tx
+        .select({ email: adminUsers.email })
+        .from(adminUsers)
+        .where(eq(adminUsers.id, session.adminUserId))
+        .limit(1);
+
       // Allocation and row creation deliberately share this transaction -
       // if the insert below fails, the counter rolls back with it, same
       // gapless-but-never-wasted-on-a-failed-write guarantee as the other
@@ -91,7 +102,9 @@ export async function POST(request: NextRequest) {
         gstin: gstin || null,
         items,
         total,
+        issuedByUserId: session.adminUserId,
         submittedByName: session.fullName,
+        submittedByEmail: issuer?.email ?? null,
       }).returning({ id: cashReceipts.id, serialNo: cashReceipts.serialNo });
 
       await tx.insert(auditLog).values({

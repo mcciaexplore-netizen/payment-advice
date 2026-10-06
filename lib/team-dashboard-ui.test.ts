@@ -19,8 +19,16 @@ describe("Team Dashboard scoped views", () => {
   it("SELF (individual-scope grant, 2026-10) reuses the same ownSubmissions predicate rather than its own matching logic, and is always forced into the My Submissions view", () => {
     expect(source).toContain('activeGrant.role === "SELF"\n        ? ownSubmissions');
     expect(source).toContain('const isSelfOnly = activeGrant.role === "SELF"');
-    expect(source).toContain('isSelfOnly || params.view === "my-submissions" ? "my-submissions" : "team-submissions"');
+    expect(source).toContain('isSelfOnly || params.view === "my-submissions" ? "my-submissions"');
     expect(source).not.toContain('activeGrant.role === "SELF"\n        ? caseInsensitiveEq');
+  });
+
+  it("Cash Receipts tab (2026-10) is offered only to BRANCH grants, and is a fully separate query path scoped to the signed-in issuer, not a filter layered on the Team Submissions query", () => {
+    expect(source).toContain('const isBranchGrant = activeGrant.role === "BRANCH"');
+    expect(source).toContain('if (view === "cash-receipts")');
+    expect(source).toContain("return loadCashReceiptsTab(activeGrant, grants, session.adminUserId)");
+    expect(source).toContain(".where(eq(cashReceipts.issuedByUserId, adminUserId))");
+    expect(source).toContain('isBranchGrant ? <Tab href={`/authority?role=${activeGrant.role}&view=cash-receipts`}');
   });
 
   it("keeps Team Submissions read-only while Authority rows retain View actions", () => {

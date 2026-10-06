@@ -1,5 +1,5 @@
 {
-  "id": "59499a24-01c5-44b9-a684-e5652c4b459d",
+  "id": "493e1184-3409-41bc-907f-3cd0d14cefc3",
   "prevId": "d0ab0e26-e604-4cfe-9705-648f37b27edd",
   "version": "7",
   "dialect": "postgresql",
@@ -517,6 +517,12 @@
           "primaryKey": false,
           "notNull": true
         },
+        "issued_by_user_id": {
+          "name": "issued_by_user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
         "submitted_by_name": {
           "name": "submitted_by_name",
           "type": "text",
@@ -538,7 +544,21 @@
         }
       },
       "indexes": {},
-      "foreignKeys": {},
+      "foreignKeys": {
+        "cash_receipts_issued_by_user_id_admin_users_id_fk": {
+          "name": "cash_receipts_issued_by_user_id_admin_users_id_fk",
+          "tableFrom": "cash_receipts",
+          "tableTo": "admin_users",
+          "columnsFrom": [
+            "issued_by_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "cash_receipts_serial_no_unique": {
