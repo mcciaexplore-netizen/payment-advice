@@ -43,43 +43,43 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   return (
     <div className="flex min-h-full flex-1 flex-col">
       <header className="border-b border-gray-200 bg-[#0b1f3a]">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-3">
-          <Link href="/admin" className="flex items-center gap-3">
-            <Image src="/mccia-logo.png" alt="MCCIA logo" width={1085} height={258} className="h-7 w-auto" />
-            <span className="font-heading text-lg text-white">Finance Admin</span>
+        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-y-3 px-6 py-3">
+          <Link href="/admin" className="flex items-center gap-3 whitespace-nowrap">
+            <Image src="/mccia-logo.png" alt="MCCIA logo" width={1085} height={258} className="h-7 w-auto shrink-0" />
+            <span className="font-heading text-lg text-white whitespace-nowrap">Finance Admin</span>
           </Link>
           {session ? (
-            <nav className="flex items-center gap-6 text-sm text-white/80">
-              <Link href="/admin" className="hover:text-white">
+            <nav className="flex flex-wrap items-center justify-end gap-x-6 gap-y-2 text-sm text-white/80">
+              <Link href="/admin" className="whitespace-nowrap hover:text-white">
                 Dashboard
               </Link>
-              <Link href="/admin/submissions" className="hover:text-white">
+              <Link href="/admin/submissions" className="whitespace-nowrap hover:text-white">
                 Submissions
               </Link>
-              <Link href="/admin/vendors" className="hover:text-white">
+              <Link href="/admin/vendors" className="whitespace-nowrap hover:text-white">
                 Vendors
               </Link>
-              <Link href="/admin/vendor-review" className="hover:text-white">
+              <Link href="/admin/vendor-review" className="whitespace-nowrap hover:text-white">
                 Vendor Review
               </Link>
-              <Link href="/admin/vendor-requests" className="hover:text-white">
+              <Link href="/admin/vendor-requests" className="whitespace-nowrap hover:text-white">
                 Vendor Addition Requests
               </Link>
-              <Link href="/admin/staff" className="hover:text-white">
+              <Link href="/admin/staff" className="whitespace-nowrap hover:text-white">
                 Staff &amp; Authorities
               </Link>
-              <Link href="/admin/forwarding-memos" className="hover:text-white">
+              <Link href="/admin/forwarding-memos" className="whitespace-nowrap hover:text-white">
                 Forwarding Memos
               </Link>
-              <Link href="/admin/cash-receipts" className="hover:text-white">
+              <Link href="/admin/cash-receipts" className="whitespace-nowrap hover:text-white">
                 Cash Receipts
               </Link>
               {hasRole(session, "AUTHORITY") ? (
-                <Link href="/authority" className="hover:text-white">
+                <Link href="/authority" className="whitespace-nowrap hover:text-white">
                   My Recommendations
                 </Link>
               ) : null}
-              <div className="flex items-center gap-5 border-l border-white/20 pl-6">
+              <div className="flex items-center gap-5 whitespace-nowrap border-l border-white/20 pl-6">
                 <NewSubmissionLink />
                 <AccountMenu
                   label={roleSummaryLabel(session.fullName, session.roles)}
