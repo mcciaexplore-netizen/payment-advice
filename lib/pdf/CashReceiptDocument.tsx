@@ -91,7 +91,9 @@ export function CashReceiptDocument({ data, logoDataUrl }: { data: CashReceiptPd
             <Text style={[styles.headerCell, styles.priceCol]}>PRICE</Text>
             <Text style={[styles.headerCell, styles.amountCol]}>AMOUNT{"\n"}Rs.</Text>
           </View>
-          {data.items.map((item, index) => (
+          {data.items.map((item, index) => {
+            const isHallHiring = item.particulars.startsWith("Hall Hiring Charges");
+            return (
             <View key={`${item.particulars}-${index}`} style={styles.row}>
               <View style={[styles.cell, styles.particularsCol]}>
                 <Text>{index + 1}) {item.particulars}</Text>
@@ -101,11 +103,12 @@ export function CashReceiptDocument({ data, logoDataUrl }: { data: CashReceiptPd
                   </Text>
                 ) : null}
               </View>
-              <Text style={[styles.cell, styles.copiesCol]}>{item.copies || ""}</Text>
-              <Text style={[styles.cell, styles.priceCol]}>{item.copies ? Number(item.price).toFixed(2) : ""}</Text>
-              <Text style={[styles.cell, styles.amountCol]}>{item.copies ? Number(item.amount).toFixed(2) : ""}</Text>
+              <Text style={[styles.cell, styles.copiesCol]}>{isHallHiring ? "" : item.copies || ""}</Text>
+              <Text style={[styles.cell, styles.priceCol]}>{isHallHiring || item.copies ? Number(item.price).toFixed(2) : ""}</Text>
+              <Text style={[styles.cell, styles.amountCol]}>{isHallHiring || item.copies ? Number(item.amount).toFixed(2) : ""}</Text>
             </View>
-          ))}
+            );
+          })}
           <View style={styles.row}>
             <Text style={[styles.cell, styles.totalLabel, { width: "80%" }]}>Total</Text>
             <Text style={[styles.cell, styles.totalValue, styles.amountCol]}>{Number(data.total).toFixed(2)}</Text>

@@ -10,6 +10,7 @@ export function CashReceiptLoginForm() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -50,7 +51,7 @@ export function CashReceiptLoginForm() {
     <form onSubmit={submit} className="flex w-full flex-col gap-4">
       {error ? <div role="alert" className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{error}</div> : null}
       <div className="flex flex-col gap-1.5"><label htmlFor="cash-receipt-email" className="text-sm font-medium text-[#0b1f3a]">Email</label><Input id="cash-receipt-email" type="email" required autoFocus autoComplete="username" value={email} onChange={(event) => setEmail(event.target.value)} /></div>
-      <div className="flex flex-col gap-1.5"><label htmlFor="cash-receipt-password" className="text-sm font-medium text-[#0b1f3a]">Password</label><Input id="cash-receipt-password" type="password" required autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} /></div>
+      <div className="flex flex-col gap-1.5"><label htmlFor="cash-receipt-password" className="text-sm font-medium text-[#0b1f3a]">Password</label><div className="relative"><Input id="cash-receipt-password" type={showPassword ? "text" : "password"} required autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} className="pr-16" /><button type="button" onClick={() => setShowPassword((visible) => !visible)} aria-controls="cash-receipt-password" aria-pressed={showPassword} className="absolute inset-y-0 right-3 text-sm text-gray-600 underline">{showPassword ? "Hide" : "Show"}</button></div></div>
       <button disabled={submitting} className="rounded-md bg-[#0b1f3a] px-6 py-2.5 font-medium text-white disabled:opacity-50">{submitting ? "Signing in…" : "Sign in"}</button>
       <Link href="/" className="text-center text-sm text-gray-600 underline">Back to Payment Desk</Link>
     </form>

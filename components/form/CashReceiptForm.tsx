@@ -26,6 +26,7 @@ type ReceiptLine = {
   id: number;
   particulars: string;
   detail: string;
+  courseName: string;
   directoryType: string;
   memberNo: string;
   copies: string;
@@ -35,8 +36,13 @@ type ReceiptLine = {
 };
 
 const blankLine = (id: number): ReceiptLine => ({
-  id, particulars: "", detail: "", directoryType: "", memberNo: "", copies: "", price: "", billNo: "", billDate: "",
+  id, particulars: "", detail: "", courseName: "", directoryType: "", memberNo: "", copies: "", price: "", billNo: "", billDate: "",
 });
+
+function lineAmount(line: ReceiptLine) {
+  const price = Number(line.price) || 0;
+  return line.particulars === "Hall Hiring Charges" ? price : (Number(line.copies) || 0) * price;
+}
 
 function directoryPrice(directoryType: string) {
   if (directoryType === "Defence Directory - Member") return "900";
@@ -56,7 +62,7 @@ export function CashReceiptForm({ branch, issuedBy }: { branch: string; issuedBy
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const total = useMemo(
-    () => lines.reduce((sum, line) => sum + (Number(line.copies) || 0) * (Number(line.price) || 0), 0),
+    () => lines.reduce((sum, line) => sum + lineAmount(line), 0),
     [lines],
   );
 
@@ -65,7 +71,7 @@ export function CashReceiptForm({ branch, issuedBy }: { branch: string; issuedBy
       if (line.id !== id) return line;
       let updated = { ...line, [field]: value };
       if (field === "particulars") {
-        updated = { ...updated, directoryType: "", memberNo: "", price: "" };
+        updated = { ...updated, directoryType: "", memberNo: "", courseName: "", price: "" };
       } else if (field === "directoryType") {
         if (value !== "Defence Directory - Member") updated.memberNo = "";
         if (updated.particulars === "Sale of Directory") {
@@ -86,18 +92,20 @@ export function CashReceiptForm({ branch, issuedBy }: { branch: string; issuedBy
     event.preventDefault();
     setError("");
     const hasPartialLine = lines.some((line) => {
-      const hasAnyValue = line.particulars || line.copies || line.price;
+      const hasAnyValue = line.particulars || line.copies || line.price || line.courseName.trim();
+      const isHallHiring = line.particulars === "Hall Hiring Charges";
       const directoryInfoMissing = line.particulars === "Sale of Directory" &&
         (!line.directoryType || (line.directoryType === "Defence Directory - Member" && !line.memberNo.trim()));
-      return (hasAnyValue && (!line.particulars || Number(line.copies) <= 0 || Number(line.price) <= 0)) || directoryInfoMissing;
+      const courseInfoMissing = line.particulars === "Course / Seminar Fee" && !line.courseName.trim();
+      return (hasAnyValue && (!line.particulars || (!isHallHiring && Number(line.copies) <= 0) || Number(line.price) <= 0)) || directoryInfoMissing || courseInfoMissing;
     });
     if (hasPartialLine) {
-      setError("Complete the particulars, copies, and price for each row, or leave the row empty.");
+      setError("Complete the particulars, required details, and price for each row, or leave the row empty.");
       return;
     }
-    const filledLines = lines.filter((line) => line.particulars && Number(line.copies) > 0 && Number(line.price) > 0);
+    const filledLines = lines.filter((line) => line.particulars && (line.particulars === "Hall Hiring Charges" || Number(line.copies) > 0) && Number(line.price) > 0);
     if (!filledLines.length) {
-      setError("Add at least one particulars row with copies and price.");
+      setError("Add at least one particulars row with a price.");
       return;
     }
 
@@ -114,8 +122,10 @@ export function CashReceiptForm({ branch, issuedBy }: { branch: string; issuedBy
               ? `${line.particulars} - ${line.directoryType}${line.directoryType === "Defence Directory - Member" ? ` (Member ID: ${line.memberNo.trim()})` : ""}`
               : line.particulars === "Others (Specify)" && line.detail.trim()
                 ? `${line.particulars}: ${line.detail.trim()}`
+                : line.particulars === "Course / Seminar Fee" && line.courseName.trim()
+                  ? `${line.particulars}: ${line.courseName.trim()}`
                 : line.particulars,
-            copies: Number(line.copies),
+            copies: line.particulars === "Hall Hiring Charges" ? 1 : Number(line.copies),
             price: Number(line.price),
             billNo: line.billNo,
             billDate: line.billDate,
@@ -151,9 +161,8 @@ export function CashReceiptForm({ branch, issuedBy }: { branch: string; issuedBy
           <thead className="bg-gray-100 text-[#0b1f3a]"><tr><th className="w-[50%] border-b border-r border-gray-300 px-3 py-3 text-left">Particulars</th><th className="w-[14%] border-b border-r border-gray-300 px-3 py-3 text-left">Copies</th><th className="w-[16%] border-b border-r border-gray-300 px-3 py-3 text-left">Price</th><th className="w-[20%] border-b border-gray-300 px-3 py-3 text-right">Amount (Rs.)</th></tr></thead>
           <tbody>
             {lines.map((line) => {
-              const copies = Number(line.copies) || 0;
-              const price = Number(line.price) || 0;
-              const amount = copies * price;
+              const isHallHiring = line.particulars === "Hall Hiring Charges";
+              const amount = lineAmount(line);
               return <tr key={line.id}>
                 <td className="border-b border-r border-gray-300 p-2">
                   <select aria-label="Particulars" value={line.particulars} onChange={(event) => updateLine(line.id, "particulars", event.target.value)} className={inputClass}>
@@ -168,9 +177,10 @@ export function CashReceiptForm({ branch, issuedBy }: { branch: string; issuedBy
                     {line.directoryType === "Defence Directory - Member" ? <input aria-label="Member ID" required maxLength={100} placeholder="Member ID" value={line.memberNo} onChange={(event) => updateLine(line.id, "memberNo", event.target.value)} className={inputClass} /> : null}
                   </div> : null}
                   {line.particulars === "Others (Specify)" ? <input aria-label="Specify other particulars" placeholder="Specify" value={line.detail} onChange={(event) => updateLine(line.id, "detail", event.target.value)} className="mt-2 w-full border-b border-gray-400 px-1 py-1 text-sm outline-none" /> : null}
+                  {line.particulars === "Course / Seminar Fee" ? <input aria-label="Course or seminar name" required maxLength={200} placeholder="Course / seminar name" value={line.courseName} onChange={(event) => updateLine(line.id, "courseName", event.target.value)} className="mt-2 w-full border-b border-gray-400 px-1 py-1 text-sm outline-none" /> : null}
                   {line.particulars === "Hall Hiring Charges" ? <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs"><label>Bill No. <input value={line.billNo} onChange={(event) => updateLine(line.id, "billNo", event.target.value)} className="w-24 border-b border-gray-400 px-1 py-1 outline-none" /></label><label>Date <input type="date" value={line.billDate} onChange={(event) => updateLine(line.id, "billDate", event.target.value)} className="border-b border-gray-400 px-1 py-1 outline-none" /></label></div> : null}
                 </td>
-                <td className="border-b border-r border-gray-300 p-2"><input aria-label="Copies" type="number" min="1" step="1" value={line.copies} onChange={(event) => updateLine(line.id, "copies", event.target.value)} className={inputClass} /></td>
+                <td className="border-b border-r border-gray-300 p-2">{isHallHiring ? <input aria-label="Copies" type="text" value="" disabled tabIndex={-1} className={`${inputClass} cursor-not-allowed bg-gray-100`} /> : <input aria-label="Copies" type="number" min="1" step="1" value={line.copies} onChange={(event) => updateLine(line.id, "copies", event.target.value)} className={inputClass} />}</td>
                 <td className="border-b border-r border-gray-300 p-2"><input aria-label="Price" type="number" min="0.01" step="0.01" value={line.price} readOnly={line.particulars === "Sale of Directory"} onChange={(event) => updateLine(line.id, "price", event.target.value)} className={`${inputClass} read-only:bg-gray-100`} /></td>
                 <td className="border-b border-gray-300 px-3 py-2 text-right">{amount ? amount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : ""}</td>
               </tr>;

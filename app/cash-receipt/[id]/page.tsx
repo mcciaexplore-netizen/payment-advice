@@ -102,7 +102,10 @@ function CashReceiptPaper({
       <div className="mt-3 print:mt-1 border-b border-black pb-2 print:pb-1 text-sm"><strong>M/s&nbsp; {partyName}</strong></div>
       <div className="mt-1 min-h-7 border-b border-black text-xs">GSTIN: {gstin ?? ""}</div>
       <table className="receipt-table mt-4 print:mt-2 w-full border-collapse text-xs"><thead><tr><th className="w-[52%]">PARTICULARS</th><th className="w-[13%]">COPIES</th><th className="w-[15%]">PRICE</th><th className="w-[20%]">AMOUNT<br />Rs.</th></tr></thead><tbody>
-        {items.map((item, index) => <tr key={`${item.particulars}-${index}`}><td>{index + 1}) {item.particulars}{item.particulars.startsWith("Hall Hiring Charges") ? <div className="mt-1 pl-3 text-[10px]">Bill No. {item.billNo || "________"} &nbsp;&nbsp;&nbsp; Date {item.billDate ? formatDateOnly(item.billDate) : "________"}</div> : null}</td><td className="text-center">{item.copies || ""}</td><td className="text-right">{item.copies ? Number(item.price).toFixed(2) : ""}</td><td className="text-right">{item.copies ? Number(item.amount).toFixed(2) : ""}</td></tr>)}
+        {items.map((item, index) => {
+          const isHallHiring = item.particulars.startsWith("Hall Hiring Charges");
+          return <tr key={`${item.particulars}-${index}`}><td>{index + 1}) {item.particulars}{isHallHiring ? <div className="mt-1 pl-3 text-[10px]">Bill No. {item.billNo || "________"} &nbsp;&nbsp;&nbsp; Date {item.billDate ? formatDateOnly(item.billDate) : "________"}</div> : null}</td><td className="text-center">{isHallHiring ? "" : item.copies || ""}</td><td className="text-right">{isHallHiring || item.copies ? Number(item.price).toFixed(2) : ""}</td><td className="text-right">{isHallHiring || item.copies ? Number(item.amount).toFixed(2) : ""}</td></tr>;
+        })}
         <tr className="font-bold"><td colSpan={3} className="text-right">Total</td><td className="text-right">{Number(total).toFixed(2)}</td></tr>
       </tbody></table>
       <div className="mt-5 print:mt-2 text-xs">
