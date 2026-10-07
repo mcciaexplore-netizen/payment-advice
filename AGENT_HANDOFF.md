@@ -4,6 +4,8 @@
 
 **Rule: update this file as the LAST step of every session, before ending it, whether you are Claude Code or Codex.** If you finish work and don't update this file, the next agent (possibly the other one) will be working blind.
 
+**Before doing anything else, also read `CONTRIBUTING.md` in the repo root.** It is the binding contributor workflow for this repo (branch and PR only, never push to `main`, migrations applied by the owner only, shared files touched with care) written after three incidents where code reached `main` depending on database changes the contributor could not make. This file (`AGENT_HANDOFF.md`) is the ground-truth state; `CONTRIBUTING.md` is the rules for how to change that state safely.
+
 ---
 
 ## 0. Ground rules for any agent starting a session
