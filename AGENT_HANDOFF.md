@@ -47,7 +47,10 @@ Design system: Navy `#0B1F3A`, Forest green `#2E8B57`, Amber `#E8A33D`. Headings
 
 ## 3. Current State (update this every session)
 
-**Last updated:** 7 October 2026, by Claude Sonnet 5 (`feature/cash-receipt-nav-item` merged to `main`; a colleague's direct-to-main commit with an unapplied migration was found along the way - see entry below)
+**Last updated:** 7 October 2026, by Codex (Cash Receipt form refinements pushed to `main` at the user's explicit request)
+
+### Cash Receipt form refinements pushed to main (Codex, 2026-10-07)
+At the user's explicit request, commit `f007c9a` was pushed directly to `main` after syncing to `origin/main` at `1e4e434`. The Cash Receipt login now has a Show/Hide password control. Hall Hiring Charges no longer accepts Copies in the form; the entered price is used as its line amount and the printed receipt/PDF leave Copies blank. Course / Seminar Fee now collects the course name and includes it in the stored particulars and receipt output. No database schema, migration, login policy, or access-role change was made. Production build and targeted ESLint passed; the full test suite was not run. The separate Excel report draft remains local and uncommitted.
 
 ### Merged to main, and a second direct-to-main push found mid-merge (Claude Sonnet 5, 2026-10-07)
 Asked to merge `feature/cash-receipt-nav-item` (the nav restructure + Vendor Review merge described below) to `main`. Re-checking `origin/main` before merging - standard practice in this file by now - found it had moved: `c5575b2 "fix: grant scoped cash receipt access"`, pushed directly to `main` with no PR by the same account that pushed the original un-PR'd Cash Receipt commits (`Vedshri2004`, 2026-10-06 16:54 IST, about 25 minutes after this session's own Cash Receipt merge).
@@ -1138,6 +1141,8 @@ Requested because every `admin_users` password (Sunil's, Abha's, the ALL account
 
 ## 4. Open Items (verify before building on top of these)
 
+- **Cash Receipt Excel report draft remains local only (2026-10-07).** The working tree has an uncommitted report button and Excel export route. It was not included in `f007c9a`; review it separately before any push. The local checkout has no `DATABASE_URL`, so it cannot display the main database's receipt records.
+
 Status legend: 🔴 unverified / high risk · 🟡 unverified / lower risk · 🟢 verified
 
 - 🟡 **A colleague with no DB access pushed three real commits directly to `main`, no branch, no PR, found 2026-10-06 while scoping Cash Receipt.** Worth knowing for anyone relying on "everything on `main` went through review": it does not, by default, for every contributor. The actual commits (`58fc92e`, `1764ca8`, `c8b354d`) are now superseded by the Cash Receipt rebuild on `feature/cash-receipt-db-wiring`, not reverted - no action needed on the commits themselves, flagging only the process gap for awareness.
@@ -1297,6 +1302,8 @@ Status legend: 🔴 unverified / high risk · 🟡 unverified / lower risk · �
 - **`lib/email/templates.ts`'s `shell()` loads the MCCIA logo from `https://payment-advice.vercel.app/mccia-logo.png` (this app's own domain), not from `mcciapune.com` directly (2026-10-01, fixed a real broken-image bug affecting every email this app sends).** Don't revert to hotlinking the logo from `mcciapune.com` or any other third-party host — email clients need a stable, reliably-reachable image URL, and this app doesn't control that site's hotlinking/availability. The underlying asset is `public/mccia-logo.png`, the same file the Payment Advice/Cash Voucher/Forwarding Memo PDFs already embed — if that file is ever replaced with a different logo, no code change is needed here, but re-check the hardcoded `width="160" height="38"` in `shell()` still matches its aspect ratio (currently ~4.2:1, matching the real 1085x258 asset).
 
 ## 6. Session Log
+
+2026-10-07 - Codex - Pushed Cash Receipt form refinements to `main` at the user's explicit request. Added Show/Hide password, required course-name detail, and Hall Hiring price-only behavior in the form and printable output. Production build and targeted ESLint passed. No schema or access changes; full test suite not run. Excel report work remains local and uncommitted.
 
 Append one entry per session, newest at the top. Keep entries short — this is a changelog, not a diary.
 
