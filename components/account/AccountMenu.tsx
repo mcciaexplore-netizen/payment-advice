@@ -14,11 +14,17 @@ export function AccountMenu({
   changePasswordHref,
   logoutEndpoint,
   loginPath,
+  extraLinks,
 }: {
   label: string;
   changePasswordHref: string;
   logoutEndpoint?: string;
   loginPath?: string;
+  /** Optional account-scoped links shown above "Change Password" - for
+   * cross-area shortcuts that depend on a role the account holds (e.g. a
+   * Finance session that also holds AUTHORITY), not worth a dedicated
+   * top-level nav item on every session. */
+  extraLinks?: { href: string; label: string }[];
 }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -56,6 +62,18 @@ export function AccountMenu({
           role="menu"
           className="absolute right-0 top-full z-10 mt-2 w-48 overflow-hidden rounded-md border border-gray-200 bg-white py-1 text-sm text-gray-700 shadow-lg"
         >
+          {extraLinks?.map((link) => (
+            <Link
+              key={link.href}
+              href={link.href}
+              role="menuitem"
+              onClick={() => setOpen(false)}
+              className="block px-4 py-2 hover:bg-gray-50"
+            >
+              {link.label}
+            </Link>
+          ))}
+          {extraLinks?.length ? <div className="border-t border-gray-100" /> : null}
           <Link
             href={changePasswordHref}
             role="menuitem"

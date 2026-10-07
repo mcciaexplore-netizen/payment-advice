@@ -1,8 +1,26 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, count, eq, isNull, sql } from "drizzle-orm";
 import { captureVendorBankAccount } from "@/lib/advice/vendor-bank-accounts";
 import { db } from "@/lib/db";
 import { auditLog, paymentAdvices, vendors } from "@/lib/db/schema";
 import type { VendorReviewAction } from "@/lib/validation/vendor-review";
+
+/** Same "regular NEFT, not Advance, no vendor link" predicate the Historical
+ * Review tab's full query uses - shared so the Dashboard card and the
+ * Vendor Addition Requests page's tab label can show the same count
+ * without each fetching every row. */
+export async function getVendorReviewCount(): Promise<number> {
+  const [row] = await db
+    .select({ count: count() })
+    .from(paymentAdvices)
+    .where(
+      and(
+        eq(paymentAdvices.paymentMode, "NEFT"),
+        eq(paymentAdvices.isAdvance, false),
+        isNull(paymentAdvices.vendorId),
+      ),
+    );
+  return row?.count ?? 0;
+}
 
 type ReviewResult =
   | { ok: false; status: number; error: string }

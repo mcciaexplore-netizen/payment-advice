@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { and, count, eq, isNull, sum } from "drizzle-orm";
+import { and, count, eq, sum } from "drizzle-orm";
 import { getAdminSession } from "@/lib/admin-session";
 import { defaultPaymentModeForRoles } from "@/lib/admin/role-scope";
 import { buildTabCondition } from "@/lib/admin/filters";
@@ -8,6 +8,7 @@ import { CashReceiptsSection } from "@/components/admin/CashReceiptsSection";
 import { db } from "@/lib/db";
 import { paymentAdvices } from "@/lib/db/schema";
 import { financialYearFor } from "@/lib/serial";
+import { getVendorReviewCount } from "@/lib/advice/vendor-review";
 import {
   addCalendarDays,
   calendarDayOfWeek,
@@ -30,7 +31,7 @@ export default async function AdminDashboardPage() {
   const roleScope = roleMode ? eq(paymentAdvices.paymentMode, roleMode) : undefined;
   const financialYear = financialYearFor(new Date());
 
-  const [stageRows, analyticsRows, vendorReviewRows] = await Promise.all([
+  const [stageRows, analyticsRows, vendorReviewCount] = await Promise.all([
     Promise.all(PIPELINE_SUMMARY_STAGES.map(async ({ tab }) => {
       const [result] = await db.select({ count: count(), sum: sum(paymentAdvices.amount) })
         .from(paymentAdvices)
@@ -47,18 +48,8 @@ export default async function AdminDashboardPage() {
       isAdvance: paymentAdvices.isAdvance,
       paymentDoneAt: paymentAdvices.paymentDoneAt,
     }).from(paymentAdvices).where(and(roleScope, eq(paymentAdvices.financialYear, financialYear))),
-    db
-      .select({ count: count() })
-      .from(paymentAdvices)
-      .where(
-        and(
-          eq(paymentAdvices.paymentMode, "NEFT"),
-          eq(paymentAdvices.isAdvance, false),
-          isNull(paymentAdvices.vendorId),
-        ),
-      ),
+    getVendorReviewCount(),
   ]);
-  const vendorReviewCount = vendorReviewRows[0]?.count ?? 0;
 
   const now = new Date();
   const today = todayInIst(now);
@@ -134,7 +125,7 @@ export default async function AdminDashboardPage() {
           </p>
         </div>
         <Link
-          href="/admin/vendor-review"
+          href="/admin/vendor-requests?tab=review"
           className="w-fit rounded-md bg-[#0b1f3a] px-4 py-2 text-sm font-medium text-white"
         >
           Review vendors
