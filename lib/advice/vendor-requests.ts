@@ -1,8 +1,19 @@
-import { eq, sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { auditLog, paymentAdvices, vendorRequests, vendors } from "@/lib/db/schema";
 import { scoreVendorsByName, type VendorNameCandidate } from "@/lib/advice/vendor-name-matching";
 import { captureVendorBankAccount } from "@/lib/advice/vendor-bank-accounts";
+
+/** Powers the small badge on the Finance Admin nav's "Vendors" item - a
+ * cheap count query, not the full row fetch the Vendor Addition Requests
+ * tab itself does, since the nav needs this on every admin page load. */
+export async function getPendingVendorRequestCount(): Promise<number> {
+  const [row] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(vendorRequests)
+    .where(and(isNull(vendorRequests.approvedAt), isNull(vendorRequests.sentBackAt)));
+  return row?.count ?? 0;
+}
 
 /** Lenient, warning-only duplicate check shown to Finance before they approve
  * a vendor request - deliberately a much lower bar than
@@ -109,7 +120,7 @@ export async function approveVendorRequest(input: {
       return {
         ok: false,
         status: 409,
-        error: "A vendor with this exact name already exists. Use the Vendor Review Queue to link to it instead of approving a duplicate.",
+        error: "A vendor with this exact name already exists. Use the Historical Review tab on Vendor Addition Requests to link to it instead of approving a duplicate.",
       };
     }
 
