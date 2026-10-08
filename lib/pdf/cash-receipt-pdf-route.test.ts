@@ -42,7 +42,7 @@ describe("GET /api/cash-receipt/[id]/pdf", () => {
   });
 
   it("the issuer can download their own receipt — 200, PDF content type, audit entry written", async () => {
-    mocks.getAdminSession.mockResolvedValue({ adminUserId: "issuer-1", fullName: "Ravindra Pansare", roles: ["BRANCH"], recommendingAuthorityId: null, branchScope: "Ahilyanagar Office" });
+    mocks.getAdminSession.mockResolvedValue({ adminUserId: "issuer-1", fullName: "Ravindra Pansare", roles: ["CASH_RECEIPT"], recommendingAuthorityId: null, branchScope: "Ahilyanagar Office" });
     const response = await GET(req(), { params: Promise.resolve({ id: RECEIPT.id }) });
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toBe("application/pdf");
@@ -54,12 +54,19 @@ describe("GET /api/cash-receipt/[id]/pdf", () => {
     }));
   });
 
-  it("a different branch member — even the same branch — gets 404, not the PDF, and no audit entry", async () => {
-    mocks.getAdminSession.mockResolvedValue({ adminUserId: "colleague-2", fullName: "Someone Else", roles: ["BRANCH"], recommendingAuthorityId: null, branchScope: "Ahilyanagar Office" });
+  it("a different CASH_RECEIPT account — even the same branch — gets 404, not the PDF, and no audit entry", async () => {
+    mocks.getAdminSession.mockResolvedValue({ adminUserId: "colleague-2", fullName: "Someone Else", roles: ["CASH_RECEIPT"], recommendingAuthorityId: null, branchScope: "Ahilyanagar Office" });
     const response = await GET(req(), { params: Promise.resolve({ id: RECEIPT.id }) });
     expect(response.status).toBe(404);
     expect(response.headers.get("content-type")).not.toMatch(/application\/pdf/);
     await expect(response.json()).resolves.toEqual({ error: "Not found" });
+    expect(mocks.insert).not.toHaveBeenCalled();
+  });
+
+  it("a BRANCH-only session gets 404 even for the receipt they issued (2026-10-07: BRANCH alone no longer grants Cash Receipt access)", async () => {
+    mocks.getAdminSession.mockResolvedValue({ adminUserId: "issuer-1", fullName: "Ravindra Pansare", roles: ["BRANCH"], recommendingAuthorityId: null, branchScope: "Ahilyanagar Office" });
+    const response = await GET(req(), { params: Promise.resolve({ id: RECEIPT.id }) });
+    expect(response.status).toBe(404);
     expect(mocks.insert).not.toHaveBeenCalled();
   });
 
@@ -78,7 +85,7 @@ describe("GET /api/cash-receipt/[id]/pdf", () => {
 
   it("a nonexistent receipt id is 404 regardless of session", async () => {
     mocks.limit.mockResolvedValue([]);
-    mocks.getAdminSession.mockResolvedValue({ adminUserId: "issuer-1", fullName: "Ravindra Pansare", roles: ["BRANCH"], recommendingAuthorityId: null, branchScope: "Ahilyanagar Office" });
+    mocks.getAdminSession.mockResolvedValue({ adminUserId: "issuer-1", fullName: "Ravindra Pansare", roles: ["CASH_RECEIPT"], recommendingAuthorityId: null, branchScope: "Ahilyanagar Office" });
     const response = await GET(req(), { params: Promise.resolve({ id: "does-not-exist" }) });
     expect(response.status).toBe(404);
   });

@@ -33,9 +33,9 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ error: "Incorrect email or password." }, { status: 401 });
         }
         const roleGrants = await getRolesForAdminUser(user.id);
-        const branchGrant = roleGrants.find((grant) => (grant.role === "BRANCH" || grant.role === "CASH_RECEIPT") && grant.scopeValue);
+        const branchGrant = roleGrants.find((grant) => grant.role === "CASH_RECEIPT" && grant.scopeValue);
         if (!branchGrant || !BRANCH_OPTIONS.includes(branchGrant.scopeValue as typeof BRANCH_OPTIONS[number])) {
-          return NextResponse.json({ error: "This account has not been given Cash Receipt access for a branch." }, { status: 403 });
+          return NextResponse.json({ error: "This account has not been given Cash Receipt access. Contact Finance if you believe this is wrong." }, { status: 403 });
         }
         const authorityGrant = roleGrants.find((grant) => grant.role === "AUTHORITY");
         const token = await createAdminSessionToken({
@@ -114,9 +114,9 @@ export async function POST(request: NextRequest) {
     }
 
     const roleGrants = await getRolesForAdminUser(user.id);
-    const branchGrant = roleGrants.find((grant) => (grant.role === "BRANCH" || grant.role === "CASH_RECEIPT") && grant.scopeValue);
+    const branchGrant = roleGrants.find((grant) => grant.role === "CASH_RECEIPT" && grant.scopeValue);
     if (!branchGrant || !BRANCH_OPTIONS.includes(branchGrant.scopeValue as typeof BRANCH_OPTIONS[number])) {
-      return NextResponse.json({ error: "This account has not been given Cash Receipt access for a branch." }, { status: 403 });
+      return NextResponse.json({ error: "This account has not been given Cash Receipt access. Contact Finance if you believe this is wrong." }, { status: 403 });
     }
 
     await recordAdminLogin(user.id);

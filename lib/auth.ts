@@ -26,7 +26,11 @@ export const FINANCE_ROLES: readonly AdminRole[] = ["PAYMENT_ADVICE", "CASH_VOUC
 // email" — so it needs no schema change: admin_user_roles' existing check
 // constraint already requires scope_value to be null for any role other
 // than BRANCH/DEPARTMENT, which SELF satisfies as-is.
-export const TEAM_DASHBOARD_ROLES: readonly AdminRole[] = ["AUTHORITY", "BRANCH", "DEPARTMENT", "SELF"];
+// CASH_RECEIPT included (2026-10-07) so a Cash-Receipt-only account can
+// reach /authority at all — its own view there is then restricted to My
+// Submissions + My Cash Receipts by app/authority/page.tsx itself, never a
+// branch- or department-wide Team Submissions view.
+export const TEAM_DASHBOARD_ROLES: readonly AdminRole[] = ["AUTHORITY", "BRANCH", "DEPARTMENT", "SELF", "CASH_RECEIPT"];
 
 /**
  * Multi-role session (see admin_user_roles / AGENT_HANDOFF.md) — a session
@@ -54,11 +58,16 @@ export function hasRole(
   return session?.roles.includes(role) ?? false;
 }
 
-/** Cash Receipt access is separate from Team Dashboard branch visibility. */
+/** Cash Receipt access requires the CASH_RECEIPT role specifically
+ * (2026-10-07) — no longer satisfied by BRANCH alone. BRANCH still grants
+ * full Team Dashboard branch visibility; CASH_RECEIPT is the separate,
+ * narrower grant for issuing and viewing Cash Receipts. An account can
+ * hold both, but holding BRANCH without CASH_RECEIPT no longer unlocks
+ * Cash Receipt login, submit, view, or download. */
 export function hasCashReceiptRole(
   session: Pick<AdminSessionPayload, "roles"> | null | undefined,
 ): boolean {
-  return hasRole(session, "BRANCH") || hasRole(session, "CASH_RECEIPT");
+  return hasRole(session, "CASH_RECEIPT");
 }
 
 /** True only for Finance roles (PAYMENT_ADVICE / CASH_VOUCHER / ALL).

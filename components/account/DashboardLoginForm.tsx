@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Input } from "@/components/ui/Input";
@@ -10,11 +11,16 @@ export function DashboardLoginForm({
   description,
   endpoint,
   fieldPrefix,
+  footerLink,
 }: {
   title: string;
   description: string;
   endpoint: string;
   fieldPrefix: string;
+  /** Optional cross-link to a related login — e.g. Team Dashboard login
+   * points here to Cash Receipt login, since one account can now use
+   * either door. Omitted on Authority login, which has no such pair. */
+  footerLink?: { href: string; label: string; lead: string };
 }) {
   const router = useRouter();
   const [email, setEmail] = useState("");
@@ -68,6 +74,11 @@ export function DashboardLoginForm({
         <button disabled={submitting} className="rounded-md bg-[#0b1f3a] px-6 py-2.5 font-medium text-white disabled:opacity-50">
           {submitting ? "Signing in…" : "Sign in"}
         </button>
+        {footerLink ? (
+          <p className="text-center text-sm text-gray-600">
+            {footerLink.lead} <Link href={footerLink.href} className="text-[#0b1f3a] underline">{footerLink.label}</Link>
+          </p>
+        ) : null}
       </form>
     </main>
   );

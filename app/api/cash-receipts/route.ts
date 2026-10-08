@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
   }
   const session = await getAdminSession();
   if (!session?.branchScope || !hasCashReceiptRole(session) || !BRANCH_OPTIONS.includes(session.branchScope as typeof BRANCH_OPTIONS[number])) {
-    return NextResponse.json({ error: "Sign in with an authorized branch account to create Cash Receipts." }, { status: 401 });
+    return NextResponse.json({ error: "Sign in with a Cash Receipt account to create Cash Receipts." }, { status: 401 });
   }
   const branch = session.branchScope;
   // Receipt Date is system-controlled, same as every other document type in

@@ -16,19 +16,33 @@ describe("Team Dashboard scoped views", () => {
     expect(source).toContain('view === "my-submissions" ? ownSubmissions');
   });
 
-  it("SELF (individual-scope grant, 2026-10) reuses the same ownSubmissions predicate rather than its own matching logic, and is always forced into the My Submissions view", () => {
-    expect(source).toContain('activeGrant.role === "SELF"\n        ? ownSubmissions');
-    expect(source).toContain('const isSelfOnly = activeGrant.role === "SELF"');
-    expect(source).toContain('isSelfOnly || params.view === "my-submissions" ? "my-submissions"');
+  it("SELF and CASH_RECEIPT (2026-10-07) are both restricted grants, forced into My Submissions/My Cash Receipts only, never Team Submissions", () => {
+    expect(source).toContain('const isRestrictedGrant = activeGrant.role === "SELF" || activeGrant.role === "CASH_RECEIPT"');
+    expect(source).toContain('activeGrant.role === "SELF" || activeGrant.role === "CASH_RECEIPT"\n        ? ownSubmissions');
+    expect(source).toContain('params.view === "cash-receipts" && canSeeCashReceiptsTab ? "cash-receipts"');
+    expect(source).toContain('isRestrictedGrant || params.view === "my-submissions" ? "my-submissions"');
     expect(source).not.toContain('activeGrant.role === "SELF"\n        ? caseInsensitiveEq');
   });
 
-  it("Cash Receipts tab (2026-10) is offered only to BRANCH grants, and is a fully separate query path scoped to the signed-in issuer, not a filter layered on the Team Submissions query", () => {
+  it("CASH_RECEIPT only becomes its own dashboard grant when the account does not also hold BRANCH, so BRANCH holders see no redundant entry", () => {
+    expect(source).toContain('const holdsBranchGrant = roleRows.some((row) => row.role === "BRANCH" && Boolean(row.scopeValue))');
+    expect(source).toContain('row.role === "CASH_RECEIPT" && Boolean(row.scopeValue) && !holdsBranchGrant && !holdsSelfGrant');
+  });
+
+  it("SELF + CASH_RECEIPT is one tab bar (My Submissions | My Cash Receipts), never a Branch or second role entry, and SELF without CASH_RECEIPT gets no Cash Receipts tab", () => {
+    expect(source).toContain('const holdsCashReceiptGrant = roleRows.some((row) => row.role === "CASH_RECEIPT" && Boolean(row.scopeValue))');
+    expect(source).toContain('(activeGrant.role === "SELF" && holdsCashReceiptGrant)');
+    expect(source).toContain('{canSeeCashReceiptsTab ? <Tab href={`/authority?role=${activeGrant.role}&view=cash-receipts`} active={false}>My Cash Receipts</Tab> : null}');
+  });
+
+  it("Cash Receipts tab is offered to BRANCH grants (unchanged) and to restricted (SELF/CASH_RECEIPT) grants as My Cash Receipts, and is a fully separate query path scoped to the signed-in issuer, not a filter layered on the Team Submissions query", () => {
     expect(source).toContain('const isBranchGrant = activeGrant.role === "BRANCH"');
+    expect(source).toContain('const canSeeCashReceiptsTab = isBranchGrant || activeGrant.role === "CASH_RECEIPT" || (activeGrant.role === "SELF" && holdsCashReceiptGrant)');
     expect(source).toContain('if (view === "cash-receipts")');
-    expect(source).toContain("return loadCashReceiptsTab(activeGrant, grants, session.adminUserId)");
+    expect(source).toContain("return loadCashReceiptsTab(activeGrant, grants, session.adminUserId, isRestrictedGrant)");
     expect(source).toContain(".where(eq(cashReceipts.issuedByUserId, adminUserId))");
-    expect(source).toContain('isBranchGrant ? <Tab href={`/authority?role=${activeGrant.role}&view=cash-receipts`}');
+    expect(source).toContain('isRestrictedGrant ? null : <Tab href={`/authority?role=${activeGrant.role}`} active={false}>Team Submissions</Tab>');
+    expect(source).toContain('{isRestrictedGrant ? "My Cash Receipts" : "Cash Receipts"}');
   });
 
   it("keeps Team Submissions read-only while Authority rows retain View actions", () => {

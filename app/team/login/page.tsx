@@ -7,6 +7,7 @@ export default function TeamLoginPage() {
       description="Sign in to track your submissions and team activity."
       endpoint="/api/team/login"
       fieldPrefix="team"
+      footerLink={{ href: "/cash-receipt/login", label: "Sign in there", lead: "Need to issue a Cash Receipt instead? It works with the same account." }}
     />
   );
 }

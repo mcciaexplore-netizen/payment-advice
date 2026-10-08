@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
   const roleGrants = await getRolesForAdminUser(user.id);
   const authorityGrant = roleGrants.find((role) => role.role === "AUTHORITY");
   const hasTeamScope = roleGrants.some(
-    (role) => ((role.role === "BRANCH" || role.role === "DEPARTMENT") && role.scopeValue) || role.role === "SELF",
+    (role) => ((role.role === "BRANCH" || role.role === "DEPARTMENT" || role.role === "CASH_RECEIPT") && role.scopeValue) || role.role === "SELF",
   );
   if (!hasTeamScope) {
     return NextResponse.json(
@@ -40,11 +40,16 @@ export async function POST(req: NextRequest) {
   }
 
   await recordAdminLogin(user.id);
+  // Same scope this account would get from Cash Receipt login — one
+  // session now works for both doors, whichever one is used first, rather
+  // than needing two separate logins.
+  const cashReceiptGrant = roleGrants.find((role) => role.role === "CASH_RECEIPT" && role.scopeValue);
   const token = await createAdminSessionToken({
     adminUserId: user.id,
     fullName: user.fullName,
     roles: roleGrants.map((role) => role.role),
     recommendingAuthorityId: authorityGrant?.recommendingAuthorityId ?? null,
+    ...(cashReceiptGrant ? { branchScope: cashReceiptGrant.scopeValue! } : {}),
   });
   const response = NextResponse.json({ ok: true });
   response.cookies.set(ADMIN_SESSION_COOKIE, token, {

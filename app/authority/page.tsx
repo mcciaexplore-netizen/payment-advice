@@ -21,7 +21,7 @@ export const dynamic = "force-dynamic";
 
 type AuthorityView = "pending" | "history" | "my-submissions";
 type TeamView = "team-submissions" | "my-submissions" | "cash-receipts";
-type DashboardRole = "AUTHORITY" | "BRANCH" | "DEPARTMENT" | "SELF";
+type DashboardRole = "AUTHORITY" | "BRANCH" | "DEPARTMENT" | "SELF" | "CASH_RECEIPT";
 type DashboardGrant = { role: DashboardRole; recommendingAuthorityId: string | null; scopeValue: string | null };
 
 function date(value: Date | string) { return formatIstDate(value); }
@@ -29,11 +29,12 @@ function caseInsensitiveEq(column: typeof paymentAdvices.branch | typeof payment
   return sql`lower(${column}) = lower(${value})`;
 }
 function isDashboardRole(value: string | undefined): value is DashboardRole {
-  return value === "AUTHORITY" || value === "BRANCH" || value === "DEPARTMENT" || value === "SELF";
+  return value === "AUTHORITY" || value === "BRANCH" || value === "DEPARTMENT" || value === "SELF" || value === "CASH_RECEIPT";
 }
 function roleLabel(grant: DashboardGrant): string {
   return grant.role === "AUTHORITY" ? "Recommendations"
     : grant.role === "SELF" ? "My Submissions"
+    : grant.role === "CASH_RECEIPT" ? `Cash Receipts: ${grant.scopeValue}`
     : `${grant.role === "BRANCH" ? "Branch" : "Department"}: ${grant.scopeValue}`;
 }
 
@@ -51,10 +52,23 @@ export default async function TeamDashboard({ searchParams }: { searchParams: Pr
   ]);
   const account = accounts[0];
   if (!account) return null;
+  // A CASH_RECEIPT grant only becomes its own dashboard entry when the
+  // account does NOT also hold BRANCH - a BRANCH holder already gets full
+  // Team Submissions plus the Cash Receipts tab below, so a second,
+  // more-restricted CASH_RECEIPT entry would be redundant and confusing.
+  // This keeps "BRANCH holders keep exactly what they have today" true
+  // regardless of whether they also hold CASH_RECEIPT. Likewise a SELF
+  // holder's My Submissions view already carries the Cash Receipts tab when
+  // they hold CASH_RECEIPT, so SELF + CASH_RECEIPT (Advika, Dnyaneshwar) is
+  // one tab bar - My Submissions | My Cash Receipts - not two role entries.
+  const holdsBranchGrant = roleRows.some((row) => row.role === "BRANCH" && Boolean(row.scopeValue));
+  const holdsSelfGrant = roleRows.some((row) => row.role === "SELF");
+  const holdsCashReceiptGrant = roleRows.some((row) => row.role === "CASH_RECEIPT" && Boolean(row.scopeValue));
   const grants = roleRows.filter((row): row is DashboardGrant =>
     (row.role === "AUTHORITY" && Boolean(row.recommendingAuthorityId)) ||
     ((row.role === "BRANCH" || row.role === "DEPARTMENT") && Boolean(row.scopeValue)) ||
-    row.role === "SELF",
+    row.role === "SELF" ||
+    (row.role === "CASH_RECEIPT" && Boolean(row.scopeValue) && !holdsBranchGrant && !holdsSelfGrant),
   );
   if (grants.length === 0) return null;
 
@@ -62,34 +76,51 @@ export default async function TeamDashboard({ searchParams }: { searchParams: Pr
   const requestedRole = isDashboardRole(params.role) ? params.role : undefined;
   const activeGrant = grants.find((grant) => grant.role === requestedRole) ?? grants[0];
   const isAuthority = activeGrant.role === "AUTHORITY";
-  // SELF has no broader "team" to show — every view is My Submissions,
-  // always, regardless of the ?view= param, and the Team/My Submissions
-  // tab switcher below is hidden entirely rather than offering a toggle
-  // between two tabs that would show the exact same rows.
-  const isSelfOnly = activeGrant.role === "SELF";
-  // Only a BRANCH grant can have issued Cash Receipts - the login that
-  // creates them requires exactly this role (see
-  // app/api/cash-receipt/login/route.ts).
+  // SELF and CASH_RECEIPT (2026-10-07) have no broader "team" to show -
+  // every view is My Submissions or My Cash Receipts, never Team
+  // Submissions and never the branch/department-wide pipeline summary,
+  // regardless of the ?view= param. The Team Submissions tab is hidden
+  // entirely for both, not just blocked server-side - there is nothing to
+  // toggle to.
+  const isRestrictedGrant = activeGrant.role === "SELF" || activeGrant.role === "CASH_RECEIPT";
+  // BRANCH keeps exactly today's behavior: Team Submissions, My
+  // Submissions, and the Cash Receipts tab. CASH_RECEIPT-only grants get
+  // the same Cash Receipts tab (same loadCashReceiptsTab, same
+  // issuedByUserId-scoped query) but never Team Submissions - see
+  // isRestrictedGrant above.
   const isBranchGrant = activeGrant.role === "BRANCH";
+  // A SELF-only account without CASH_RECEIPT never gets the tab.
+  const canSeeCashReceiptsTab = isBranchGrant || activeGrant.role === "CASH_RECEIPT" || (activeGrant.role === "SELF" && holdsCashReceiptGrant);
   const isDg = isAuthority && authorityRows[0]?.authorityName.trim().toUpperCase() === "DG";
   if (isDg && (!params.view || params.view === "executive")) return loadDgExecutiveDashboard();
   const authorityView: AuthorityView = params.view === "history" ? "history" : params.view === "my-submissions" ? "my-submissions" : "pending";
-  const teamView: TeamView = isSelfOnly || params.view === "my-submissions" ? "my-submissions"
-    : isBranchGrant && params.view === "cash-receipts" ? "cash-receipts"
+  // Cash Receipts is checked first so a restricted grant (SELF/CASH_RECEIPT)
+  // can still reach it; isRestrictedGrant then forces everything else to
+  // My Submissions, so Team Submissions is never reachable for them no
+  // matter what ?view= asks for - enforced here, in the server-computed
+  // view selection the query itself is built from, not just in the nav UI.
+  const teamView: TeamView = params.view === "cash-receipts" && canSeeCashReceiptsTab ? "cash-receipts"
+    : isRestrictedGrant || params.view === "my-submissions" ? "my-submissions"
     : "team-submissions";
   const view = isAuthority ? authorityView : teamView;
 
   if (view === "cash-receipts") {
-    return loadCashReceiptsTab(activeGrant, grants, session.adminUserId);
+    return loadCashReceiptsTab(activeGrant, grants, session.adminUserId, isRestrictedGrant);
   }
 
   const ownSubmissions = eq(paymentAdvices.submittedByEmail, account.email);
   const authorityScope = eq(paymentAdvices.recommendingAuthorityId, activeGrant.recommendingAuthorityId!);
+  // teamScope is never actually consulted for a restricted grant (SELF or
+  // CASH_RECEIPT) - view can only ever be "my-submissions" or
+  // "cash-receipts" for them, both computed above without it - but it
+  // still defaults both to ownSubmissions rather than falling through to
+  // authorityScope, so a future code path can't accidentally compute a
+  // branch-wide or authority-wide query for one of them.
   const teamScope = activeGrant.role === "BRANCH"
     ? caseInsensitiveEq(paymentAdvices.branch, activeGrant.scopeValue!)
     : activeGrant.role === "DEPARTMENT"
       ? caseInsensitiveEq(paymentAdvices.submittedByDepartment, activeGrant.scopeValue!)
-      : activeGrant.role === "SELF"
+      : activeGrant.role === "SELF" || activeGrant.role === "CASH_RECEIPT"
         ? ownSubmissions
         : authorityScope;
   const scopeWhere = view === "my-submissions" ? ownSubmissions : isAuthority
@@ -147,7 +178,7 @@ export default async function TeamDashboard({ searchParams }: { searchParams: Pr
       : `${rows.length} submission${rows.length === 1 ? "" : "s"} in ${activeGrant.scopeValue}`;
 
   return <div className="flex flex-col gap-6">
-    <header><h1 className="font-heading text-3xl text-[#0b1f3a]">{isAuthority ? "Authority Recommendations" : isSelfOnly ? "My Submissions" : "Team Submissions"}</h1><p className="mt-1 text-sm text-gray-600">{subtitle}</p></header>
+    <header><h1 className="font-heading text-3xl text-[#0b1f3a]">{isAuthority ? "Authority Recommendations" : isRestrictedGrant ? "My Submissions" : "Team Submissions"}</h1><p className="mt-1 text-sm text-gray-600">{subtitle}</p></header>
     {grants.length > 1 ? <nav aria-label="Dashboard role" className="flex flex-wrap gap-2 rounded-lg bg-gray-100 p-1.5">
       {grants.map((grant) => <Link key={grant.role} href={`/authority?role=${grant.role}`} className={`rounded-md px-3 py-2 text-sm font-medium ${grant.role === activeGrant.role ? "bg-white text-[#0b1f3a] shadow-sm" : "text-gray-600 hover:text-[#0b1f3a]"}`}>{roleLabel(grant)}</Link>)}
     </nav> : null}
@@ -156,10 +187,13 @@ export default async function TeamDashboard({ searchParams }: { searchParams: Pr
         <Tab href={`/authority?role=AUTHORITY${isDg ? "&view=pending" : ""}`} active={view === "pending"}>Pending My Recommendation</Tab>
         <Tab href="/authority?role=AUTHORITY&view=history" active={view === "history"}>History</Tab>
         <Tab href="/authority?role=AUTHORITY&view=my-submissions" active={view === "my-submissions"}>My Submissions</Tab>
-      </> : isSelfOnly ? (
-        // No separate "Team Submissions" tab - SELF has no broader team,
-        // so there is only ever the one view, already active.
-        <Tab href={`/authority?role=${activeGrant.role}`} active>My Submissions</Tab>
+      </> : isRestrictedGrant ? (
+        // No Team Submissions tab - SELF/CASH_RECEIPT have no broader team
+        // to show, only their own submissions and their own Cash Receipts.
+        <>
+          <Tab href={`/authority?role=${activeGrant.role}`} active>My Submissions</Tab>
+          {canSeeCashReceiptsTab ? <Tab href={`/authority?role=${activeGrant.role}&view=cash-receipts`} active={false}>My Cash Receipts</Tab> : null}
+        </>
       ) : <>
         <Tab href={`/authority?role=${activeGrant.role}`} active={view === "team-submissions"}>Team Submissions</Tab>
         <Tab href={`/authority?role=${activeGrant.role}&view=my-submissions`} active={view === "my-submissions"}>My Submissions</Tab>
@@ -192,16 +226,18 @@ function formatAmount(value: string): string {
   return `₹ ${Number(value).toLocaleString("en-IN", { minimumFractionDigits: 2 })}`;
 }
 
-/** The Cash Receipts tab on a BRANCH account's Team Dashboard - only the
- * receipts this specific person issued, never a colleague's even in the
- * same branch, enforced here by the query itself (issuedByUserId =
- * session.adminUserId), the same restriction the View/Download routes
- * enforce server-side - this is not a UI-only filter layered on top of a
- * broader query. */
+/** The Cash Receipts tab - only the receipts this specific person issued,
+ * never a colleague's even in the same branch, enforced here by the query
+ * itself (issuedByUserId = session.adminUserId), the same restriction the
+ * View/Download routes enforce server-side - this is not a UI-only filter
+ * layered on top of a broader query. Reached from a BRANCH grant (full Team
+ * Dashboard, unchanged) or a CASH_RECEIPT/SELF grant (restricted - no Team
+ * Submissions tab here either, same as the My Submissions view). */
 async function loadCashReceiptsTab(
   activeGrant: DashboardGrant,
   grants: DashboardGrant[],
   adminUserId: string,
+  isRestrictedGrant: boolean,
 ) {
   const rows = await db
     .select()
@@ -215,9 +251,9 @@ async function loadCashReceiptsTab(
       {grants.map((grant) => <Link key={grant.role} href={`/authority?role=${grant.role}`} className={`rounded-md px-3 py-2 text-sm font-medium ${grant.role === activeGrant.role ? "bg-white text-[#0b1f3a] shadow-sm" : "text-gray-600 hover:text-[#0b1f3a]"}`}>{roleLabel(grant)}</Link>)}
     </nav> : null}
     <nav className="flex flex-wrap items-center gap-2 border-b border-gray-200 pb-0">
-      <Tab href={`/authority?role=${activeGrant.role}`} active={false}>Team Submissions</Tab>
+      {isRestrictedGrant ? null : <Tab href={`/authority?role=${activeGrant.role}`} active={false}>Team Submissions</Tab>}
       <Tab href={`/authority?role=${activeGrant.role}&view=my-submissions`} active={false}>My Submissions</Tab>
-      <Tab href={`/authority?role=${activeGrant.role}&view=cash-receipts`} active>Cash Receipts</Tab>
+      <Tab href={`/authority?role=${activeGrant.role}&view=cash-receipts`} active>{isRestrictedGrant ? "My Cash Receipts" : "Cash Receipts"}</Tab>
     </nav>
     {rows.length === 0 ? <div className="rounded-lg border border-gray-200 p-10 text-center text-sm text-gray-500">
       You have not issued any Cash Receipts yet.
