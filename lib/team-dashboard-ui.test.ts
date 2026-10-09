@@ -39,10 +39,17 @@ describe("Team Dashboard scoped views", () => {
     expect(source).toContain('const isBranchGrant = activeGrant.role === "BRANCH"');
     expect(source).toContain('const canSeeCashReceiptsTab = isBranchGrant || activeGrant.role === "CASH_RECEIPT" || (activeGrant.role === "SELF" && holdsCashReceiptGrant)');
     expect(source).toContain('if (view === "cash-receipts")');
-    expect(source).toContain("return loadCashReceiptsTab(activeGrant, grants, session.adminUserId, isRestrictedGrant)");
-    expect(source).toContain(".where(eq(cashReceipts.issuedByUserId, adminUserId))");
+    expect(source).toContain("return loadCashReceiptsTab(activeGrant, grants, session.adminUserId, isRestrictedGrant, params)");
+    expect(source).toContain("eq(cashReceipts.issuedByUserId, adminUserId),");
     expect(source).toContain('isRestrictedGrant ? null : <Tab href={`/authority?role=${activeGrant.role}`} active={false}>Team Submissions</Tab>');
     expect(source).toContain('{isRestrictedGrant ? "My Cash Receipts" : "Cash Receipts"}');
+  });
+
+  it("My Cash Receipts filters to the report bar's range (default today, IST) using the same parser as the report download", () => {
+    expect(source).toContain("const parsedRange = parseReportRange(");
+    expect(source).toContain("gte(cashReceipts.receiptDate, range.from)");
+    expect(source).toContain("lte(cashReceipts.receiptDate, range.to)");
+    expect(source).toContain('filterParams={{ role: activeGrant.role, view: "cash-receipts" }}');
   });
 
   it("keeps Team Submissions read-only while Authority rows retain View actions", () => {

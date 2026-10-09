@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { and, count, desc, eq, inArray, isNotNull, isNull, or, sql, sum } from "drizzle-orm";
+import { and, count, desc, eq, gte, inArray, isNotNull, isNull, lte, or, sql, sum } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { adminUserRoles, adminUsers, cashReceipts, paymentAdvices, paymentEntries, recommendingAuthorities } from "@/lib/db/schema";
 import { getAdminSession } from "@/lib/admin-session";
@@ -8,7 +8,9 @@ import { pipelineStageFor } from "@/lib/advice/pipeline-stage";
 import { StageBadge } from "@/components/admin/StageBadge";
 import { StageLegend } from "@/components/admin/StageLegend";
 import { PaymentMode } from "@/lib/validation/payment-advice";
-import { formatDateOnly, formatIstDate } from "@/lib/date-time";
+import { addCalendarDays, formatDateOnly, formatIstDate, todayInIst } from "@/lib/date-time";
+import { parseReportRange } from "@/lib/cash-receipt-report";
+import { CashReceiptReportBar } from "@/components/account/CashReceiptReportBar";
 import { buildTabCondition, isAdminTab } from "@/lib/admin/filters";
 import { PIPELINE_SUMMARY_STAGES, PipelineSummary } from "@/components/admin/PipelineSummary";
 import { StageAgingIndicator } from "@/components/admin/StageAgingIndicator";
@@ -38,7 +40,7 @@ function roleLabel(grant: DashboardGrant): string {
     : `${grant.role === "BRANCH" ? "Branch" : "Department"}: ${grant.scopeValue}`;
 }
 
-export default async function TeamDashboard({ searchParams }: { searchParams: Promise<{ view?: string; role?: string; stage?: string }> }) {
+export default async function TeamDashboard({ searchParams }: { searchParams: Promise<{ view?: string; role?: string; stage?: string; dateFrom?: string; dateTo?: string }> }) {
   const session = await getAdminSession();
   if (!session) return null;
   const [accounts, roleRows, authorityRows] = await Promise.all([
@@ -105,7 +107,7 @@ export default async function TeamDashboard({ searchParams }: { searchParams: Pr
   const view = isAuthority ? authorityView : teamView;
 
   if (view === "cash-receipts") {
-    return loadCashReceiptsTab(activeGrant, grants, session.adminUserId, isRestrictedGrant);
+    return loadCashReceiptsTab(activeGrant, grants, session.adminUserId, isRestrictedGrant, params);
   }
 
   const ownSubmissions = eq(paymentAdvices.submittedByEmail, account.email);
@@ -238,15 +240,28 @@ async function loadCashReceiptsTab(
   grants: DashboardGrant[],
   adminUserId: string,
   isRestrictedGrant: boolean,
+  params: { dateFrom?: string; dateTo?: string },
 ) {
+  // Same range parsing as the report download (/api/cash-receipt/report),
+  // so the table always lists exactly the receipts the button downloads.
+  // Both dates default to today (IST); a malformed range falls back to today.
+  const today = todayInIst();
+  const parsedRange = parseReportRange(new URLSearchParams(Object.entries(params).filter((entry): entry is [string, string] => typeof entry[1] === "string")), today);
+  const range = parsedRange.ok ? parsedRange : { from: today, to: today };
   const rows = await db
     .select()
     .from(cashReceipts)
-    .where(eq(cashReceipts.issuedByUserId, adminUserId))
+    .where(and(
+      eq(cashReceipts.issuedByUserId, adminUserId),
+      gte(cashReceipts.receiptDate, range.from),
+      lte(cashReceipts.receiptDate, range.to),
+    ))
     .orderBy(desc(cashReceipts.createdAt));
+  const rangeLabel = range.from === range.to ? `on ${formatDateOnly(range.from)}` : `from ${formatDateOnly(range.from)} to ${formatDateOnly(range.to)}`;
+  const rangeTotal = rows.reduce((sum, row) => sum + Math.round(Number(row.total) * 100), 0) / 100;
 
   return <div className="flex flex-col gap-6">
-    <header><h1 className="font-heading text-3xl text-[#0b1f3a]">Cash Receipts</h1><p className="mt-1 text-sm text-gray-600">{rows.length} receipt{rows.length === 1 ? "" : "s"} you have issued.</p></header>
+    <header><h1 className="font-heading text-3xl text-[#0b1f3a]">Cash Receipts</h1><p className="mt-1 text-sm text-gray-600">{rows.length} receipt{rows.length === 1 ? "" : "s"} you issued {rangeLabel}{rows.length ? `, total ${formatAmount(rangeTotal.toFixed(2))}` : ""}.</p></header>
     {grants.length > 1 ? <nav aria-label="Dashboard role" className="flex flex-wrap gap-2 rounded-lg bg-gray-100 p-1.5">
       {grants.map((grant) => <Link key={grant.role} href={`/authority?role=${grant.role}`} className={`rounded-md px-3 py-2 text-sm font-medium ${grant.role === activeGrant.role ? "bg-white text-[#0b1f3a] shadow-sm" : "text-gray-600 hover:text-[#0b1f3a]"}`}>{roleLabel(grant)}</Link>)}
     </nav> : null}
@@ -255,8 +270,17 @@ async function loadCashReceiptsTab(
       <Tab href={`/authority?role=${activeGrant.role}&view=my-submissions`} active={false}>My Submissions</Tab>
       <Tab href={`/authority?role=${activeGrant.role}&view=cash-receipts`} active>{isRestrictedGrant ? "My Cash Receipts" : "Cash Receipts"}</Tab>
     </nav>
+    <CashReceiptReportBar
+      key={`${range.from}:${range.to}`}
+      today={today}
+      yesterday={addCalendarDays(today, -1)}
+      from={range.from}
+      to={range.to}
+      filterBasePath="/authority"
+      filterParams={{ role: activeGrant.role, view: "cash-receipts" }}
+    />
     {rows.length === 0 ? <div className="rounded-lg border border-gray-200 p-10 text-center text-sm text-gray-500">
-      You have not issued any Cash Receipts yet.
+      You have no Cash Receipts {rangeLabel}.
     </div> : <div className="overflow-x-auto rounded-lg border border-gray-200"><table className="w-full text-left text-sm">
       <thead className="bg-gray-50 text-xs uppercase text-gray-500"><tr><th className="p-3">Reference</th><th className="p-3">Party Name</th><th className="p-3">Amount</th><th className="p-3">Receipt Date</th><th className="p-3">Documents</th></tr></thead>
       <tbody className="divide-y divide-gray-100">{rows.map((row) => <tr key={row.id} className="align-top">
