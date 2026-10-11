@@ -49,7 +49,13 @@ Design system: Navy `#0B1F3A`, Forest green `#2E8B57`, Amber `#E8A33D`. Headings
 
 ## 3. Current State (update this every session)
 
-**Last updated:** 9 October 2026, by Claude Opus 5.5 (daily Cash Receipts report, branch `feature/cash-receipt-daily-report`, PR open, not merged; see entry below)
+**Last updated:** 12 October 2026, by Claude Opus 5.5 (National Safety Week home page card, branch `feature/nsw-home-card`, PR open, not merged; see entry below)
+
+### In review: National Safety Week card on the home page (Claude Opus 5.5, 2026-10-12, branch `feature/nsw-home-card`, PR open, not merged)
+Sixth card on the Payment Desk home page grid (`app/page.tsx`), after Cash Receipt: "National Safety Week - Branch Login", "Branch login for the National Safety Week portal.", CTA "Open portal →". It opens `https://nsw-web.vercel.app/select-branch` in the same tab, and the URL lives only in `NSW_BRANCH_LOGIN_URL` (`lib/external-links.ts`; a Next page file cannot export extra values). It uses the same `ChoiceCard` as the other five. `ChoiceCard` gained an optional `cta` prop (default "Open form →", so the other cards are unchanged) and a new `rose` accent (`bg-rose-600` bar, `border-rose-300` / hover `border-rose-600`). Not gated by any role or session.
+- Home page cards are inline JSX in `app/page.tsx`, not a shared list. Nothing else (nav, footer, hub) reuses them.
+- Verified: tsc, lint, 640 tests (new `lib/home-page-ui.test.ts`) and `next build` clean. Checked with Playwright + Chrome against `next start`: at 1280, 768 and 375 px the card is the same width as the others; it sits right of Cash Receipt at desktop and tablet and stacks under it on mobile. Seven Tabs reach it, focus shows the browser ring like the other cards, and Enter goes to the exact URL in the same tab (the navigation was stubbed). One read-only fetch of the portal returned 200 text/html with no redirects.
+- Pre-existing, not touched: at 375 px the home page header ("Payment Desk" title block) overflows by about 19 px and causes sideways scroll. This happens on production too, without this change.
 
 ### In review: daily Cash Receipts report (.xlsx) (Claude Opus 5.5, 2026-10-09, branch `feature/cash-receipt-daily-report`, PR open, not merged)
 Issuers can download a daily cash collection report from Team Dashboard > My Cash Receipts. It replaces the manual Excel sheet Finance keeps (two bold title lines, blue bold headers, bordered rows, totals row).
