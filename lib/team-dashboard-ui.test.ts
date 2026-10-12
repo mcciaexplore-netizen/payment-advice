@@ -58,10 +58,10 @@ describe("Team Dashboard scoped views", () => {
     expect(source).not.toContain("AuthorityQueueActions");
   });
 
-  it("offers type-correct UUID PDF downloads only in My Submissions", () => {
-    expect(source).toContain('view === "my-submissions" ? <th className="p-3">Download</th>');
-    expect(source).toContain("submissionPdfHref(row)");
-    expect(source).toContain('view === "my-submissions" ? <td className="p-3"><a');
+  it("offers type-correct UUID PDF downloads, with attachment buttons, in My Submissions and Team Submissions only", () => {
+    expect(source).toContain('const showDownloads = view === "my-submissions" || view === "team-submissions"');
+    expect(source).toContain('{showDownloads ? <th className="p-3">Download</th> : null}');
+    expect(source).toContain("pdfHref={submissionPdfHref(row)} pdfLabel={submissionPdfLabel(row)}");
   });
 
   it("routes only the linked DG authority record to the executive dashboard", () => {
