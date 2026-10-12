@@ -49,7 +49,20 @@ Design system: Navy `#0B1F3A`, Forest green `#2E8B57`, Amber `#E8A33D`. Headings
 
 ## 3. Current State (update this every session)
 
-**Last updated:** 12 October 2026, by Claude Opus 5.5 (dashboard attachment buttons, branch `feature/dashboard-attachment-buttons`, PR open, not merged; see entry below)
+**Last updated:** 12 October 2026, by Claude Opus 5.5 (dashboard attachment buttons: one-line layout fix, branch `feature/dashboard-attachment-buttons`, PR open, not merged; see entries below)
+
+### In review: one-line layout for the dashboard Download column (Claude Opus 5.5, 2026-10-12, same branch `feature/dashboard-attachment-buttons`)
+This follows the entry below and replaces its "Layout" bullet. There are no behaviour, route or access changes.
+- **Compact attachment buttons** (`components/admin/SubmissionDownloadButtons.tsx`): an icon plus "View" / "Download", with "View Attachment" / "Download Attachment" as `title` and accessible name. The single-file View button is `AttachmentPreview`, so its name comes from an `sr-only` span and its tooltip from a wrapping `<span title>`. Multiple files show "View (4)" / "Download (4)". The two sit in a `role="group" aria-label="Attachment"`, then a thin divider, then the full PDF label. The group is `md:flex-nowrap`: one line from 768 px, and it may wrap below that. Buttons are `relative` so the absolutely positioned `sr-only` text stays inside the table's scroll frame. Without that it escaped and made the whole page scroll sideways on phones.
+- **Rebalanced columns** (`app/authority/page.tsx`, only when the Download column shows):
+  - Payee and particulars truncate with an ellipsis and a full-text `title`: payee one line, particulars two lines. The column is 10rem, or 14rem at xl.
+  - The Team Submissions submitter name truncates at 5.5rem.
+  - References get a `<wbr>` after each "/", so "CASH/MCCIA/2026-27/0049" can wrap at the slashes. The text itself is unchanged.
+  - Below 1280 px every cell uses 0.5rem side padding (`.dashboard-compact-table` in `app/globals.css`).
+- **Scroll cue**: the submissions table frame has `.dashboard-scroll-frame` (`app/globals.css`), a pure-CSS edge shadow that shows on whichever side still has hidden columns.
+- **Result**, measured in Chrome on real data (read-only, minted sessions, Authority My Submissions, Team Submissions, Team My Submissions): buttons on one line and no table or page scroll at 1440 and 1024. At 390 the table scrolls inside its frame with the edge shadow, buttons wrap to two lines, and the page itself does not scroll.
+- **Fixture rendering**: `lib/dashboard-download-column.test.ts` renders the real dashboard page against an in-memory fake DB, with rows that have one, four and zero attachments (no DB access), and asserts the Download column. With `DASHBOARD_FIXTURE_HTML_DIR` set it also writes standalone HTML using the built CSS, which is how the screenshots were taken. There is no real zero-attachment submission and `TEST_DATABASE_URL` is empty, so this is the only way to show that state.
+- **Verified**: tsc, lint, 666 tests and `next build` clean. View, Download and both multi-file menus re-checked on real data, and the PDF hrefs are unchanged.
 
 ### In review: View / Download Attachment buttons on the Authority and Team dashboards (Claude Opus 5.5, 2026-10-12, branch `feature/dashboard-attachment-buttons`, PR open, not merged)
 The Download column on `app/authority/page.tsx` (the one page that renders both dashboards) is now one shared client component, `components/admin/SubmissionDownloadButtons.tsx`: View Attachment | Download Attachment | Download {document}. "Download PDF" is gone.
