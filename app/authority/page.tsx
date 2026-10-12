@@ -227,19 +227,27 @@ export default async function TeamDashboard({ searchParams }: { searchParams: Pr
     /> : null}
     {rows.length === 0 ? <div className="rounded-lg border border-gray-200 p-10 text-center text-sm text-gray-500">
       {isAuthority && view === "history" ? "No decisions recorded yet." : view === "my-submissions" ? "No submissions found for your login email." : isAuthority ? "Nothing is waiting for your recommendation." : "No submissions found for this team scope."}
-    </div> : <div className="overflow-x-auto rounded-lg border border-gray-200"><table className="w-full text-left text-sm">
-      <thead className="bg-gray-50 text-xs uppercase text-gray-500"><tr><th className="p-3">Reference</th><th className="p-3">Payee / Particulars</th><th className="p-3">Amount</th><th className="p-3">Submitted</th><th className="p-3">{isAuthority && view === "history" ? "Decision" : isAuthority && view === "pending" ? "Action" : "Current Stage"}</th>{showDownloads ? <th className="p-3">Download</th> : null}{isAuthority && view === "history" ? <th className="p-3">Action</th> : null}</tr></thead>
+    </div> : <div className="dashboard-scroll-frame overflow-x-auto rounded-lg border border-gray-200"><table className={`w-full text-left text-sm ${showDownloads ? "dashboard-compact-table" : ""}`}>
+      <thead className="bg-gray-50/80 text-xs uppercase text-gray-500"><tr><th className="p-3">Reference</th><th className="p-3">Payee / Particulars</th><th className="p-3">Amount</th><th className="p-3">Submitted</th><th className="p-3">{isAuthority && view === "history" ? "Decision" : isAuthority && view === "pending" ? "Action" : "Current Stage"}</th>{showDownloads ? <th className="p-3">Download</th> : null}{isAuthority && view === "history" ? <th className="p-3">Action</th> : null}</tr></thead>
       <tbody className="divide-y divide-gray-100">{rows.map((row) => <tr key={row.id} className="align-top">
-        <td className="p-3 font-medium text-[#0b1f3a]">{displayNoFor(row.paymentMode as PaymentMode, row.serialNo, row.cashVoucherNo, row.isAdvance, row.advanceNo)}</td>
-        <td className="p-3"><div className="font-medium">{row.payeeName}</div><div className="mt-1 max-w-xs text-xs text-gray-600">{row.nature}</div>{isAuthority && view === "pending" && row.revisionCount >= 1 ? <div className="mt-2 max-w-sm rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs text-amber-900"><strong>Resubmission - revision {row.revisionCount}</strong>{row.adminRemarks ? <div className="mt-1">Previous remarks: {row.adminRemarks}</div> : null}</div> : null}</td>
+        <td className="p-3 font-medium text-[#0b1f3a]">{showDownloads ? withSlashBreaks(displayNoFor(row.paymentMode as PaymentMode, row.serialNo, row.cashVoucherNo, row.isAdvance, row.advanceNo)) : displayNoFor(row.paymentMode as PaymentMode, row.serialNo, row.cashVoucherNo, row.isAdvance, row.advanceNo)}</td>
+        <td className={`p-3 ${showDownloads ? "max-w-[10rem] xl:max-w-[14rem]" : ""}`}><div className={`font-medium ${showDownloads ? "truncate" : ""}`} title={row.payeeName}>{row.payeeName}</div><div className={`mt-1 max-w-xs text-xs text-gray-600 ${showDownloads ? "line-clamp-2" : ""}`} title={row.nature}>{row.nature}</div>{isAuthority && view === "pending" && row.revisionCount >= 1 ? <div className="mt-2 max-w-sm rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs text-amber-900"><strong>Resubmission - revision {row.revisionCount}</strong>{row.adminRemarks ? <div className="mt-1">Previous remarks: {row.adminRemarks}</div> : null}</div> : null}</td>
         <td className="p-3 whitespace-nowrap">₹ {Number(row.amount).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
-        <td className="p-3 whitespace-nowrap">{view !== "my-submissions" ? <div>{row.submittedBy}</div> : null}<div className="text-xs text-gray-500">{date(row.submittedAt)}</div></td>
+        <td className="p-3 whitespace-nowrap">{view !== "my-submissions" ? <div className={showDownloads ? "max-w-[5.5rem] truncate" : ""} title={row.submittedBy}>{row.submittedBy}</div> : null}<div className="text-xs text-gray-500">{date(row.submittedAt)}</div></td>
         <td className="p-3">{isAuthority && view === "pending" ? <div className="flex flex-col items-start gap-2"><StageBadge stage="Waiting on Authority" /><StageAgingIndicator advice={row} /><ViewLink adviceId={row.id} from="pending" /></div> : isAuthority && view === "history" ? <div className="text-xs"><StageBadge stage={row.status === "REJECTED" ? "Rejected" : row.approvedAt ? "Awaiting Finance Review" : "Sent Back"} /><div className="mt-1 text-gray-500">{date(row.finalRejectedAt ?? row.approvedAt ?? row.rejectedAt!)}</div>{(row.finalRejectionRemarks ?? row.authorityRemarks) ? <div className="mt-1 max-w-xs text-gray-600">{row.finalRejectionRemarks ?? row.authorityRemarks}</div> : null}</div> : <div className="text-xs"><StageBadge stage={pipelineStageFor(row)} /><div><StageAgingIndicator advice={row} /></div>{row.adminRemarks ? <div className="mt-2 max-w-xs rounded bg-amber-50 px-2 py-1 text-amber-800">Sent-back remarks: {row.adminRemarks}</div> : null}</div>}</td>
         {showDownloads ? <td className="p-3"><SubmissionDownloadButtons adviceId={row.id} attachments={attachmentsByAdvice.get(row.id) ?? []} pdfHref={submissionPdfHref(row)} pdfLabel={submissionPdfLabel(row)} /></td> : null}
         {isAuthority && view === "history" ? <td className="p-3"><ViewLink adviceId={row.id} from="history" /></td> : null}
       </tr>)}</tbody>
     </table></div>}
   </div>;
+}
+
+/** "CASH/MCCIA/2026-27/0049" with a line-break opportunity after each "/",
+ * so the Reference column can wrap at the slashes instead of holding the
+ * whole "CASH/MCCIA/2026-" chunk on one line and crowding the Download
+ * column. Text and copy-paste are unchanged (<wbr> adds no characters). */
+function withSlashBreaks(reference: string) {
+  return reference.split("/").map((part, index, parts) => <span key={index}>{part}{index < parts.length - 1 ? <>/<wbr /></> : null}</span>);
 }
 
 function formatAmount(value: string): string {
