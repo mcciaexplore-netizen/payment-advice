@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { and, count, desc, eq, gte, inArray, isNotNull, isNull, lte, or, sql, sum } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { adminUserRoles, adminUsers, cashReceipts, paymentAdvices, paymentEntries, recommendingAuthorities } from "@/lib/db/schema";
+import { adminUserRoles, adminUsers, attachments, cashReceipts, paymentAdvices, paymentEntries, recommendingAuthorities } from "@/lib/db/schema";
 import { getAdminSession } from "@/lib/admin-session";
 import { displayNoFor } from "@/lib/advice/document-identity";
 import { pipelineStageFor } from "@/lib/advice/pipeline-stage";
@@ -17,7 +17,8 @@ import { StageAgingIndicator } from "@/components/admin/StageAgingIndicator";
 import { compareByCurrentStageAge } from "@/lib/advice/stage-aging";
 import { DgExecutiveDashboard } from "@/components/admin/DgExecutiveDashboard";
 import { buildDgSummaryMetrics, calculateDgIntervalMetrics } from "@/lib/advice/dg-dashboard";
-import { submissionPdfHref } from "@/lib/advice/submission-pdf";
+import { submissionPdfHref, submissionPdfLabel } from "@/lib/advice/submission-pdf";
+import { SubmissionDownloadButtons, type SubmissionAttachment } from "@/components/admin/SubmissionDownloadButtons";
 
 export const dynamic = "force-dynamic";
 
@@ -157,7 +158,24 @@ export default async function TeamDashboard({ searchParams }: { searchParams: Pr
     })) : Promise.resolve([]),
   ]);
 
+  // The Download column (View / Download Attachment + the PDF) shows on My
+  // Submissions for every role and on a BRANCH/DEPARTMENT Team Submissions
+  // view. Only ids and file names are loaded here, never Blob URLs: the
+  // files themselves go through /api/advice/[id]/attachments/[attachmentId].
+  const showDownloads = view === "my-submissions" || view === "team-submissions";
+  const attachmentsByAdvice = new Map<string, SubmissionAttachment[]>();
   const firstPaymentByAdvice = new Map<string, Date>();
+  if (rawRows.length > 0 && showDownloads) {
+    const files = await db.select({ id: attachments.id, adviceId: attachments.paymentAdviceId, fileName: attachments.fileName })
+      .from(attachments)
+      .where(inArray(attachments.paymentAdviceId, rawRows.map((row) => row.id)))
+      .orderBy(attachments.uploadedAt);
+    for (const file of files) {
+      const list = attachmentsByAdvice.get(file.adviceId) ?? [];
+      list.push({ id: file.id, fileName: file.fileName });
+      attachmentsByAdvice.set(file.adviceId, list);
+    }
+  }
   if (rawRows.length > 0) {
     const entries = await db.select({ adviceId: paymentEntries.paymentAdviceId, paidAt: paymentEntries.paidAt })
       .from(paymentEntries)
@@ -210,14 +228,14 @@ export default async function TeamDashboard({ searchParams }: { searchParams: Pr
     {rows.length === 0 ? <div className="rounded-lg border border-gray-200 p-10 text-center text-sm text-gray-500">
       {isAuthority && view === "history" ? "No decisions recorded yet." : view === "my-submissions" ? "No submissions found for your login email." : isAuthority ? "Nothing is waiting for your recommendation." : "No submissions found for this team scope."}
     </div> : <div className="overflow-x-auto rounded-lg border border-gray-200"><table className="w-full text-left text-sm">
-      <thead className="bg-gray-50 text-xs uppercase text-gray-500"><tr><th className="p-3">Reference</th><th className="p-3">Payee / Particulars</th><th className="p-3">Amount</th><th className="p-3">Submitted</th><th className="p-3">{isAuthority && view === "history" ? "Decision" : isAuthority && view === "pending" ? "Action" : "Current Stage"}</th>{view === "my-submissions" ? <th className="p-3">Download</th> : null}{isAuthority && view === "history" ? <th className="p-3">Action</th> : null}</tr></thead>
+      <thead className="bg-gray-50 text-xs uppercase text-gray-500"><tr><th className="p-3">Reference</th><th className="p-3">Payee / Particulars</th><th className="p-3">Amount</th><th className="p-3">Submitted</th><th className="p-3">{isAuthority && view === "history" ? "Decision" : isAuthority && view === "pending" ? "Action" : "Current Stage"}</th>{showDownloads ? <th className="p-3">Download</th> : null}{isAuthority && view === "history" ? <th className="p-3">Action</th> : null}</tr></thead>
       <tbody className="divide-y divide-gray-100">{rows.map((row) => <tr key={row.id} className="align-top">
         <td className="p-3 font-medium text-[#0b1f3a]">{displayNoFor(row.paymentMode as PaymentMode, row.serialNo, row.cashVoucherNo, row.isAdvance, row.advanceNo)}</td>
         <td className="p-3"><div className="font-medium">{row.payeeName}</div><div className="mt-1 max-w-xs text-xs text-gray-600">{row.nature}</div>{isAuthority && view === "pending" && row.revisionCount >= 1 ? <div className="mt-2 max-w-sm rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs text-amber-900"><strong>Resubmission - revision {row.revisionCount}</strong>{row.adminRemarks ? <div className="mt-1">Previous remarks: {row.adminRemarks}</div> : null}</div> : null}</td>
         <td className="p-3 whitespace-nowrap">₹ {Number(row.amount).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
         <td className="p-3 whitespace-nowrap">{view !== "my-submissions" ? <div>{row.submittedBy}</div> : null}<div className="text-xs text-gray-500">{date(row.submittedAt)}</div></td>
         <td className="p-3">{isAuthority && view === "pending" ? <div className="flex flex-col items-start gap-2"><StageBadge stage="Waiting on Authority" /><StageAgingIndicator advice={row} /><ViewLink adviceId={row.id} from="pending" /></div> : isAuthority && view === "history" ? <div className="text-xs"><StageBadge stage={row.status === "REJECTED" ? "Rejected" : row.approvedAt ? "Awaiting Finance Review" : "Sent Back"} /><div className="mt-1 text-gray-500">{date(row.finalRejectedAt ?? row.approvedAt ?? row.rejectedAt!)}</div>{(row.finalRejectionRemarks ?? row.authorityRemarks) ? <div className="mt-1 max-w-xs text-gray-600">{row.finalRejectionRemarks ?? row.authorityRemarks}</div> : null}</div> : <div className="text-xs"><StageBadge stage={pipelineStageFor(row)} /><div><StageAgingIndicator advice={row} /></div>{row.adminRemarks ? <div className="mt-2 max-w-xs rounded bg-amber-50 px-2 py-1 text-amber-800">Sent-back remarks: {row.adminRemarks}</div> : null}</div>}</td>
-        {view === "my-submissions" ? <td className="p-3"><a href={submissionPdfHref(row)} download className="inline-flex whitespace-nowrap rounded-md border border-[#0b1f3a] px-3 py-2 text-xs font-medium text-[#0b1f3a] hover:bg-[#0b1f3a]/5">Download PDF</a></td> : null}
+        {showDownloads ? <td className="p-3"><SubmissionDownloadButtons adviceId={row.id} attachments={attachmentsByAdvice.get(row.id) ?? []} pdfHref={submissionPdfHref(row)} pdfLabel={submissionPdfLabel(row)} /></td> : null}
         {isAuthority && view === "history" ? <td className="p-3"><ViewLink adviceId={row.id} from="history" /></td> : null}
       </tr>)}</tbody>
     </table></div>}
