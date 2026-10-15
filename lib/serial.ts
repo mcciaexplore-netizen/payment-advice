@@ -11,6 +11,7 @@ const PAYMENT_ADVICE_SERIES = "PAYMENT_ADVICE";
 const CASH_VOUCHER_SERIES = "CASH_VOUCHER";
 const ADVANCE_SERIES = "ADVANCE";
 const FORWARDING_MEMO_SERIES = "FORWARDING_MEMO";
+const REFUND_SERIES = "REFUND";
 
 /**
  * Indian financial year runs 1 April -> 31 March.
@@ -37,6 +38,10 @@ export function formatAdvanceNo(financialYear: string, number: number): string {
 
 export function formatForwardingMemoNo(financialYear: string, number: number): string {
   return `FM/MCCIA/${financialYear}/${String(number).padStart(4, "0")}`;
+}
+
+export function formatRefundNo(financialYear: string, number: number): string {
+  return `REF/MCCIA/${financialYear}/${String(number).padStart(4, "0")}`;
 }
 
 /**
@@ -129,6 +134,15 @@ export async function allocateForwardingMemoNumber(
 ): Promise<string> {
   const nextNumber = await allocateNumber(tx, financialYear, FORWARDING_MEMO_SERIES);
   return formatForwardingMemoNo(financialYear, nextNumber);
+}
+
+/** Allocates Refund request numbers on their own gapless series. */
+export async function allocateRefundNumber(
+  tx: Executor,
+  financialYear: string,
+): Promise<string> {
+  const nextNumber = await allocateNumber(tx, financialYear, REFUND_SERIES);
+  return formatRefundNo(financialYear, nextNumber);
 }
 
 /** Allocates the next Cash Receipt number for a given branch — one

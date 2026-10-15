@@ -18,7 +18,7 @@ describe("Team Dashboard scoped views", () => {
 
   it("SELF and CASH_RECEIPT (2026-10-07) are both restricted grants, forced into My Submissions/My Cash Receipts only, never Team Submissions", () => {
     expect(source).toContain('const isRestrictedGrant = activeGrant.role === "SELF" || activeGrant.role === "CASH_RECEIPT"');
-    expect(source).toContain('activeGrant.role === "SELF" || activeGrant.role === "CASH_RECEIPT"\n        ? ownSubmissions');
+    expect(source).toMatch(/activeGrant\.role === "SELF" \|\| activeGrant\.role === "CASH_RECEIPT"\s+\? ownSubmissions/);
     expect(source).toContain('params.view === "cash-receipts" && canSeeCashReceiptsTab ? "cash-receipts"');
     expect(source).toContain('isRestrictedGrant || params.view === "my-submissions" ? "my-submissions"');
     expect(source).not.toContain('activeGrant.role === "SELF"\n        ? caseInsensitiveEq');

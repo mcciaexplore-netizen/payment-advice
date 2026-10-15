@@ -11,7 +11,7 @@ const html = renderToStaticMarkup(createElement(PaymentDeskPage));
 const cards = [...html.matchAll(/<a [^>]*href="([^"]+)"[^>]*>.*?<h3[^>]*>([^<]+)<\/h3>.*?<\/a>/g)].map((match) => ({ href: match[1], title: match[2], markup: match[0] }));
 
 describe("Payment Desk home page cards", () => {
-  it("shows six cards, with National Safety Week last, right after Cash Receipt", () => {
+  it("shows the six existing cards in order and adds Refund after National Safety Week", () => {
     expect(cards.map((card) => card.title)).toEqual([
       "Payment Advice",
       "Cash Payment Voucher",
@@ -19,6 +19,7 @@ describe("Payment Desk home page cards", () => {
       "Forwarding Memo",
       "Cash Receipt",
       "National Safety Week - Branch Login",
+      "Refund",
     ]);
   });
 
@@ -38,5 +39,10 @@ describe("Payment Desk home page cards", () => {
     for (const card of cards.slice(0, 5)) expect(card.markup).toContain("Open form →");
     const baseClass = (markup: string) => /class="([^"]+)"/.exec(markup)![1].split(" ").filter((name) => !name.includes("border-[") && !/border-(sky|violet|rose)-/.test(name)).join(" ");
     for (const card of cards) expect(baseClass(card.markup)).toBe(baseClass(cards[0].markup));
+  });
+
+  it("shows the Refund card only outside production unless its feature flag is enabled", () => {
+    expect(cards[6].href).toBe("/refund");
+    expect(cards[6].markup).toContain("Submit a refund request");
   });
 });

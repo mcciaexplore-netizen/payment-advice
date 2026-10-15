@@ -8,6 +8,7 @@ import { vendors } from "@/lib/db/schema";
 import {
   findConfidentInvoiceVendor,
   invoiceExtractionSchema,
+  type InvoiceVendorCandidate,
 } from "@/lib/invoice-autofill";
 import { MAX_FILE_SIZE_BYTES } from "@/lib/validation/payment-advice";
 import { PENDING_UPLOAD_PREFIX } from "@/lib/attachments/client-upload";
@@ -83,27 +84,48 @@ async function readBlobAsBase64(pathname: string) {
  * and leave the established manual form flow untouched.
  */
 export async function POST(request: Request) {
-  const parsed = requestSchema.safeParse(await request.json().catch(() => null));
-  if (!parsed.success) return NextResponse.json({ autoFill: null });
-
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
     console.warn("Gemini invoice auto-fill requested without GEMINI_API_KEY configured");
-    return NextResponse.json({ autoFill: null });
+    return NextResponse.json({ autoFill: null, error: "Invoice auto-fill needs GEMINI_API_KEY in this environment. Add it to payment-advice/.env.local and restart the dev server." }, { status: 503 });
   }
 
   try {
-    const metadata = await head(parsed.data.pathname);
-    if (
-      metadata.size > MAX_FILE_SIZE_BYTES ||
-      !["application/pdf", "image/jpeg", "image/png"].includes(metadata.contentType)
-    ) {
-      return NextResponse.json({ autoFill: null });
+    let mimeType: string;
+    let base64: string;
+    const contentType = request.headers.get("content-type") ?? "";
+    if (contentType.includes("multipart/form-data")) {
+      const form = await request.formData();
+      const file = form.get("file");
+      if (!(file instanceof File) || file.size === 0) {
+        return NextResponse.json({ autoFill: null, error: "Choose an invoice file before trying auto-fill." }, { status: 400 });
+      }
+      mimeType = file.type;
+      if (
+        file.size > MAX_FILE_SIZE_BYTES ||
+        !["application/pdf", "image/jpeg", "image/png"].includes(mimeType) ||
+        !/\.(pdf|jpe?g|png)$/i.test(file.name)
+      ) {
+        return NextResponse.json({ autoFill: null, error: "Use a PDF, JPEG, or PNG file no larger than 10 MB." }, { status: 400 });
+      }
+      base64 = Buffer.from(await file.arrayBuffer()).toString("base64");
+    } else {
+      const parsed = requestSchema.safeParse(await request.json().catch(() => null));
+      if (!parsed.success) return NextResponse.json({ autoFill: null, error: "The uploaded invoice reference is invalid. Attach the file again." }, { status: 400 });
+      const metadata = await head(parsed.data.pathname);
+      if (
+        metadata.size > MAX_FILE_SIZE_BYTES ||
+        !["application/pdf", "image/jpeg", "image/png"].includes(metadata.contentType)
+      ) {
+        return NextResponse.json({ autoFill: null, error: "Use a PDF, JPEG, or PNG file no larger than 10 MB." }, { status: 400 });
+      }
+      mimeType = metadata.contentType;
+      base64 = await readBlobAsBase64(parsed.data.pathname);
     }
 
-    const [base64, vendorRows] = await Promise.all([
-      readBlobAsBase64(parsed.data.pathname),
-      db
+    let vendorRows: InvoiceVendorCandidate[];
+    try {
+      vendorRows = await db
         .select({
           id: vendors.id,
           companyName: vendors.companyName,
@@ -115,15 +137,21 @@ export async function POST(request: Request) {
           udyamNumber: vendors.udyamNumber,
         })
         .from(vendors)
-        .where(and(eq(vendors.isActive, true))),
-    ]);
+        .where(and(eq(vendors.isActive, true)));
+    } catch (error) {
+      // Invoice fields remain useful during local development even when the
+      // optional vendor database is not configured; in that case we simply
+      // skip matching the extracted payee to a canonical vendor record.
+      console.warn("Invoice auto-fill vendor lookup unavailable", error instanceof Error ? error.message : error);
+      vendorRows = [];
+    }
 
     const ai = new GoogleGenAI({ apiKey });
     const result = await ai.models.generateContent({
       model: "gemini-2.5-flash",
       contents: [
         { text: extractionPrompt },
-        { inlineData: { mimeType: metadata.contentType, data: base64 } },
+        { inlineData: { mimeType, data: base64 } },
       ],
       config: {
         responseMimeType: "application/json",
@@ -132,7 +160,9 @@ export async function POST(request: Request) {
       },
     });
     const extracted = invoiceExtractionSchema.safeParse(JSON.parse(result.text || "null"));
-    if (!extracted.success) return NextResponse.json({ autoFill: null });
+    if (!extracted.success || !Object.values(extracted.data).some((value) => value !== null)) {
+      return NextResponse.json({ autoFill: null, error: "We couldn't identify invoice details in this file. Try a clearer scan, or fill the form manually." }, { status: 422 });
+    }
 
     const matchedVendor = findConfidentInvoiceVendor(extracted.data.payeeName, vendorRows);
     // Only a real, active vendor selected above is returned as `vendor` —
@@ -162,6 +192,6 @@ export async function POST(request: Request) {
     // non-blocking. Keep minimal server observability without exposing an
     // extraction/provider error to a public submitter.
     console.warn("Gemini invoice auto-fill unavailable", error instanceof Error ? error.message : error);
-    return NextResponse.json({ autoFill: null });
+    return NextResponse.json({ autoFill: null, error: "Invoice reading failed. Try again with a clearer PDF or image, or fill the form manually." }, { status: 502 });
   }
 }
