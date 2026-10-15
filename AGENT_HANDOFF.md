@@ -49,7 +49,14 @@ Design system: Navy `#0B1F3A`, Forest green `#2E8B57`, Amber `#E8A33D`. Headings
 
 ## 3. Current State (update this every session)
 
-**Last updated:** 12 October 2026, by Claude Opus 5.5 (dashboard attachment buttons, branch `feature/dashboard-attachment-buttons`, PR open, not merged; see entry below)
+**Last updated:** 15 October 2026, by Codex (Refund request form and Tax Invoice auto-fill fix, branch `feature/refund-request-form`, PR #6 open, not merged; see entry below)
+
+### In review: Refund request form and Tax Invoice auto-fill fix (Codex, 2026-10-15, branch `feature/refund-request-form`, PR #6 open, not merged)
+Adds a seventh Refund card and form with required submitter and Payee / Company Name, optional payee fields in Payment Advice order, required basic/GST amounts, expenditure and date, optional bank details, enclosures/remarks, and optional Email copy, Cancelled cheque, and Other Documents uploads. Local development submission is explicitly non-persistent and returns `LOCAL PREVIEW ONLY`.
+- **Production safety:** the home card is hidden, `/refund` returns 404, and `/api/refund/submit` returns 404 unless `REFUND_REQUESTS_ENABLED=true`. Keep the flag unset until the owner generates and applies the migration.
+- **Database proposal:** new `refund_submissions` table with UUID PK, unique refund number, submitter/branch/authority, payee fields, amounts, expenditure/date, optional bank/enclosure/remarks fields, JSONB document metadata, timestamp, and positive-total check. Numbering uses existing `serial_counters`. No migration is included; `drizzle-kit generate` failed with `uv_os_get_passwd returned ENOMEM`, and no migration/snapshot/journal was hand-edited.
+- **Auto-fill:** local Tax Invoice auto-fill sends the selected file directly to the route, avoiding a local Blob upload dependency; production keeps the private Blob flow. Missing Gemini configuration and invalid upload errors are now explicit. Live Gemini extraction was not verified because this environment has no `GEMINI_API_KEY`.
+- **Verified:** TypeScript, lint, full Vitest (669 passed, 11 skipped), and production build pass. New refund form and submit tests, invoice auto-fill tests, and home page tests pass. The pre-existing report work remains safely stashed and is not part of this branch.
 
 ### In review: View / Download Attachment buttons on the Authority and Team dashboards (Claude Opus 5.5, 2026-10-12, branch `feature/dashboard-attachment-buttons`, PR open, not merged)
 The Download column on `app/authority/page.tsx` (the one page that renders both dashboards) is now one shared client component, `components/admin/SubmissionDownloadButtons.tsx`: View Attachment | Download Attachment | Download {document}. "Download PDF" is gone.
@@ -1189,6 +1196,7 @@ Requested because every `admin_users` password (Sunil's, Abha's, the ALL account
 
 ## 4. Open Items (verify before building on top of these)
 
+- **Refund request migration pending (2026-10-15, PR #6).** `feature/refund-request-form` defines `refund_submissions` in Drizzle schema but intentionally includes no migration because `drizzle-kit generate` failed with `uv_os_get_passwd returned ENOMEM`; migration files, snapshots, and journal were not hand-edited. Owner must generate/review/apply the additive migration before setting `REFUND_REQUESTS_ENABLED=true`. Production UI and route remain hidden/inert while the flag is unset. No production DB access or writes were made.
 - **Cash Receipt Excel report draft remains local only (2026-10-07).** The working tree has an uncommitted report button and Excel export route. It was not included in `f007c9a`; review it separately before any push. The local checkout has no `DATABASE_URL`, so it cannot display the main database's receipt records.
 
 Status legend: 🔴 unverified / high risk · 🟡 unverified / lower risk · 🟢 verified
@@ -1350,6 +1358,8 @@ Status legend: 🔴 unverified / high risk · 🟡 unverified / lower risk · �
 - **`lib/email/templates.ts`'s `shell()` loads the MCCIA logo from `https://payment-advice.vercel.app/mccia-logo.png` (this app's own domain), not from `mcciapune.com` directly (2026-10-01, fixed a real broken-image bug affecting every email this app sends).** Don't revert to hotlinking the logo from `mcciapune.com` or any other third-party host — email clients need a stable, reliably-reachable image URL, and this app doesn't control that site's hotlinking/availability. The underlying asset is `public/mccia-logo.png`, the same file the Payment Advice/Cash Voucher/Forwarding Memo PDFs already embed — if that file is ever replaced with a different logo, no code change is needed here, but re-check the hardcoded `width="160" height="38"` in `shell()` still matches its aspect ratio (currently ~4.2:1, matching the real 1085x258 asset).
 
 ## 6. Session Log
+
+2026-10-15 - Codex - Added Refund request form and local Tax Invoice auto-fill fix on `feature/refund-request-form`; pushed branch and opened PR #6 into `main`. Production Refund card/page/submit endpoint stay disabled unless `REFUND_REQUESTS_ENABLED=true`; do not set it until owner-generated migration is applied. Drizzle migration generation failed with `uv_os_get_passwd returned ENOMEM`; no migration files were hand-edited. TypeScript, lint, 669 tests (11 skipped), and production build pass. The unrelated Cash Receipt report work remains stashed and was not included.
 
 2026-10-07 - Codex - Pushed Cash Receipt form refinements to `main` at the user's explicit request. Added Show/Hide password, required course-name detail, and Hall Hiring price-only behavior in the form and printable output. Production build and targeted ESLint passed. No schema or access changes; full test suite not run. Excel report work remains local and uncommitted.
 

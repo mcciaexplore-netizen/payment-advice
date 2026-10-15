@@ -639,6 +639,48 @@ export const cashReceipts = pgTable(
   ],
 );
 
+/** Standalone Refund requests submitted from the public Payment Desk form. */
+export const refundSubmissions = pgTable(
+  "refund_submissions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    refundNo: text("refund_no").notNull().unique(),
+    financialYear: text("financial_year").notNull(),
+    submittedByName: text("submitted_by_name").notNull(),
+    submittedByEmail: text("submitted_by_email").notNull(),
+    submittedByDepartment: text("submitted_by_department").notNull(),
+    branch: text("branch").notNull(),
+    recommendingAuthority: text("recommending_authority").notNull(),
+    payeeDetails: text("payee_details").notNull(),
+    payeeAddress: text("payee_address"),
+    payeeContactPerson: text("payee_contact_person"),
+    payeeContactPhone: text("payee_contact_phone"),
+    payeeEmail: text("payee_email"),
+    payeeGstin: text("payee_gstin"),
+    payeeUdyamNumber: text("payee_udyam_number"),
+    basicAmount: numeric("basic_amount", { precision: 14, scale: 2 }).notNull().default("0"),
+    gstAmount: numeric("gst_amount", { precision: 14, scale: 2 }).notNull().default("0"),
+    totalAmount: numeric("total_amount", { precision: 14, scale: 2 }).notNull(),
+    natureOfExpenditure: text("nature_of_expenditure").notNull(),
+    fromDate: date("from_date").notNull(),
+    bankName: text("bank_name"),
+    beneficiaryName: text("beneficiary_name"),
+    bankAccountNo: text("bank_account_no"),
+    bankIfsc: text("bank_ifsc"),
+    enclosures: text("enclosures"),
+    specialRemarks: text("special_remarks"),
+    documents: jsonb("documents").$type<Array<{
+      type: "EMAIL_COPY" | "CANCELLED_CHEQUE" | "OTHER";
+      fileName: string;
+      blobPathname: string;
+      blobUrl: string;
+      sizeBytes: number;
+    }>>().notNull().default([]),
+    submittedAt: timestamp("submitted_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [check("refund_submissions_amount_positive_check", sql`${table.totalAmount} > 0`)],
+);
+
 export const auditLog = pgTable("audit_log", {
   id: uuid("id").primaryKey().defaultRandom(),
   paymentAdviceId: uuid("payment_advice_id").references(

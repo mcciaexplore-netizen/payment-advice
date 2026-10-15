@@ -84,6 +84,7 @@ export function PaymentAdviceForm({
   const [autoFillInvoiceUpload, setAutoFillInvoiceUpload] = useState<UploadedAttachment | null>(null);
   const [extractingInvoice, setExtractingInvoice] = useState(false);
   const [hasInvoiceAutoFill, setHasInvoiceAutoFill] = useState(false);
+  const [invoiceAutoFillError, setInvoiceAutoFillError] = useState<string | null>(null);
   // The invoice's own printed bank details (if extracted), kept only to
   // compare against whatever the vendor-bank-accounts system record ends up
   // filling in — see applyVendorBankAccount below. Cleared whenever the Tax
@@ -323,6 +324,7 @@ export function PaymentAdviceForm({
     setTaxInvoice(files);
     setAutoFillInvoiceUpload(null);
     setHasInvoiceAutoFill(false);
+    setInvoiceAutoFillError(null);
     setInvoiceExtractedBank(null);
     setValue("bankDetailsMismatch", false);
     if (priorUpload) void cleanupPendingUploads([priorUpload]);
@@ -333,37 +335,53 @@ export function PaymentAdviceForm({
     if (!file || isAdvance || isCashVoucher) return;
 
     setExtractingInvoice(true);
+    setInvoiceAutoFillError(null);
     try {
       let uploaded = autoFillInvoiceUpload;
-      if (!uploaded) {
-        const uploadBatchId = crypto.randomUUID();
-        const blob = await upload(
-          `pending-uploads/${uploadBatchId}/TAX_INVOICE-${safeUploadFileName(file.name)}`,
-          file,
-          {
-            access: "private",
-            handleUploadUrl: "/api/attachments/upload",
-            multipart: file.size > 4 * 1024 * 1024,
-          },
-        );
-        uploaded = {
-          docType: "TAX_INVOICE",
-          fileName: file.name,
-          blobPathname: blob.pathname,
-          blobUrl: blob.url,
-          sizeBytes: file.size,
-        };
-        setAutoFillInvoiceUpload(uploaded);
-      }
+      let response: Response;
+      if (process.env.NODE_ENV !== "production") {
+        // Local development reads the selected file directly. This avoids
+        // requiring Vercel Blob credentials just to try invoice extraction.
+        const body = new FormData();
+        body.set("file", file);
+        response = await fetch("/api/invoice-autofill", { method: "POST", body });
+      } else {
+        if (!uploaded) {
+          const uploadBatchId = crypto.randomUUID();
+          let blob: Awaited<ReturnType<typeof upload>>;
+          try {
+            blob = await upload(
+              `pending-uploads/${uploadBatchId}/TAX_INVOICE-${safeUploadFileName(file.name)}`,
+              file,
+              {
+                access: "private",
+                handleUploadUrl: "/api/attachments/upload",
+                multipart: file.size > 4 * 1024 * 1024,
+              },
+            );
+          } catch {
+            throw new Error("Tax invoice upload failed. Check that BLOB_READ_WRITE_TOKEN is configured for this environment, then try again.");
+          }
+          uploaded = {
+            docType: "TAX_INVOICE",
+            fileName: file.name,
+            blobPathname: blob.pathname,
+            blobUrl: blob.url,
+            sizeBytes: file.size,
+          };
+          setAutoFillInvoiceUpload(uploaded);
+        }
 
-      const response = await fetch("/api/invoice-autofill", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pathname: uploaded.blobPathname }),
-      });
-      const payload = response.ok ? await response.json() : null;
+        response = await fetch("/api/invoice-autofill", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ pathname: uploaded.blobPathname }),
+        });
+      }
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(payload?.error ?? "Invoice reading is temporarily unavailable. You can continue by filling the form manually.");
       const autoFill = payload?.autoFill;
-      if (!autoFill) return;
+      if (!autoFill) throw new Error(payload?.error ?? "We couldn't read any details from this file. Try a clearer PDF or image, or fill the form manually.");
 
       let changed = false;
       if (autoFill.billNo) {
@@ -387,6 +405,11 @@ export function PaymentAdviceForm({
       // branch, so auto-fill cannot create or bypass the vendor dropdown.
       if (autoFill.vendor) {
         applyVendor(autoFill.vendor as VendorSearchResult);
+        changed = true;
+      } else if (autoFill.payeeName) {
+        // Keep the extracted supplier name as an editable beneficiary fallback
+        // when no active vendor record could be confidently matched.
+        setValue("beneficiaryName", autoFill.payeeName, { shouldValidate: true });
         changed = true;
       }
       // Bank details: the invoice's own printed bank details are only a
@@ -423,9 +446,9 @@ export function PaymentAdviceForm({
         changed = true;
       }
       if (changed) setHasInvoiceAutoFill(true);
-    } catch {
-      // Best effort only: a provider/upload failure intentionally leaves the
-      // ordinary manual form flow uninterrupted and without an error banner.
+      else setInvoiceAutoFillError("No invoice details could be identified. Try a clearer PDF or image, or fill the form manually.");
+    } catch (error) {
+      setInvoiceAutoFillError(error instanceof Error ? error.message : "Invoice auto-fill is unavailable. Please fill the form manually.");
     } finally {
       setExtractingInvoice(false);
     }
@@ -726,6 +749,7 @@ export function PaymentAdviceForm({
               </button>
             </div>
           ) : null}
+          {invoiceAutoFillError ? <p role="alert" className="mt-3 rounded-md border border-[#b3261e]/30 bg-white px-3 py-2 text-sm text-[#b3261e]">{invoiceAutoFillError}</p> : null}
         </div>
       ) : null}
 
