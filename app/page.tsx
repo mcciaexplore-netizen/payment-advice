@@ -2,9 +2,10 @@ import Image from "next/image";
 import Link from "next/link";
 import { PublicLoginMenu } from "@/components/public/PublicLoginMenu";
 import { NSW_BRANCH_LOGIN_URL } from "@/lib/external-links";
+import { refundEntryVisible } from "@/lib/refund-requests";
 
 export default function PaymentDeskPage() {
-  const refundRequestsEnabled = process.env.NODE_ENV !== "production" || process.env.REFUND_REQUESTS_ENABLED === "true";
+  const refundRequestsEnabled = refundEntryVisible();
   return <main className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-10 px-6 py-10">
     <header className="relative flex flex-wrap items-start gap-4 border-b border-gray-200 pb-6"><div className="flex min-w-0 items-center gap-4 sm:pr-32"><Image src="/mccia-logo.png" alt="MCCIA logo" width={1085} height={258} className="h-14 w-auto" /><div><h1 className="font-heading text-3xl text-[#0b1f3a]">Payment Desk</h1><p className="text-sm text-gray-600">Finance &amp; Accounts Department - Mahratta Chamber of Commerce, Industries and Agriculture</p></div></div><PublicLoginMenu /></header>
     <section className="text-center"><h2 className="font-heading text-3xl text-[#0b1f3a]">What would you like to submit?</h2><p className="mt-2 text-sm text-gray-600">Choose the document that matches your payment request.</p></section>
