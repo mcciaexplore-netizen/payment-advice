@@ -49,7 +49,22 @@ Design system: Navy `#0B1F3A`, Forest green `#2E8B57`, Amber `#E8A33D`. Headings
 
 ## 3. Current State (update this every session)
 
-**Last updated:** 16 October 2026, by Claude Opus 5.5 (home card order, branch `fix/home-card-order`, PR open, not merged; see entry below)
+**Last updated:** 16 October 2026, by Claude Opus 5.5 (compact home page that fits a laptop screen, branch `fix/home-compact`, PR open, not merged; supersedes PR #14; see entry below)
+
+### In review: compact home page, all cards visible without scrolling on a laptop (Claude Opus 5.5, 2026-10-16, branch `fix/home-compact`, PR open, not merged)
+This supersedes PR #14 (`fix/home-card-order`), which can be closed; it carries the same owner card order.
+- **Grid** (`app/page.tsx`): 1 column on mobile, 2 from 640 px, 3 from 1024 px.
+  - Flag on: Payment Advice, Cash Payment Voucher, Advance Payment Form / Refund, Cash Receipt, Forwarding Memo / National Safety Week bar.
+  - Flag off: Payment Advice, Cash Payment Voucher, Advance Payment Form / Forwarding Memo, Cash Receipt (spans 2 of 3 columns, and the full row on tablet) / bar.
+  - The last-card span is computed (`lastCardSpans`) from the card count, so no row has a gap.
+- **Compact cards**: `p-4`, title `text-lg` on one line (`truncate`), description `line-clamp-2`, accent bar `w-12`, and "Open form" pinned to the bottom.
+- **Header and heading**: tighter. `main` is `py-5 gap-5` and `max-w-5xl` (was `max-w-4xl`, so three columns fit the titles). The title and heading are `text-2xl`, and the sub line under the header title is `text-xs` on mobile. The logo and Login button are unchanged. This also removed the old 19 px sideways scroll at 390 px.
+- **National Safety Week**: a slim single-row bar spanning the grid, with the rose accent as a short vertical stripe, title and description on the left, "Open portal →" on the right. Same link, same tab.
+- **Copy shortened** (two descriptions only):
+  - Forwarding Memo: "For forwarding cheques, demand drafts, and other payment instruments to the Accounts Department." becomes "For forwarding cheques, demand drafts, and other instruments to Accounts."
+  - Refund: "Submit a refund request with payee, amount, bank details, and supporting documents." becomes "Request a refund with payee, amount, bank details, and documents."
+- **Measured in Chrome** (fixture render with the built CSS, flag on and off): no vertical scroll at 1366x650, 1440x800, 1920x950 and 1024x768. The last card ends at 607 px. No title is cut and no description is clamped at desktop sizes. At 390 px the page scrolls (allowed) and the bar's title wraps to two lines.
+- **Verified**: tsc, lint, 732 tests and `next build` clean. `lib/home-page-ui.test.ts` is rewritten for both flag states: order, spans, grid classes, compact classes, exact descriptions, bar layout, links and accents.
 
 ### In review: home page card order (Claude Opus 5.5, 2026-10-16, branch `fix/home-card-order`, PR open, not merged)
 Order change only, on the owner's spec. There are no colour, copy, link or grid changes (verified: all six card definitions and the rest of `app/page.tsx` are identical to `main`).
