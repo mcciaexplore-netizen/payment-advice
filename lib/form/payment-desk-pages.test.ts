@@ -6,7 +6,7 @@ const read = (file: string) => fs.readFileSync(path.join(process.cwd(), file), "
 
 describe("Payment Desk dedicated public pages", () => {
   it("routes the landing choices and the two confirmed follow-up links correctly", () => {
-    expect(read("app/page.tsx")).toContain('href: "/payment-advice", title: "Payment Advice"');
+    expect(read("app/page.tsx")).toContain('{ href: "/payment-advice", title: "Payment Advice"');
     expect(read("app/page.tsx")).toContain('href: "/cash-voucher", title: "Cash Payment Voucher"');
     expect(read("app/page.tsx")).toContain('href: "/advance", title: "Advance Payment Form"');
     expect(read("app/advance/page.tsx")).toContain('href="/payment-advice"');
