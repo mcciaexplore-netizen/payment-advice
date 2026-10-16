@@ -10,11 +10,19 @@ const ADVICE_ID = "11111111-1111-4111-8111-111111111111";
 const render = (attachments: Array<{ id: string; fileName: string }>) => renderToStaticMarkup(createElement(SubmissionDownloadButtons, {
   adviceId: ADVICE_ID, attachments, pdfHref: `/api/advice/${ADVICE_ID}/pdf`, pdfLabel: "Download Payment Advice",
 }));
-const labels = (html: string) => [...html.matchAll(/<(?:a|button)[^>]*>([^<]+)<\/(?:a|button)>/g)].map((match) => match[1]);
+/** Visible text of each button/link (icons and screen-reader-only text dropped). */
+const labels = (html: string) => [...html.matchAll(/<(?:a|button)\b[^>]*>(.*?)<\/(?:a|button)>/g)]
+  .map((match) => match[1].replace(/<span class="sr-only">.*?<\/span>/g, "").replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim());
 
 describe("SubmissionDownloadButtons", () => {
-  it("orders the buttons View Attachment | Download Attachment | Download {document}", () => {
-    expect(labels(render([{ id: "a1", fileName: "invoice.pdf" }]))).toEqual(["View Attachment", "Download Attachment", "Download Payment Advice"]);
+  it("orders the buttons [View] [Download] | [Download {document}], full names as tooltip and accessible name", () => {
+    const html = render([{ id: "a1", fileName: "invoice.pdf" }]);
+    expect(labels(html)).toEqual(["View", "Download", "Download Payment Advice"]);
+    expect(html).toContain('<span title="View Attachment"');
+    expect(html).toContain('<span class="sr-only">View Attachment</span>');
+    expect(html).toContain('title="Download Attachment" aria-label="Download Attachment"');
+    expect(html).toContain('role="group" aria-label="Attachment"');
+    expect(html).toContain("md:flex-nowrap");
   });
 
   it("one attachment: direct actions through the authenticated route, original filename, no Blob URL", () => {
@@ -27,13 +35,15 @@ describe("SubmissionDownloadButtons", () => {
 
   it("several attachments: both buttons open a file list (and show the count)", () => {
     const html = render([{ id: "a1", fileName: "invoice.pdf" }, { id: "a2", fileName: "po.png" }]);
-    expect(labels(html)).toEqual(["View Attachment (2) ▾", "Download Attachment (2) ▾", "Download Payment Advice"]);
+    expect(labels(html)).toEqual(["View (2) ▾", "Download (2) ▾", "Download Payment Advice"]);
+    expect(html).toContain('aria-label="View Attachment (2)"');
+    expect(html).toContain('title="Download Attachment (2)"');
     expect(html.match(/aria-haspopup="true"/g)).toHaveLength(2);
   });
 
   it("no attachment: both buttons stay in place, disabled, with a No attachment tooltip", () => {
     const html = render([]);
-    expect(labels(html)).toEqual(["View Attachment", "Download Attachment", "Download Payment Advice"]);
+    expect(labels(html)).toEqual(["View", "Download", "Download Payment Advice"]);
     expect(html.match(/title="No attachment"/g)).toHaveLength(2);
     expect(html.match(/<button[^>]*disabled=""/g)).toHaveLength(2);
   });

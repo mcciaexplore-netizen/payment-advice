@@ -2,8 +2,16 @@ import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
 import { NextResponse } from "next/server";
 import { MAX_FILE_SIZE_BYTES } from "@/lib/validation/payment-advice";
 import { PENDING_UPLOAD_PREFIX } from "@/lib/attachments/client-upload";
+import { clientIpFrom, createRateLimiter } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
+
+/** Upload-token requests per IP per warm instance, shared by every form
+ * (Payment Advice, Cash Voucher, Advance, Vendor requests, Refund). Set high
+ * because one submission can carry several files and staff share office
+ * IPs; it only stops sustained bursts. Blob's completion callback (no
+ * x-forwarded-for of a real browser) is not counted. */
+const isRateLimited = createRateLimiter({ limit: 120, windowMs: 10 * 60 * 1000 });
 
 export async function POST(request: Request) {
   let body: HandleUploadBody;
@@ -11,6 +19,10 @@ export async function POST(request: Request) {
     body = (await request.json()) as HandleUploadBody;
   } catch {
     return NextResponse.json({ error: "Invalid upload request." }, { status: 400 });
+  }
+
+  if (body?.type === "blob.generate-client-token" && isRateLimited(clientIpFrom(request.headers))) {
+    return NextResponse.json({ error: "Too many uploads from this connection. Please wait a few minutes and try again." }, { status: 429 });
   }
 
   try {

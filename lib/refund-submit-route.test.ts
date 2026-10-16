@@ -41,7 +41,7 @@ vi.mock("@/lib/date-time", async (importOriginal) => ({
 import { POST } from "@/app/api/refund/submit/route";
 import { auditLog, refundRequests } from "@/lib/db/schema";
 
-function form(overrides: Record<string, string> = {}) {
+function form(overrides: Record<string, string> = {}, ip = "203.0.113.9") {
   const body = new FormData();
   const fields: Record<string, string> = {
     submittedByName: "Test Submitter", submittedByEmail: "submitter@example.com", submittedByDepartment: "ADMIN",
@@ -50,7 +50,7 @@ function form(overrides: Record<string, string> = {}) {
     documents: "[]", ...overrides,
   };
   for (const [key, value] of Object.entries(fields)) body.set(key, value);
-  return new NextRequest("http://localhost/api/refund/submit", { method: "POST", body, headers: { "x-forwarded-for": "203.0.113.9" } });
+  return new NextRequest("http://localhost/api/refund/submit", { method: "POST", body, headers: { "x-forwarded-for": ip } });
 }
 
 describe("POST /api/refund/submit", () => {
@@ -110,6 +110,13 @@ describe("POST /api/refund/submit", () => {
     expect(audit.values).toMatchObject({ refundRequestId: "99999999-9999-4999-8999-999999999999", action: "REFUND_REQUEST_SUBMITTED", actor: "Test Submitter", ipAddress: "203.0.113.9" });
   });
 
+  it("stores lowercase, space-padded GSTIN and IFSC uppercased (no CHECK failure, no 500)", async () => {
+    vi.stubEnv("REFUND_REQUESTS_ENABLED", "true");
+    const response = await POST(form({ payeeGstin: " 27aaacm1234a1z5 ", bankIfsc: "hdfc0001234 " }));
+    expect(response.status).toBe(200);
+    expect(mocks.state.inserts[0].values).toMatchObject({ payeeGstin: "27AAACM1234A1Z5", bankIfsc: "HDFC0001234" });
+  });
+
   it("a client-supplied date or serial is ignored", async () => {
     vi.stubEnv("REFUND_REQUESTS_ENABLED", "true");
     await POST(form({ requestDate: "2020-01-01", serialNo: "REF/MCCIA/2020-21/9999" }));
@@ -132,5 +139,19 @@ describe("POST /api/refund/submit", () => {
     const response = await POST(form({ documents }));
     expect(response.status).toBe(400);
     expect(mocks.transaction).not.toHaveBeenCalled();
+  });
+
+  it("rate limits bursts per IP with 429 (20 per 10 minutes per instance)", async () => {
+    vi.stubEnv("REFUND_REQUESTS_ENABLED", "");
+    const statuses: number[] = [];
+    for (let i = 0; i < 21; i++) statuses.push((await POST(form({}, "198.51.100.77"))).status);
+    expect(statuses.slice(0, 20).every((status) => status === 200)).toBe(true);
+    expect(statuses[20]).toBe(429);
+    expect((await POST(form({}, "198.51.100.78"))).status).toBe(200);
+  });
+
+  it("rejects an oversized body with 413 before parsing", async () => {
+    const request = new NextRequest("http://localhost/api/refund/submit", { method: "POST", body: "x", headers: { "content-length": String(2 * 1024 * 1024), "x-forwarded-for": "198.51.100.90" } });
+    expect((await POST(request)).status).toBe(413);
   });
 });

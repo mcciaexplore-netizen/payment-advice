@@ -50,6 +50,21 @@ describe("refundRequestSchema", () => {
     expect(firstError(overrides)).toBe(message);
   });
 
+  it("treats a spaces-only GSTIN or IFSC as blank, and a missing one as blank", () => {
+    const spaces = parse({ payeeGstin: "   ", bankIfsc: "  " });
+    expect(spaces.success && [spaces.data.payeeGstin, spaces.data.bankIfsc]).toEqual(["", ""]);
+    const missing = parse({});
+    expect(missing.success && [missing.data.payeeGstin, missing.data.bankIfsc]).toEqual(["", ""]);
+  });
+
+  it("anything that passes validation also passes the DB format checks", () => {
+    const result = parse({ payeeGstin: " 27aaacm1234a1z5 ", bankIfsc: " hdfc0001234 " });
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.data.payeeGstin).toMatch(/^[0-9A-Z]{15}$/);
+    expect(result.data.bankIfsc).toMatch(/^[A-Z]{4}0[A-Z0-9]{6}$/);
+  });
+
   it("allows From Date equal to today (the stored request_date)", () => {
     expect(parse({ fromDate: TODAY }).success).toBe(true);
   });
@@ -60,6 +75,8 @@ describe("refundRequestSchema", () => {
     expect(firstError({ documents: [doc("EMAIL_COPY", 1), doc("EMAIL_COPY", 2)] })).toBe("Only one file of each document type is allowed.");
     expect(parse({ documents: [doc("OTHER", 1), doc("OTHER", 2), doc("OTHER", 3), doc("OTHER", 4)] }).success).toBe(false);
     expect(parse({ documents: [{ ...doc("OTHER"), blobPathname: "attachments/final.pdf" }] }).success).toBe(false);
+    const big = (type: string, n: number) => ({ ...doc(type, n), sizeBytes: 9 * 1024 * 1024 });
+    expect(firstError({ documents: [big("EMAIL_COPY", 1), big("CANCELLED_CHEQUE", 2), big("OTHER", 3)] })).toBe("Documents together must be 25 MB or less.");
   });
 });
 
