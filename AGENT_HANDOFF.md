@@ -58,7 +58,7 @@ The owner chose this layout. `app/page.tsx` drops PR #6's 3-column step: one car
   - Flag off: 2 + 2 + Cash Receipt (full) + National Safety Week (full).
   - Flag on: 2 + 2 + 2 + National Safety Week (full).
   - Verified in Chrome at 1440, 1024 and 390 px. Cards are 414 px wide on desktop and tablet, and stacked at 390. The sideways scroll at 390 is the existing header overflow, not the grid.
-- **Visual note for the owner**: with the flag on, Cash Receipt and Refund sit side by side with the same sky accent.
+- **Refund accent**: teal (`bg-teal-600`, `border-teal-300` / hover `border-teal-600`), on the owner's decision, so it is distinct from Cash Receipt's sky blue beside it.
 - **Verified**: tsc, lint, full tests and `next build` clean. `lib/home-page-ui.test.ts` renders the page as production with the flag off and on and checks order, full-width cards and grid classes. `lib/form/payment-desk-pages.test.ts` is updated for the data-list syntax.
 
 ### In review: Refund requests saved to the DB (Claude Opus 5.5, 2026-10-16, branch `feature/refund-request-db`, pushed, not merged). Migration 0030 generated, NOT applied.

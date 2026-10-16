@@ -29,6 +29,16 @@ describe("Payment Desk home page cards", () => {
     expect(cards.map((card) => card.wide)).toEqual([false, false, false, false, false, false, true]);
   });
 
+  it("gives Refund its own teal accent, distinct from Cash Receipt's sky blue beside it", () => {
+    const { cards } = render(true);
+    const refund = cards.find((card) => card.title === "Refund")!;
+    const cashReceipt = cards.find((card) => card.title === "Cash Receipt")!;
+    expect(refund.markup).toContain("bg-teal-600");
+    expect(refund.markup).toContain("border-teal-300 hover:border-teal-600");
+    expect(refund.markup).not.toContain("sky-");
+    expect(cashReceipt.markup).toContain("bg-sky-600");
+  });
+
   it("flag off: 6 cards, no Refund, the odd last form (Cash Receipt) spans its row, National Safety Week last and full width", () => {
     const { cards, html } = render(false);
     expect(cards.map((card) => card.title)).toEqual([...FORMS, NSW]);
@@ -58,7 +68,7 @@ describe("Payment Desk home page cards", () => {
     expect(cards.slice(0, 6).map((card) => card.href)).toEqual(["/payment-advice", "/cash-voucher", "/advance", "/forwarding-memo", "/cash-receipt", "/refund"]);
     for (const card of cards.slice(0, 6)) expect(card.markup).toContain("Open form →");
     const baseClass = (markup: string) => /class="([^"]+)"/.exec(markup)![1].split(" ")
-      .filter((name) => !name.includes("border-[") && !/border-(sky|violet|rose)-/.test(name) && name !== "sm:col-span-2").join(" ");
+      .filter((name) => !name.includes("border-[") && !/border-(sky|violet|rose|teal)-/.test(name) && name !== "sm:col-span-2").join(" ");
     for (const card of cards) expect(baseClass(card.markup)).toBe(baseClass(cards[0].markup));
   });
 });
