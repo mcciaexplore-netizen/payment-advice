@@ -12,9 +12,14 @@ import {
 } from "@/lib/invoice-autofill";
 import { MAX_FILE_SIZE_BYTES } from "@/lib/validation/payment-advice";
 import { PENDING_UPLOAD_PREFIX } from "@/lib/attachments/client-upload";
+import { clientIpFrom, createRateLimiter } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
+
+/** Each call sends a file to Gemini (cost), so it is throttled per IP per
+ * warm instance. Best effort, same limiter as the refund and upload routes. */
+const isRateLimited = createRateLimiter({ limit: 20, windowMs: 10 * 60 * 1000 });
 
 const requestSchema = z.object({
   pathname: z
@@ -66,10 +71,15 @@ async function readBlobAsBase64(pathname: string) {
   if (!result || result.statusCode !== 200 || !result.stream) throw new Error("Blob unavailable");
   const reader = result.stream.getReader();
   const chunks: Buffer[] = [];
+  let total = 0;
   try {
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
+      total += value.byteLength;
+      // Belt and braces next to the metadata size check: never buffer more
+      // than the 10 MB limit, whatever the stored metadata claims.
+      if (total > MAX_FILE_SIZE_BYTES) throw new Error("Invoice file too large");
       chunks.push(Buffer.from(value));
     }
   } finally {
@@ -84,44 +94,34 @@ async function readBlobAsBase64(pathname: string) {
  * and leave the established manual form flow untouched.
  */
 export async function POST(request: Request) {
+  if (isRateLimited(clientIpFrom(request.headers))) {
+    return NextResponse.json({ autoFill: null, error: "Too many invoice reads from this connection. Please wait a few minutes, or fill the form manually." }, { status: 429 });
+  }
+  // Only a Tax Invoice already uploaded to the private Blob store (by the
+  // form, under pending-uploads/) is accepted. There is no direct file
+  // upload path, so this public route cannot be used to push arbitrary
+  // files to Gemini.
+  const parsed = requestSchema.safeParse(await request.json().catch(() => null));
+  if (!parsed.success) {
+    return NextResponse.json({ autoFill: null, error: "The uploaded invoice reference is invalid. Attach the file again." }, { status: 400 });
+  }
+
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
     console.warn("Gemini invoice auto-fill requested without GEMINI_API_KEY configured");
-    return NextResponse.json({ autoFill: null, error: "Invoice auto-fill needs GEMINI_API_KEY in this environment. Add it to payment-advice/.env.local and restart the dev server." }, { status: 503 });
+    return NextResponse.json({ autoFill: null, error: "Invoice auto-fill is not available right now. Please fill the form manually." }, { status: 503 });
   }
 
   try {
-    let mimeType: string;
-    let base64: string;
-    const contentType = request.headers.get("content-type") ?? "";
-    if (contentType.includes("multipart/form-data")) {
-      const form = await request.formData();
-      const file = form.get("file");
-      if (!(file instanceof File) || file.size === 0) {
-        return NextResponse.json({ autoFill: null, error: "Choose an invoice file before trying auto-fill." }, { status: 400 });
-      }
-      mimeType = file.type;
-      if (
-        file.size > MAX_FILE_SIZE_BYTES ||
-        !["application/pdf", "image/jpeg", "image/png"].includes(mimeType) ||
-        !/\.(pdf|jpe?g|png)$/i.test(file.name)
-      ) {
-        return NextResponse.json({ autoFill: null, error: "Use a PDF, JPEG, or PNG file no larger than 10 MB." }, { status: 400 });
-      }
-      base64 = Buffer.from(await file.arrayBuffer()).toString("base64");
-    } else {
-      const parsed = requestSchema.safeParse(await request.json().catch(() => null));
-      if (!parsed.success) return NextResponse.json({ autoFill: null, error: "The uploaded invoice reference is invalid. Attach the file again." }, { status: 400 });
-      const metadata = await head(parsed.data.pathname);
-      if (
-        metadata.size > MAX_FILE_SIZE_BYTES ||
-        !["application/pdf", "image/jpeg", "image/png"].includes(metadata.contentType)
-      ) {
-        return NextResponse.json({ autoFill: null, error: "Use a PDF, JPEG, or PNG file no larger than 10 MB." }, { status: 400 });
-      }
-      mimeType = metadata.contentType;
-      base64 = await readBlobAsBase64(parsed.data.pathname);
+    const metadata = await head(parsed.data.pathname);
+    if (
+      metadata.size > MAX_FILE_SIZE_BYTES ||
+      !["application/pdf", "image/jpeg", "image/png"].includes(metadata.contentType)
+    ) {
+      return NextResponse.json({ autoFill: null, error: "Use a PDF, JPEG, or PNG file no larger than 10 MB." }, { status: 400 });
     }
+    const mimeType = metadata.contentType;
+    const base64 = await readBlobAsBase64(parsed.data.pathname);
 
     let vendorRows: InvoiceVendorCandidate[];
     try {
