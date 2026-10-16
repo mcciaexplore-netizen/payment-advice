@@ -49,7 +49,37 @@ Design system: Navy `#0B1F3A`, Forest green `#2E8B57`, Amber `#E8A33D`. Headings
 
 ## 3. Current State (update this every session)
 
-**Last updated:** 15 October 2026, by Codex (Refund request form and Tax Invoice auto-fill fix, branch `feature/refund-request-form`, PR #6 open, not merged; see entry below)
+**Last updated:** 16 October 2026, by Claude Opus 5.5 (Refund requests: DB schema, migration 0030 generated not applied, submit path; branch `feature/refund-request-db`, pushed, not merged; see entry below)
+
+### In review: Refund requests saved to the DB (Claude Opus 5.5, 2026-10-16, branch `feature/refund-request-db`, pushed, not merged). Migration 0030 generated, NOT applied.
+Builds on Codex's `feature/refund-request-form` (PR #6, already merged to `main` as `599cc7f`, so "merge it in" was a no-op).
+- **Drift on `main` until this merges**: PR #6 added `refund_submissions` to `lib/db/schema.ts` with no migration. That table does not exist in the database. It was dormant only because every refund route is flag-gated. This branch replaces it with `refund_requests` plus migration 0030.
+- **Schema (owner applies)**: `lib/db/migrations/0030_refund_requests.sql`, generated with `drizzle-kit generate --name refund_requests` (no hand edits; snapshot 0030 and journal updated by the tool). It contains exactly 3 statements:
+  - `CREATE TABLE refund_requests`: uuid PK; unique `serial_no`; `financial_year`; server-side IST `request_date`; submitter fields; one column per form field; `documents` jsonb; `created_at`.
+  - CHECKs on the table: branch list, basic >= 0, gst >= 0, total > 0, total = basic + gst, from_date <= request_date, IFSC format, GSTIN format, documents is an array.
+  - `ALTER TABLE audit_log ADD COLUMN refund_request_id uuid` and its FK.
+  - No data, no grants. A read-only information_schema diff shows the only drift is exactly these two objects.
+- **Serial**: `REF/MCCIA/<FY>/NNNN` through `allocateRefundNumber` (Codex's, existing `serial_counters` + SELECT ... FOR UPDATE, series `REFUND`). No new mechanism.
+- **Submit path** (`app/api/refund/submit/route.ts`): Zod (`lib/validation/refund-request.ts`), then serial allocation, insert and `REFUND_REQUEST_SUBMITTED` audit in one transaction (a failed insert rolls the counter back). `request_date` and serial are always server-side. Amounts are summed in paise so the DB's total check cannot trip on float error. Documents are checked with `verifyUploadedAttachments` before the transaction.
+- **Flag** (`lib/refund-requests.ts`): saving needs `REFUND_REQUESTS_ENABLED=true` everywhere, including local dev (shared DB). With the flag off:
+  - In production, the home card, `/refund`, `/refund/submitted/[id]`, `/api/refund/submit` and `/api/refund/[id]/pdf` are all hidden or 404.
+  - Locally, the form is a database-free preview that uploads nothing.
+  - The home page is statically rendered, so the card appears only after a redeploy with the flag set. On Vercel that is normal for env var changes.
+- **Confirmation and PDF**: `/refund/submitted/[id]` shows the real serial. `GET /api/refund/[id]/pdf` renders from the DB row (`lib/pdf/RefundRequestDocument.tsx`, one A4 page, blank signature lines, no stamps, `Stamp.tsx` untouched) and writes `REFUND_REQUEST_PDF_GENERATED`. The access model is the same as the Forwarding Memo and Payment Advice PDFs: public but keyed by the random UUID. Blob URLs are never passed to the PDF.
+  - A react-pdf gotcha found here: `lineHeight` on a Text inside a wrapping flex row reserves an extra blank band under every value. Leave it unset in that layout.
+- **Form changes**: field `payeeDetails` renamed `payeeName`. The server-driven `persist` prop replaces the client's NODE_ENV guess. The em dash in the preview message was removed, and the button reads "Preview Refund Request" while saving is off.
+- **Not built (Part 3 proposal, needs owner approval)**:
+  - Workflow: Submit, then Authority recommendation, then Finance review, then Paid. This needs a later additive migration for stage columns, and ideally a `recommending_authority_id` FK resolved from the typed authority name.
+  - Dashboards: refunds in My Submissions (Team/Authority) by submitter email; an Authority queue if recommendation is approved; a "Refund Requests" section and nav item in the Finance dashboards like Cash Receipts.
+  - An authenticated route for refund documents. Today nobody can view them in the app.
+  - A submission confirmation email.
+- **Shared-file concerns from PR #6, not changed here** (flagged for the owner):
+  - `app/api/invoice-autofill/route.ts` now accepts direct multipart file uploads in production as well, so it is a public endpoint that forwards files of up to 10 MB to Gemini.
+  - Its error text names `GEMINI_API_KEY`, `BLOB_READ_WRITE_TOKEN` and a local `.env.local` path to public users.
+  - `PaymentAdviceForm` now fills in Beneficiary Name from the extracted payee when no vendor matches.
+  - The home grid became 3 columns at `lg`.
+- **Also pending**: `feature/dashboard-attachment-buttons` commit `7359cb8` (one-line Download column layout) was pushed after PR #5 was merged, so it is not on `main` and needs its own PR.
+- **Verified**: tsc, lint, 698 tests and `next build` clean. New tests: `lib/validation/refund-request.test.ts`, `lib/refund-submit-route.test.ts` (flag gating, preview without DB, transaction contents, REFUND series with FOR UPDATE, client date/serial ignored, rollback on failed insert, bad uploads), `lib/refund-access.test.ts` (PDF and confirmation 404s, DB render, audit, serial format), `lib/pdf/refund-request-render.test.tsx` (real PDF), `lib/db/migrations/refund-requests-migration.test.ts`, and an updated `lib/refund-form.test.tsx`. Regression on `next start` with the flag off: all forms and Finance Admin pages 200, dashboards 200, every refund route 404, no home card. With the flag on, `/refund` renders with the live authority list (read-only). No writes to the shared database at any point.
 
 ### In review: Refund request form and Tax Invoice auto-fill fix (Codex, 2026-10-15, branch `feature/refund-request-form`, PR #6 open, not merged)
 Adds a seventh Refund card and form with required submitter and Payee / Company Name, optional payee fields in Payment Advice order, required basic/GST amounts, expenditure and date, optional bank details, enclosures/remarks, and optional Email copy, Cancelled cheque, and Other Documents uploads. Local development submission is explicitly non-persistent and returns `LOCAL PREVIEW ONLY`.

@@ -639,27 +639,34 @@ export const cashReceipts = pgTable(
   ],
 );
 
-/** Standalone Refund requests submitted from the public Payment Desk form. */
-export const refundSubmissions = pgTable(
-  "refund_submissions",
+/** Refund requests submitted from the public Payment Desk form. Own
+ * independent gapless series (REF/MCCIA/<FY>/NNNN), allocated through the
+ * same lib/serial.ts SELECT ... FOR UPDATE primitive as every other series,
+ * see allocateRefundNumber(). requestDate is server-computed (IST), never
+ * taken from the client, same rule as Forwarding Memo's memoDate. One
+ * column per form field; documents keeps the uploaded files' metadata (the
+ * files themselves stay in the private Blob store). */
+export const refundRequests = pgTable(
+  "refund_requests",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    refundNo: text("refund_no").notNull().unique(),
+    serialNo: text("serial_no").notNull().unique(),
     financialYear: text("financial_year").notNull(),
+    requestDate: date("request_date").notNull(),
     submittedByName: text("submitted_by_name").notNull(),
     submittedByEmail: text("submitted_by_email").notNull(),
     submittedByDepartment: text("submitted_by_department").notNull(),
     branch: text("branch").notNull(),
     recommendingAuthority: text("recommending_authority").notNull(),
-    payeeDetails: text("payee_details").notNull(),
+    payeeName: text("payee_name").notNull(),
     payeeAddress: text("payee_address"),
     payeeContactPerson: text("payee_contact_person"),
     payeeContactPhone: text("payee_contact_phone"),
     payeeEmail: text("payee_email"),
     payeeGstin: text("payee_gstin"),
     payeeUdyamNumber: text("payee_udyam_number"),
-    basicAmount: numeric("basic_amount", { precision: 14, scale: 2 }).notNull().default("0"),
-    gstAmount: numeric("gst_amount", { precision: 14, scale: 2 }).notNull().default("0"),
+    basicAmount: numeric("basic_amount", { precision: 14, scale: 2 }).notNull(),
+    gstAmount: numeric("gst_amount", { precision: 14, scale: 2 }).notNull(),
     totalAmount: numeric("total_amount", { precision: 14, scale: 2 }).notNull(),
     natureOfExpenditure: text("nature_of_expenditure").notNull(),
     fromDate: date("from_date").notNull(),
@@ -676,9 +683,22 @@ export const refundSubmissions = pgTable(
       blobUrl: string;
       sizeBytes: number;
     }>>().notNull().default([]),
-    submittedAt: timestamp("submitted_at", { withTimezone: true }).defaultNow().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
-  (table) => [check("refund_submissions_amount_positive_check", sql`${table.totalAmount} > 0`)],
+  (table) => [
+    check(
+      "refund_requests_branch_check",
+      sql`${table.branch} in ('SB Road Office', 'Tilak Road Office', 'Hadapsar Office', 'Bhosari Office', 'Ahilyanagar Office')`,
+    ),
+    check("refund_requests_basic_amount_check", sql`${table.basicAmount} >= 0`),
+    check("refund_requests_gst_amount_check", sql`${table.gstAmount} >= 0`),
+    check("refund_requests_total_positive_check", sql`${table.totalAmount} > 0`),
+    check("refund_requests_total_matches_check", sql`${table.totalAmount} = ${table.basicAmount} + ${table.gstAmount}`),
+    check("refund_requests_from_date_check", sql`${table.fromDate} <= ${table.requestDate}`),
+    check("refund_requests_bank_ifsc_check", sql`${table.bankIfsc} is null or ${table.bankIfsc} ~ '^[A-Z]{4}0[A-Z0-9]{6}$'`),
+    check("refund_requests_payee_gstin_check", sql`${table.payeeGstin} is null or ${table.payeeGstin} ~ '^[0-9A-Z]{15}$'`),
+    check("refund_requests_documents_array_check", sql`jsonb_typeof(${table.documents}) = 'array'`),
+  ],
 );
 
 export const auditLog = pgTable("audit_log", {
@@ -689,7 +709,8 @@ export const auditLog = pgTable("audit_log", {
   forwardingMemoId: uuid("forwarding_memo_id").references(() => forwardingMemos.id),
   vendorRequestId: uuid("vendor_request_id").references(() => vendorRequests.id),
   cashReceiptId: uuid("cash_receipt_id").references(() => cashReceipts.id),
-  action: text("action").notNull(), // 'SUBMITTED' | 'RESUBMITTED' | 'APPROVED' | 'SENT_BACK' | 'PDF_GENERATED' | 'EXPORTED' | 'VENDOR_REQUEST_SUBMITTED' | 'VENDOR_REQUEST_APPROVED' | 'VENDOR_REQUEST_SENT_BACK' | 'VENDOR_MSME_EMAIL_SENT' | 'CASH_RECEIPT_SUBMITTED' | 'CASH_RECEIPT_PDF_GENERATED'
+  refundRequestId: uuid("refund_request_id").references(() => refundRequests.id),
+  action: text("action").notNull(), // 'SUBMITTED' | 'RESUBMITTED' | 'APPROVED' | 'SENT_BACK' | 'PDF_GENERATED' | 'EXPORTED' | 'VENDOR_REQUEST_SUBMITTED' | 'VENDOR_REQUEST_APPROVED' | 'VENDOR_REQUEST_SENT_BACK' | 'VENDOR_MSME_EMAIL_SENT' | 'CASH_RECEIPT_SUBMITTED' | 'CASH_RECEIPT_PDF_GENERATED' | 'REFUND_REQUEST_SUBMITTED' | 'REFUND_REQUEST_PDF_GENERATED'
   actor: text("actor").notNull(),
   ipAddress: text("ip_address"),
   details: jsonb("details"),

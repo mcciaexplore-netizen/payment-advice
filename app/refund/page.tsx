@@ -6,11 +6,13 @@ import { PublicLoginMenu } from "@/components/public/PublicLoginMenu";
 import { db } from "@/lib/db";
 import { recommendingAuthorities } from "@/lib/db/schema";
 import { notFound } from "next/navigation";
+import { refundEntryVisible, refundRequestsEnabled } from "@/lib/refund-requests";
 
 export const dynamic = "force-dynamic";
 
 export default async function RefundPage() {
-  if (process.env.NODE_ENV === "production" && process.env.REFUND_REQUESTS_ENABLED !== "true") notFound();
+  if (!refundEntryVisible()) notFound();
+  const persist = refundRequestsEnabled();
   let authorities: string[] = [];
   try {
     authorities = (await db.select({ authorityName: recommendingAuthorities.authorityName })
@@ -29,7 +31,8 @@ export default async function RefundPage() {
         <PublicLoginMenu />
       </header>
       <Link href="/" className="w-fit text-sm font-medium text-gray-600 hover:text-[#0b1f3a]">← Back to Payment Desk</Link>
-      <RefundForm authorityOptions={authorities} />
+      {persist ? null : <p className="rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">Preview mode: Refund requests are not switched on yet, so nothing you enter here is saved.</p>}
+      <RefundForm authorityOptions={authorities} persist={persist} />
     </main>
   );
 }
