@@ -5,8 +5,20 @@ import { BRANCH_OPTIONS, GSTIN_RE, MAX_OTHER_ATTACHMENTS } from "@/lib/validatio
 const IFSC_RE = /^[A-Z]{4}0[A-Z0-9]{6}$/;
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_AMOUNT = 99_999_999.99;
+/** Total size of all documents on one refund request (each file is also
+ * capped at 10 MB by the upload route and by verifyUploadedAttachments). */
+export const MAX_REFUND_DOCUMENTS_TOTAL_BYTES = 25 * 1024 * 1024;
 
 const optionalText = (max: number) => z.string().trim().max(max).optional().default("");
+
+/** Optional code field (GSTIN, IFSC): trimmed and uppercased before the
+ * format check, so valid lowercase or space-padded input passes and is
+ * stored in the exact form the DB CHECK constraints expect; spaces only
+ * counts as blank. */
+const optionalCode = (pattern: RegExp, message: string) => z.preprocess(
+  (value) => (typeof value === "string" ? value.trim().toUpperCase() : value ?? ""),
+  z.union([z.literal(""), z.string().regex(pattern, message)]),
+);
 
 export const REFUND_DOCUMENT_TYPES = ["EMAIL_COPY", "CANCELLED_CHEQUE", "OTHER"] as const;
 
@@ -37,7 +49,7 @@ export function refundRequestSchema(today: string) {
     payeeContactPerson: optionalText(200),
     payeeContactPhone: optionalText(30),
     payeeEmail: z.union([z.string().trim().email("Enter a valid payee email").max(320), z.literal("")]).optional().default(""),
-    payeeGstin: z.union([z.string().trim().toUpperCase().regex(GSTIN_RE, "Enter a valid 15-character GSTIN"), z.literal("")]).optional().default(""),
+    payeeGstin: optionalCode(GSTIN_RE, "Enter a valid 15-character GSTIN"),
     payeeUdyamNumber: optionalText(50),
     basicAmount: amount("Basic Amount"),
     gstAmount: amount("GST Amount"),
@@ -46,7 +58,7 @@ export function refundRequestSchema(today: string) {
     bankName: optionalText(200),
     beneficiaryName: optionalText(200),
     bankAccountNo: optionalText(50),
-    bankIfsc: z.union([z.string().trim().toUpperCase().regex(IFSC_RE, "Enter a valid IFSC code"), z.literal("")]).optional().default(""),
+    bankIfsc: optionalCode(IFSC_RE, "Enter a valid IFSC code"),
     enclosures: optionalText(1000),
     specialRemarks: optionalText(4000),
     documents: z.array(refundDocumentSchema).max(2 + MAX_OTHER_ATTACHMENTS),
@@ -57,6 +69,9 @@ export function refundRequestSchema(today: string) {
     const singleTypes = value.documents.filter((document) => document.type !== "OTHER").map((document) => document.type);
     if (new Set(singleTypes).size !== singleTypes.length) {
       context.addIssue({ code: "custom", path: ["documents"], message: "Only one file of each document type is allowed." });
+    }
+    if (value.documents.reduce((sum, document) => sum + document.sizeBytes, 0) > MAX_REFUND_DOCUMENTS_TOTAL_BYTES) {
+      context.addIssue({ code: "custom", path: ["documents"], message: "Documents together must be 25 MB or less." });
     }
     if (value.documents.filter((document) => document.type === "OTHER").length > MAX_OTHER_ATTACHMENTS) {
       context.addIssue({ code: "custom", path: ["documents"], message: `Attach no more than ${MAX_OTHER_ATTACHMENTS} other documents.` });
