@@ -6,11 +6,12 @@ describe("Finance Admin top nav, restructured (2026-10-07)", () => {
   const layout = fs.readFileSync(path.join(process.cwd(), "app/admin/layout.tsx"), "utf8");
   const nav = fs.readFileSync(path.join(process.cwd(), "components/admin/AdminNav.tsx"), "utf8");
 
-  it("has at most 6 top-level items: Dashboard, Submissions, Forwarding Memos, Cash Receipts, Vendors (dropdown), Staff & Authorities", () => {
+  it("has 7 top-level items: Dashboard, Submissions, Forwarding Memos, Cash Receipts, Refunds (2026-10-16), Vendors (dropdown), Staff & Authorities", () => {
     const navItemsBlock = nav.slice(nav.indexOf("const NAV_ITEMS"), nav.indexOf("const VENDORS_ITEMS"));
     const topLevelLabels = [...navItemsBlock.matchAll(/label: "([^"]+)"/g)].map((m) => m[1]);
-    expect(topLevelLabels).toEqual(["Dashboard", "Submissions", "Forwarding Memos", "Cash Receipts"]);
-    // Plus the Vendors dropdown trigger and Staff & Authorities = 6 total.
+    expect(topLevelLabels).toEqual(["Dashboard", "Submissions", "Forwarding Memos", "Cash Receipts", "Refunds"]);
+    // Plus the Vendors dropdown trigger and Staff & Authorities = 7 total.
+    // "Refunds" is kept short so the row still fits without wrapping.
     expect(nav).toContain("<VendorsDropdown");
     expect(nav).toContain("Staff &amp; Authorities".replace("&amp;", "&"));
   });

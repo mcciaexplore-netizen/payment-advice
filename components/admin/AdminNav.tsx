@@ -25,6 +25,11 @@ const NAV_ITEMS: NavItem[] = [
     label: "Cash Receipts",
     match: (p) => p.startsWith("/admin/cash-receipts"),
   },
+  {
+    href: "/admin/refunds",
+    label: "Refunds",
+    match: (p) => p.startsWith("/admin/refunds"),
+  },
 ];
 
 const VENDORS_ITEMS = [

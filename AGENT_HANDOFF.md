@@ -49,7 +49,16 @@ Design system: Navy `#0B1F3A`, Forest green `#2E8B57`, Amber `#E8A33D`. Headings
 
 ## 3. Current State (update this every session)
 
-**Last updated:** 16 October 2026, by Claude Opus 5.5 (home page grid, branch `fix/home-grid`, not merged; see entry below)
+**Last updated:** 16 October 2026, by Claude Opus 5.5 (Finance Refund Requests section, branch `feature/refund-finance-section`, PR open, not merged; see entry below)
+
+### In review: Finance "Refund Requests" section (Claude Opus 5.5, 2026-10-16, branch `feature/refund-finance-section`, PR open, not merged)
+This closes the gap left when Refund went live (no Finance screen).
+- **`/admin/refunds`**: every refund request, newest first, with Branch / From / To filters and a count and total. Each row shows the serial and branch; payee and nature; total; date; submitter, email, department and recommending authority; documents; and View / Download of the printable PDF (the existing public UUID route).
+- **Documents**: `GET /api/admin/refund/[id]/documents/[index]` streams from the private Blob store (no Blob URL in the page), inline or `?download=1`, with nosniff and no-store. It is Finance-only: proxy.ts already gates `/api/admin/*`, and the route re-checks `hasFinanceRole`, so a non-Finance session gets 404 and no session gets 401 from the proxy. Bad id or index: 404. Opening uses the existing `AttachmentPreview` dialog. Not audited, same as advice attachments.
+- **Nav**: new top-level "Refunds" item, so 7 top-level items (the 2026-10-07 restructure set 6; `lib/admin-nav-ui.test.ts` is updated). The label is kept short, and the row was verified on one line at 1440, 1280 and 1024 px.
+- **Access change (owner approved in chat 2026-10-16)**: Finance roles can now see every refund request and its documents. Nobody else gained access.
+- **Not built**: submitter or authority visibility on the Team and Authority dashboards, approval stages, and emails. These are still proposals.
+- **Verified**: tsc, lint, 731 tests and `next build` clean. New `lib/refund-finance-section.test.ts` covers the Finance stream with headers, download, 404 for branch, Cash Receipt, authority and no session, bad indexes and ids, and the filters. Local `next start` read-only with minted sessions: Finance 200 (empty state), branch user redirected to `/admin/login`, branch user on the document route 401.
 
 ### In review: home page grid (Claude Opus 5.5, 2026-10-16, branch `fix/home-grid`, not merged)
 The owner chose this layout. `app/page.tsx` drops PR #6's 3-column step: one card per row on mobile, two columns from `sm` (640 px) up.
