@@ -17,7 +17,7 @@ import { FileUploadSlot } from "@/components/form/FileUploadSlot";
 import { LineItemsField } from "@/components/form/LineItemsField";
 import { CashVoucherItemsField } from "@/components/form/CashVoucherItemsField";
 import { storeSubmissionSummary } from "@/lib/submission-summary";
-import { bankDetailsMismatch } from "@/lib/invoice-autofill";
+import { bankDetailsMismatch, invoiceBeneficiaryName } from "@/lib/invoice-autofill";
 import { resolveAutoFillEmail } from "@/lib/form/staff-email-autofill";
 import { resolveSourceFieldAutoFill } from "@/lib/form/source-field-autofill";
 import {
@@ -397,11 +397,6 @@ export function PaymentAdviceForm({
       if (autoFill.vendor) {
         applyVendor(autoFill.vendor as VendorSearchResult);
         changed = true;
-      } else if (autoFill.payeeName) {
-        // Keep the extracted supplier name as an editable beneficiary fallback
-        // when no active vendor record could be confidently matched.
-        setValue("beneficiaryName", autoFill.payeeName, { shouldValidate: true });
-        changed = true;
       }
       // Bank details: the invoice's own printed bank details are only a
       // fallback starting point, filled here as plain editable text — never
@@ -417,7 +412,9 @@ export function PaymentAdviceForm({
       if (autoFill.bankAccountNo || autoFill.bankIfsc) {
         if (autoFill.bankAccountNo) setValue("bankAccountNo", autoFill.bankAccountNo, { shouldValidate: true });
         if (autoFill.bankIfsc) setValue("bankIfsc", autoFill.bankIfsc, { shouldValidate: true });
-        const beneficiaryName = autoFill.vendor?.companyName ?? autoFill.payeeName;
+        // Only alongside printed bank details, and never over a typed value
+        // (see invoiceBeneficiaryName).
+        const beneficiaryName = invoiceBeneficiaryName(autoFill, getValues("beneficiaryName"));
         if (beneficiaryName) setValue("beneficiaryName", beneficiaryName, { shouldValidate: true });
         // Kept so applyVendorBankAccount (fired later by
         // VendorBankAccountFields, if this invoice's vendor turns out to
