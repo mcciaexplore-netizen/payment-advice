@@ -106,6 +106,7 @@ All must pass. Use the scripts in `package.json`.
 ## Database changes needed
 (tables, columns, constraints, FKs. Write "none" if none.)
 Migration file included: yes/no. Owner to apply and may regenerate.
+Do not merge until any migration in this PR has been applied by the owner.
 
 ## Env vars needed
 (names only, never values. "none" if none.)
