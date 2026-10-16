@@ -5,12 +5,23 @@ import { AttachmentPreview } from "@/components/ui/AttachmentPreview";
 
 export type SubmissionAttachment = { id: string; fileName: string };
 
-const buttonClass = "inline-flex items-center text-left xl:whitespace-nowrap rounded-md border border-[#0b1f3a] px-3 py-2 text-xs font-medium text-[#0b1f3a] hover:bg-[#0b1f3a]/5";
-const disabledClass = "inline-flex cursor-not-allowed items-center text-left xl:whitespace-nowrap rounded-md border border-gray-300 px-3 py-2 text-xs font-medium text-gray-400";
+const buttonClass = "relative inline-flex items-center gap-1 whitespace-nowrap rounded-md border border-[#0b1f3a] px-2 py-2 text-xs font-medium text-[#0b1f3a] hover:bg-[#0b1f3a]/5";
+const disabledClass = "relative inline-flex cursor-not-allowed items-center gap-1 whitespace-nowrap rounded-md border border-gray-300 px-2 py-2 text-xs font-medium text-gray-400";
 const menuItemClass = "block w-full truncate px-3 py-2 text-left text-xs text-[#0b1f3a] hover:bg-[#0b1f3a]/5";
 
+function EyeIcon() {
+  return <svg aria-hidden="true" viewBox="0 0 16 16" className="h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5Z" /><circle cx="8" cy="8" r="2" /></svg>;
+}
+function DownloadIcon() {
+  return <svg aria-hidden="true" viewBox="0 0 16 16" className="h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M8 2v8M4.5 6.5 8 10l3.5-3.5M2.5 13.5h11" /></svg>;
+}
+
 /** The Download column on the Authority and Team dashboards:
- * View Attachment | Download Attachment | Download {document}.
+ * [View] [Download] | [Download {document}].
+ *
+ * The two attachment buttons are compact (icon + "View" / "Download", with
+ * "View Attachment" / "Download Attachment" as tooltip and accessible name)
+ * so the whole group fits one line from 768px up; below that it may wrap.
  *
  * Files are served by /api/advice/[id]/attachments/[attachmentId], which
  * checks the session on every request; no Blob URL is ever put in the
@@ -45,30 +56,33 @@ export function SubmissionDownloadButtons({
   const downloadHref = (attachment: SubmissionAttachment) => `${fileHref(attachment)}?download=1`;
   const toggle = (next: "view" | "download") => setMenu((current) => current === next ? null : next);
 
+  const suffix = attachments.length > 1 ? ` (${attachments.length})` : "";
   return (
     <div ref={rootRef} className="flex flex-col gap-2">
-      {/* Attachment pair on one line, the PDF button under it: all three on
-          one line would need ~527px, more than this column gets inside the
-          max-w-6xl dashboard without the table scrolling sideways. */}
-      <div className="flex flex-wrap items-start gap-2">
-        <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap items-center gap-1.5 md:flex-nowrap">
+        <div role="group" aria-label="Attachment" className="flex gap-1.5">
           {attachments.length === 0 ? (
             <>
-              <span title="No attachment"><button type="button" disabled aria-label="View Attachment (no attachment)" className={disabledClass}>View Attachment</button></span>
-              <span title="No attachment"><button type="button" disabled aria-label="Download Attachment (no attachment)" className={disabledClass}>Download Attachment</button></span>
+              <span title="No attachment"><button type="button" disabled aria-label="View Attachment (no attachment)" className={disabledClass}><EyeIcon />View</button></span>
+              <span title="No attachment"><button type="button" disabled aria-label="Download Attachment (no attachment)" className={disabledClass}><DownloadIcon />Download</button></span>
             </>
           ) : attachments.length === 1 ? (
             <>
-              <AttachmentPreview fileName={attachments[0].fileName} href={fileHref(attachments[0])} className={buttonClass}>View Attachment</AttachmentPreview>
-              <a href={downloadHref(attachments[0])} download={attachments[0].fileName} className={buttonClass}>Download Attachment</a>
+              <span title="View Attachment" className="inline-flex">
+                <AttachmentPreview fileName={attachments[0].fileName} href={fileHref(attachments[0])} className={buttonClass}>
+                  <EyeIcon /><span aria-hidden="true">View</span><span className="sr-only">View Attachment</span>
+                </AttachmentPreview>
+              </span>
+              <a href={downloadHref(attachments[0])} download={attachments[0].fileName} title="Download Attachment" aria-label="Download Attachment" className={buttonClass}><DownloadIcon />Download</a>
             </>
           ) : (
             <>
-              <button type="button" aria-expanded={menu === "view"} aria-haspopup="true" onClick={() => toggle("view")} className={buttonClass}>View Attachment ({attachments.length}) ▾</button>
-              <button type="button" aria-expanded={menu === "download"} aria-haspopup="true" onClick={() => toggle("download")} className={buttonClass}>Download Attachment ({attachments.length}) ▾</button>
+              <button type="button" aria-expanded={menu === "view"} aria-haspopup="true" onClick={() => toggle("view")} title={`View Attachment${suffix}`} aria-label={`View Attachment${suffix}`} className={buttonClass}><EyeIcon />View{suffix} <span aria-hidden="true">▾</span></button>
+              <button type="button" aria-expanded={menu === "download"} aria-haspopup="true" onClick={() => toggle("download")} title={`Download Attachment${suffix}`} aria-label={`Download Attachment${suffix}`} className={buttonClass}><DownloadIcon />Download{suffix} <span aria-hidden="true">▾</span></button>
             </>
           )}
         </div>
+        <span aria-hidden="true" className="hidden h-6 w-px bg-gray-300 md:block" />
         <a href={pdfHref} download className={buttonClass}>{pdfLabel}</a>
       </div>
       {menu && attachments.length > 1 ? (

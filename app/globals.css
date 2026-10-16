@@ -37,3 +37,25 @@ h3,
 .admin-filter-input {
   @apply rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-sm text-[#171717] shadow-sm outline-none transition focus:border-[#0b1f3a] focus:ring-2 focus:ring-[#0b1f3a]/20;
 }
+
+/* Horizontal scroll cue for wide dashboard tables: soft shadows appear at
+   whichever edge still has hidden content, and disappear at the ends.
+   Pure CSS (the "local" layers cover the shadows once scrolled to that
+   edge), so it works without JavaScript. */
+.dashboard-scroll-frame {
+  background:
+    linear-gradient(to right, #fff 30%, rgb(255 255 255 / 0)) left center / 48px 100% no-repeat local,
+    linear-gradient(to left, #fff 30%, rgb(255 255 255 / 0)) right center / 48px 100% no-repeat local,
+    radial-gradient(farthest-side at 0 50%, rgb(11 31 58 / 0.22), transparent) left center / 16px 100% no-repeat scroll,
+    radial-gradient(farthest-side at 100% 50%, rgb(11 31 58 / 0.22), transparent) right center / 16px 100% no-repeat scroll;
+  background-color: #fff;
+}
+
+/* Dashboard submissions table with the Download column: below 1280px the
+   column needs the room, so every cell gives up some side padding. */
+@media (max-width: 1279px) {
+  .dashboard-compact-table :is(th, td) {
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+  }
+}
