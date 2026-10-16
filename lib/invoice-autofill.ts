@@ -87,3 +87,19 @@ export function bankDetailsMismatch(
     normalizedBankValue(invoiceExtracted.bankIfsc) !== normalizedBankValue(systemAccount.bankIfsc);
   return accountDiffers || ifscDiffers;
 }
+
+/** Beneficiary Name to fill from an invoice auto-fill, or null to leave the
+ * field alone. Same rule as before PR #6, plus a no-overwrite guard:
+ * - only when the invoice also printed the issuer's bank account number or
+ *   IFSC (a bare supplier name is not evidence of who holds the account);
+ * - the matched vendor's company name is preferred over the raw invoice
+ *   payee text;
+ * - never replaces anything the submitter has already typed. */
+export function invoiceBeneficiaryName(
+  autoFill: { bankAccountNo?: string | null; bankIfsc?: string | null; payeeName?: string | null; vendor?: { companyName: string } | null },
+  currentBeneficiaryName: string | null | undefined,
+): string | null {
+  if (!autoFill.bankAccountNo && !autoFill.bankIfsc) return null;
+  if ((currentBeneficiaryName ?? "").trim()) return null;
+  return autoFill.vendor?.companyName?.trim() || autoFill.payeeName?.trim() || null;
+}

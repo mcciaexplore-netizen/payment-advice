@@ -6,12 +6,18 @@ import { todayInIst } from "@/lib/date-time";
 import { verifyUploadedAttachments } from "@/lib/attachments/verify-uploaded";
 import { refundEntryVisible, refundRequestsEnabled } from "@/lib/refund-requests";
 import { refundAmounts, refundRequestSchema } from "@/lib/validation/refund-request";
+import { clientIpFrom, createRateLimiter } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 
 function clientIp(req: NextRequest): string | null {
   return req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null;
 }
+
+/** Form fields only (files go straight to Blob), so 1 MB is generous. */
+const MAX_BODY_BYTES = 1024 * 1024;
+/** Per IP, per warm instance. Generous because MCCIA staff share office IPs. */
+const isRateLimited = createRateLimiter({ limit: 20, windowMs: 10 * 60 * 1000 });
 
 const asString = (form: FormData, key: string) => {
   const value = form.get(key);
@@ -28,6 +34,12 @@ const asString = (form: FormData, key: string) => {
 export async function POST(request: NextRequest) {
   if (!refundEntryVisible()) {
     return NextResponse.json({ error: "Refund requests are not enabled yet." }, { status: 404 });
+  }
+  if (isRateLimited(clientIpFrom(request.headers))) {
+    return NextResponse.json({ error: "Too many refund requests from this connection. Please wait a few minutes and try again." }, { status: 429 });
+  }
+  if (Number(request.headers.get("content-length") ?? 0) > MAX_BODY_BYTES) {
+    return NextResponse.json({ error: "The refund details are too large." }, { status: 413 });
   }
   const form = await request.formData().catch(() => null);
   if (!form) return NextResponse.json({ error: "Invalid refund details." }, { status: 400 });

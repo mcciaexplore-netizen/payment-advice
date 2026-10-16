@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bankDetailsMismatch, findConfidentInvoiceVendor, invoiceExtractionSchema } from "@/lib/invoice-autofill";
+import { bankDetailsMismatch, findConfidentInvoiceVendor, invoiceExtractionSchema, invoiceBeneficiaryName } from "@/lib/invoice-autofill";
 
 const vendor = (id: string, companyName: string) => ({
   id,
@@ -132,5 +132,37 @@ describe("bankDetailsMismatch", () => {
       bankDetailsMismatch(systemAccount, { bankAccountNo: null, bankIfsc: "HDFC0001234" }),
     ).toBe(true);
     expect(bankDetailsMismatch(systemAccount, { bankAccountNo: "0248274720", bankIfsc: null })).toBe(false);
+  });
+});
+
+describe("invoiceBeneficiaryName (pre-PR #6 rule, no overwrite)", () => {
+  const vendor = { companyName: "Pune Expo Services Pvt. Ltd." };
+
+  it("is not set from a supplier name alone: the invoice must also print an account number or IFSC", () => {
+    expect(invoiceBeneficiaryName({ payeeName: "Pune Expo Services" }, "")).toBeNull();
+    expect(invoiceBeneficiaryName({ payeeName: "Pune Expo Services", vendor }, "")).toBeNull();
+  });
+
+  it("uses the matched vendor name over the raw invoice payee when bank details were printed", () => {
+    expect(invoiceBeneficiaryName({ bankAccountNo: "50100012345678", payeeName: "PUNE EXPO", vendor }, "")).toBe("Pune Expo Services Pvt. Ltd.");
+    expect(invoiceBeneficiaryName({ bankIfsc: "HDFC0001234", payeeName: "Pune Expo Services" }, null)).toBe("Pune Expo Services");
+  });
+
+  it("never overwrites what the submitter already typed", () => {
+    expect(invoiceBeneficiaryName({ bankAccountNo: "50100012345678", payeeName: "Pune Expo Services" }, "R. Kulkarni")).toBeNull();
+    expect(invoiceBeneficiaryName({ bankAccountNo: "50100012345678", payeeName: "Pune Expo Services" }, "   ")).toBe("Pune Expo Services");
+  });
+
+  it("returns null when there is no name to use", () => {
+    expect(invoiceBeneficiaryName({ bankAccountNo: "50100012345678" }, "")).toBeNull();
+  });
+});
+
+describe("PaymentAdviceForm wiring", () => {
+  it("only fills Beneficiary Name through invoiceBeneficiaryName, with no payee-only fallback", async () => {
+    const fs = await import("node:fs");
+    const source = fs.readFileSync("components/form/PaymentAdviceForm.tsx", "utf8");
+    expect(source).toContain('invoiceBeneficiaryName(autoFill, getValues("beneficiaryName"))');
+    expect(source).not.toContain('setValue("beneficiaryName", autoFill.payeeName');
   });
 });
