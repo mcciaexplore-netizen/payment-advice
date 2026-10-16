@@ -17,15 +17,16 @@ function render(flag: boolean) {
   return { html, cards };
 }
 
-const FORMS = ["Payment Advice", "Cash Payment Voucher", "Advance Payment Form", "Forwarding Memo", "Cash Receipt"];
+const FLAG_ON_ORDER = ["Payment Advice", "Cash Payment Voucher", "Advance Payment Form", "Refund", "Cash Receipt", "Forwarding Memo"];
+const FLAG_OFF_ORDER = ["Payment Advice", "Cash Payment Voucher", "Advance Payment Form", "Forwarding Memo", "Cash Receipt"];
 const NSW = "National Safety Week - Branch Login";
 
 describe("Payment Desk home page cards", () => {
   afterEach(() => vi.unstubAllEnvs());
 
-  it("flag on: 7 cards in order, Refund after Cash Receipt, National Safety Week last and full width, the six forms in three even rows", () => {
+  it("flag on: 7 cards in the owner's order (Refund fourth, Cash Receipt before Forwarding Memo), National Safety Week last and full width, three even rows", () => {
     const { cards } = render(true);
-    expect(cards.map((card) => card.title)).toEqual([...FORMS, "Refund", NSW]);
+    expect(cards.map((card) => card.title)).toEqual([...FLAG_ON_ORDER, NSW]);
     expect(cards.map((card) => card.wide)).toEqual([false, false, false, false, false, false, true]);
   });
 
@@ -39,9 +40,9 @@ describe("Payment Desk home page cards", () => {
     expect(cashReceipt.markup).toContain("bg-sky-600");
   });
 
-  it("flag off: 6 cards, no Refund, the odd last form (Cash Receipt) spans its row, National Safety Week last and full width", () => {
+  it("flag off: 6 cards, no Refund, Forwarding Memo before Cash Receipt so Cash Receipt is the full-width fifth card, National Safety Week last and full width", () => {
     const { cards, html } = render(false);
-    expect(cards.map((card) => card.title)).toEqual([...FORMS, NSW]);
+    expect(cards.map((card) => card.title)).toEqual([...FLAG_OFF_ORDER, NSW]);
     expect(cards.map((card) => card.wide)).toEqual([false, false, false, false, true, true]);
     expect(html).not.toContain('href="/refund"');
   });
@@ -65,7 +66,7 @@ describe("Payment Desk home page cards", () => {
 
   it("keeps the form links, Open form CTA, and one shared card class list", () => {
     const { cards } = render(true);
-    expect(cards.slice(0, 6).map((card) => card.href)).toEqual(["/payment-advice", "/cash-voucher", "/advance", "/forwarding-memo", "/cash-receipt", "/refund"]);
+    expect(cards.slice(0, 6).map((card) => card.href)).toEqual(["/payment-advice", "/cash-voucher", "/advance", "/refund", "/cash-receipt", "/forwarding-memo"]);
     for (const card of cards.slice(0, 6)) expect(card.markup).toContain("Open form →");
     const baseClass = (markup: string) => /class="([^"]+)"/.exec(markup)![1].split(" ")
       .filter((name) => !name.includes("border-[") && !/border-(sky|violet|rose|teal)-/.test(name) && name !== "sm:col-span-2").join(" ");

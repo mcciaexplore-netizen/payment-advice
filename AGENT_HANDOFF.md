@@ -49,7 +49,14 @@ Design system: Navy `#0B1F3A`, Forest green `#2E8B57`, Amber `#E8A33D`. Headings
 
 ## 3. Current State (update this every session)
 
-**Last updated:** 16 October 2026, by Claude Opus 5.5 (Finance Refund Requests section, branch `feature/refund-finance-section`, PR open, not merged; see entry below)
+**Last updated:** 16 October 2026, by Claude Opus 5.5 (home card order, branch `fix/home-card-order`, PR open, not merged; see entry below)
+
+### In review: home page card order (Claude Opus 5.5, 2026-10-16, branch `fix/home-card-order`, PR open, not merged)
+Order change only, on the owner's spec. There are no colour, copy, link or grid changes (verified: all six card definitions and the rest of `app/page.tsx` are identical to `main`).
+- **Flag on**: Payment Advice, Cash Payment Voucher, Advance Payment Form, Refund, Cash Receipt, Forwarding Memo, then National Safety Week full width.
+- **Flag off**: Payment Advice, Cash Payment Voucher, Advance Payment Form, Forwarding Memo, Cash Receipt (full width as the odd fifth card), then National Safety Week full width. Forwarding Memo deliberately moves ahead of Cash Receipt when Refund is absent.
+- Production currently has the flag ON, so merging this changes the live order straight away.
+- **Verified**: tsc, lint, 731 tests and `next build` clean. `lib/home-page-ui.test.ts` asserts both orders and which cards are full width.
 
 ### In review: Finance "Refund Requests" section (Claude Opus 5.5, 2026-10-16, branch `feature/refund-finance-section`, PR open, not merged)
 This closes the gap left when Refund went live (no Finance screen).
