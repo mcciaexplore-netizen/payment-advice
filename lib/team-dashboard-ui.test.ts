@@ -16,6 +16,11 @@ describe("Team Dashboard scoped views", () => {
     expect(source).toContain('view === "my-submissions" ? ownSubmissions');
   });
 
+  it("shows the sent-back edit link only in the submitter-scoped My Submissions view", () => {
+    expect(source).toContain("editToken: paymentAdvices.editToken, editTokenExpiresAt: paymentAdvices.editTokenExpiresAt");
+    expect(source).toContain('{view === "my-submissions" ? <div className="mt-2"><SubmitterEditAction');
+  });
+
   it("SELF and CASH_RECEIPT (2026-10-07) are both restricted grants, forced into My Submissions/My Cash Receipts only, never Team Submissions", () => {
     expect(source).toContain('const isRestrictedGrant = activeGrant.role === "SELF" || activeGrant.role === "CASH_RECEIPT"');
     expect(source).toMatch(/activeGrant\.role === "SELF" \|\| activeGrant\.role === "CASH_RECEIPT"\s+\? ownSubmissions/);

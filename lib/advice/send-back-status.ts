@@ -2,6 +2,10 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 export const SENT_BACK_STALE_AFTER_DAYS = 7;
 
+export function isEditTokenExpired(editTokenExpiresAt: Date | null, now = new Date()): boolean {
+  return !editTokenExpiresAt || editTokenExpiresAt.getTime() <= now.getTime();
+}
+
 export function sentBackStatus(
   sentBackAt: Date | null,
   editTokenExpiresAt: Date | null,
@@ -13,6 +17,6 @@ export function sentBackStatus(
     daysAgo,
     label: `Sent back ${daysAgo} ${daysAgo === 1 ? "day" : "days"} ago`,
     isStale: daysAgo > SENT_BACK_STALE_AFTER_DAYS,
-    isExpired: !editTokenExpiresAt || editTokenExpiresAt.getTime() <= now.getTime(),
+    isExpired: isEditTokenExpired(editTokenExpiresAt, now),
   };
 }
