@@ -49,7 +49,17 @@ Design system: Navy `#0B1F3A`, Forest green `#2E8B57`, Amber `#E8A33D`. Headings
 
 ## 3. Current State (update this every session)
 
-**Last updated:** 16 October 2026, by Claude Opus 5.5 (Refund requests: DB schema, migration 0030 generated not applied, submit path; branch `feature/refund-request-db`, pushed, not merged; see entry below)
+**Last updated:** 16 October 2026, by Claude Opus 5.5 (home page grid, branch `fix/home-grid`, not merged; see entry below)
+
+### In review: home page grid (Claude Opus 5.5, 2026-10-16, branch `fix/home-grid`, not merged)
+The owner chose this layout. `app/page.tsx` drops PR #6's 3-column step: one card per row on mobile, two columns from `sm` (640 px) up.
+- **Order**: Payment Advice, Cash Payment Voucher, Advance Payment Form, Forwarding Memo, Cash Receipt, Refund (only while `refundEntryVisible()`), then National Safety Week - Branch Login, always full width (`sm:col-span-2`) at the end.
+- **Odd counts**: the forms are a data list. If they leave an odd one out (flag off: five), the last form spans the row too.
+  - Flag off: 2 + 2 + Cash Receipt (full) + National Safety Week (full).
+  - Flag on: 2 + 2 + 2 + National Safety Week (full).
+  - Verified in Chrome at 1440, 1024 and 390 px. Cards are 414 px wide on desktop and tablet, and stacked at 390. The sideways scroll at 390 is the existing header overflow, not the grid.
+- **Visual note for the owner**: with the flag on, Cash Receipt and Refund sit side by side with the same sky accent.
+- **Verified**: tsc, lint, full tests and `next build` clean. `lib/home-page-ui.test.ts` renders the page as production with the flag off and on and checks order, full-width cards and grid classes. `lib/form/payment-desk-pages.test.ts` is updated for the data-list syntax.
 
 ### In review: Refund requests saved to the DB (Claude Opus 5.5, 2026-10-16, branch `feature/refund-request-db`, pushed, not merged). Migration 0030 generated, NOT applied.
 Builds on Codex's `feature/refund-request-form` (PR #6, already merged to `main` as `599cc7f`, so "merge it in" was a no-op).
