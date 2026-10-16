@@ -49,7 +49,21 @@ Design system: Navy `#0B1F3A`, Forest green `#2E8B57`, Amber `#E8A33D`. Headings
 
 ## 3. Current State (update this every session)
 
-**Last updated:** 16 October 2026, by Claude Opus 5.5 (Refund requests: DB schema, migration 0030 generated not applied, submit path; branch `feature/refund-request-db`, pushed, not merged; see entry below)
+**Last updated:** 16 October 2026, by Claude Opus 5.5 (migration 0030 applied after a production incident; rate limits branch `fix/refund-rate-limits`, PR open, not merged; see entries below)
+
+### Incident and fix: migration 0030 applied (Claude Opus 5.5, 2026-10-16, owner-approved)
+- **What happened**: PR #7 (`feature/refund-request-db`, commit `385f1ef`) was merged to `main` at 05:47 UTC (11:17 IST) and auto-deployed (`dpl_Ef8rrpAs15r13M7uirvwvKS1krzN`) before migration 0030 existed in the database. Its `schema.ts` declares `audit_log.refund_request_id`, so every Drizzle insert into `audit_log` named a column the database did not have.
+- **Impact** (Vercel production request and runtime logs, 05:48 to 06:05 UTC):
+  - Three `POST /api/submit` returned 500 (05:49:58, 05:50:19, 06:04:25). Each rolled back fully: no row, no serial consumed (PAYMENT_ADVICE counter still 423), and the browser deleted its uploads. Those submitters must submit again. Their identity is not recorded anywhere.
+  - Two `GET /api/advice/5f4d8298-.../pdf` (MCCIA/2026-27/0413, Sarika Damle) returned 500 at 05:52:06 and 05:52:20.
+  - There were no other writes in the window: no audit rows, Cash Receipts, Forwarding Memos, Finance actions, vendor requests or logins.
+  - Error text: `Failed query: insert into "audit_log" (... "refund_request_id" ...)`.
+- **Fix**: owner approved option 1. `npm run db:migrate` applied only 0030 at 06:05 UTC (recorded as id 31, hash `f72c9e95...`). `npx tsx scripts/verify-migration-0030.ts` passed every check: 0030 newest with a matching hash, schema.ts and the database identical, all 0030 constraints present, `audit_log.refund_request_id` nullable, `refund_requests` empty, no REFUND counter.
+  - `REFUND_REQUESTS_ENABLED` is still unset, so refunds stay off.
+- **Lesson**: any `schema.ts` change to a table the app already writes (here `audit_log`) breaks production the moment it deploys without its migration. Apply the migration before merging, not after.
+
+### In review: rate limits and size caps for refunds and uploads, GSTIN/IFSC normalisation (branch `fix/refund-rate-limits`, PR open, not merged)
+This is commit `75adb16` from `feature/refund-request-db`, which PR #7 did not include. Details are in the "Deploy order", "GSTIN / IFSC" and "Rate limit" bullets of the Refund entry below.
 
 ### In review: Refund requests saved to the DB (Claude Opus 5.5, 2026-10-16, branch `feature/refund-request-db`, pushed, not merged). Migration 0030 generated, NOT applied.
 Builds on Codex's `feature/refund-request-form` (PR #6, already merged to `main` as `599cc7f`, so "merge it in" was a no-op).
