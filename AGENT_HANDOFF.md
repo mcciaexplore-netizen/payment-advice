@@ -49,7 +49,16 @@ Design system: Navy `#0B1F3A`, Forest green `#2E8B57`, Amber `#E8A33D`. Headings
 
 ## 3. Current State (update this every session)
 
-**Last updated:** 16 October 2026, by Claude Opus 5.5 (Refund requests: DB schema, migration 0030 generated not applied, submit path; branch `feature/refund-request-db`, pushed, not merged; see entry below)
+**Last updated:** 16 October 2026, by Claude Opus 5.5 (invoice auto-fill hardening, branch `fix/invoice-autofill-hardening`, not merged; see entry below)
+
+### In review: invoice auto-fill hardening (Claude Opus 5.5, 2026-10-16, branch `fix/invoice-autofill-hardening`, not merged)
+This reverses the risky parts of PR #6's auto-fill rework in `app/api/invoice-autofill/route.ts` and `components/form/PaymentAdviceForm.tsx`.
+- **Blob path only again**: the route no longer accepts multipart file uploads, so this public endpoint cannot be used to send arbitrary files to Gemini. The form always uploads the Tax Invoice to the private Blob store first, in local development too (PR #6's dev-only direct path is removed). Local auto-fill therefore needs `BLOB_READ_WRITE_TOKEN`, same as before PR #6.
+- **Size**: the existing 10 MB metadata check stays, and the route now also stops reading the stored file after 10 MB.
+- **Rate limit**: 20 calls per 10 min per IP per instance, using `lib/rate-limit.ts`. That is the same file as on `fix/refund-rate-limits`; the two copies are identical, so they merge cleanly in either order.
+- **Errors**: no user-facing text names `GEMINI_API_KEY` or `BLOB_READ_WRITE_TOKEN`, or mentions a local `.env.local` path. A missing key now shows "Invoice auto-fill is not available right now. Please fill the form manually." (503). The explicit errors PR #6 added for invalid files are kept.
+- **Unchanged, owner to decide**: PR #6's Beneficiary Name fallback is still in place. When the invoice yields a payee name but no active vendor matches, the form now sets Beneficiary Name to that name. Before PR #6, Beneficiary Name was filled only when the invoice also printed an account number or IFSC. The fallback overwrites anything already typed in that field, and it counts as a successful auto-fill, so the "auto-filled" notice shows and the "no details found" message does not.
+- **Verified**: tsc, lint, full tests and `next build` clean. `lib/invoice-autofill-route.test.ts` is rewritten to cover: generic 503, invalid path, multipart rejected unread, size and type rejected before reading, the 10 MB streaming cap, and the 429.
 
 ### In review: Refund requests saved to the DB (Claude Opus 5.5, 2026-10-16, branch `feature/refund-request-db`, pushed, not merged). Migration 0030 generated, NOT applied.
 Builds on Codex's `feature/refund-request-form` (PR #6, already merged to `main` as `599cc7f`, so "merge it in" was a no-op).

@@ -338,46 +338,37 @@ export function PaymentAdviceForm({
     setInvoiceAutoFillError(null);
     try {
       let uploaded = autoFillInvoiceUpload;
-      let response: Response;
-      if (process.env.NODE_ENV !== "production") {
-        // Local development reads the selected file directly. This avoids
-        // requiring Vercel Blob credentials just to try invoice extraction.
-        const body = new FormData();
-        body.set("file", file);
-        response = await fetch("/api/invoice-autofill", { method: "POST", body });
-      } else {
-        if (!uploaded) {
-          const uploadBatchId = crypto.randomUUID();
-          let blob: Awaited<ReturnType<typeof upload>>;
-          try {
-            blob = await upload(
-              `pending-uploads/${uploadBatchId}/TAX_INVOICE-${safeUploadFileName(file.name)}`,
-              file,
-              {
-                access: "private",
-                handleUploadUrl: "/api/attachments/upload",
-                multipart: file.size > 4 * 1024 * 1024,
-              },
-            );
-          } catch {
-            throw new Error("Tax invoice upload failed. Check that BLOB_READ_WRITE_TOKEN is configured for this environment, then try again.");
-          }
-          uploaded = {
-            docType: "TAX_INVOICE",
-            fileName: file.name,
-            blobPathname: blob.pathname,
-            blobUrl: blob.url,
-            sizeBytes: file.size,
-          };
-          setAutoFillInvoiceUpload(uploaded);
+      if (!uploaded) {
+        const uploadBatchId = crypto.randomUUID();
+        let blob: Awaited<ReturnType<typeof upload>>;
+        try {
+          blob = await upload(
+            `pending-uploads/${uploadBatchId}/TAX_INVOICE-${safeUploadFileName(file.name)}`,
+            file,
+            {
+              access: "private",
+              handleUploadUrl: "/api/attachments/upload",
+              multipart: file.size > 4 * 1024 * 1024,
+            },
+          );
+        } catch {
+          throw new Error("The tax invoice could not be uploaded for reading. Please try again, or fill the form manually.");
         }
-
-        response = await fetch("/api/invoice-autofill", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ pathname: uploaded.blobPathname }),
-        });
+        uploaded = {
+          docType: "TAX_INVOICE",
+          fileName: file.name,
+          blobPathname: blob.pathname,
+          blobUrl: blob.url,
+          sizeBytes: file.size,
+        };
+        setAutoFillInvoiceUpload(uploaded);
       }
+
+      const response = await fetch("/api/invoice-autofill", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pathname: uploaded.blobPathname }),
+      });
       const payload = await response.json().catch(() => null);
       if (!response.ok) throw new Error(payload?.error ?? "Invoice reading is temporarily unavailable. You can continue by filling the form manually.");
       const autoFill = payload?.autoFill;
