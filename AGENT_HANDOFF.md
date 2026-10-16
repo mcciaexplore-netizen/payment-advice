@@ -49,7 +49,12 @@ Design system: Navy `#0B1F3A`, Forest green `#2E8B57`, Amber `#E8A33D`. Headings
 
 ## 3. Current State (update this every session)
 
-**Last updated:** 16 October 2026, by Claude Opus 5.5 (compact home page that fits a laptop screen, branch `fix/home-compact`, PR open, not merged; supersedes PR #14; see entry below)
+**Last updated:** 16 October 2026, by Codex (sent-back edit action in submitter dashboard, branch `feature/sent-back-dashboard-edit`, PR #16 open, not merged; see entry below)
+
+### In review: sent-back edit action in My Submissions (Codex, 2026-10-16, branch `feature/sent-back-dashboard-edit`, PR #16 open)
+- Adds the same **Edit & Resubmit** link sent by email to the submitter-scoped My Submissions dashboard for SENT_BACK requests with a valid existing edit token.
+- Missing or expired tokens show “Edit link expired.” Other statuses and Team Submissions do not show the link. No permissions or database schema changes.
+- **Verified:** TypeScript, lint, 738 tests (11 skipped), and production build pass. Manual browser and other request-type spot checks were not performed.
 
 ### In review: compact home page, all cards visible without scrolling on a laptop (Claude Opus 5.5, 2026-10-16, branch `fix/home-compact`, PR open, not merged)
 This supersedes PR #14 (`fix/home-card-order`), which can be closed; it carries the same owner card order.
@@ -1314,6 +1319,8 @@ Requested because every `admin_users` password (Sunil's, Abha's, the ALL account
 - Verification: TypeScript and ESLint clean; Vitest **305 passed / 7 skipped**; production build clean (the first sandboxed build could not reach Google Fonts, then passed with network access).
 
 ## 4. Open Items (verify before building on top of these)
+
+- **Sent-back dashboard edit PR #16 awaits review and merge (2026-10-16).** Branch `feature/sent-back-dashboard-edit`. No migration required; the action uses existing edit-token fields and appears only in My Submissions.
 
 - **Refund request migration pending (2026-10-15, PR #6).** `feature/refund-request-form` defines `refund_submissions` in Drizzle schema but intentionally includes no migration because `drizzle-kit generate` failed with `uv_os_get_passwd returned ENOMEM`; migration files, snapshots, and journal were not hand-edited. Owner must generate/review/apply the additive migration before setting `REFUND_REQUESTS_ENABLED=true`. Production UI and route remain hidden/inert while the flag is unset. No production DB access or writes were made.
 - **Cash Receipt Excel report draft remains local only (2026-10-07).** The working tree has an uncommitted report button and Excel export route. It was not included in `f007c9a`; review it separately before any push. The local checkout has no `DATABASE_URL`, so it cannot display the main database's receipt records.
@@ -3910,3 +3917,5 @@ linked 0132 to `VENTIVE HOSPITALITY PRIVATE LIMITED-CR-JW` (`8ebe7ea5-...`).
 Every correction logged actor/timestamp/old-new values/vendor IDs. Reference
 numbers, amounts, statuses, addresses (except canonical Tier 4 vendor-master
 addresses copied verbatim), and payment/workflow fields were untouched.
+
+2026-10-16 - Codex - Added the existing sent-back email's Edit & Resubmit action to the submitter-scoped My Submissions dashboard on `feature/sent-back-dashboard-edit`, PR #16. No schema or access changes. Verified with TypeScript, lint, 738 tests (11 skipped), and production build. Manual browser smoke checks were not performed.
