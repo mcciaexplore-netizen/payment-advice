@@ -1,11 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { eq, sql } from "drizzle-orm";
-import { db } from "@/lib/db";
-import { paymentAdvices, paymentEntries, auditLog } from "@/lib/db/schema";
-import { paymentEntrySchema } from "@/lib/validation/payment-advice";
-import { displayNoFor, documentLabelFor } from "@/lib/advice/document-identity";
 import { getAdminSession } from "@/lib/admin-session";
-import { notifyPaymentEntry } from "@/lib/email/notify";
+import { recordNeftPayment } from "@/lib/advice/finance-stage-actions";
 
 export const runtime = "nodejs";
 
@@ -13,20 +8,7 @@ function clientIp(req: NextRequest): string | null {
   return req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null;
 }
 
-function money(value: number): string {
-  return value.toLocaleString("en-IN", { minimumFractionDigits: 2 });
-}
 
-type TxResult =
-  | { ok: false; status: number; error: string }
-  | {
-      ok: true;
-      totalPaid: string;
-      remaining: string;
-      payableAmount: string;
-      isFinal: boolean;
-      paidAt: Date;
-    };
 
 /**
  * "Record a Payment" — replaces the old single "Mark Payment Done" action
@@ -45,7 +27,8 @@ type TxResult =
  * atomically in the same transaction as the insert. The entry that brings
  * total_paid to payable_amount performs the same
  * status/approved_at/approved_by_name dual-write the old single Payment
- * Done action used to — partial entries never touch those fields.
+ * Done action used to — partial entries never touch those fields. The logic
+ * lives in lib/advice/finance-stage-actions.ts, shared with the bulk action.
  */
 export async function POST(
   req: NextRequest,
@@ -58,176 +41,14 @@ export async function POST(
     return NextResponse.json({ error: "Not signed in." }, { status: 401 });
   }
 
-  const [advice] = await db
-    .select({
-      paymentMode: paymentAdvices.paymentMode,
-      serialNo: paymentAdvices.serialNo,
-      cashVoucherNo: paymentAdvices.cashVoucherNo,
-      isAdvance: paymentAdvices.isAdvance,
-      advanceNo: paymentAdvices.advanceNo,
-      submittedByName: paymentAdvices.submittedByName,
-      submittedByEmail: paymentAdvices.submittedByEmail,
-      payeeName: paymentAdvices.payeeName,
-      formDate: paymentAdvices.formDate,
-      verifiedAt: paymentAdvices.verifiedAt,
-    })
-    .from(paymentAdvices)
-    .where(eq(paymentAdvices.id, id))
-    .limit(1);
-  if (!advice) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
-  }
-  if (advice.paymentMode !== "NEFT") {
-    return NextResponse.json(
-      { error: "Record a Payment is only available for NEFT Payment Advices." },
-      { status: 409 },
-    );
-  }
-  if (!advice.verifiedAt) {
-    return NextResponse.json(
-      { error: "Must be verified before recording a payment." },
-      { status: 409 },
-    );
-  }
-
   const body = await req.json().catch(() => null);
-  const parsed = paymentEntrySchema.safeParse(body);
-  if (!parsed.success) {
-    return NextResponse.json(
-      { error: parsed.error.issues[0]?.message ?? "Invalid data" },
-      { status: 400 },
-    );
-  }
-
-  const paidBy = session.fullName;
-  const now = new Date();
-  const amountPaise = Math.round(parsed.data.amount * 100);
-  const remarks = parsed.data.remarks ?? "";
-
-  const result: TxResult = await db.transaction(async (tx) => {
-    const rows = await tx.execute<{
-      payable_amount: string | null;
-      total_paid: string;
-      status: string;
-    }>(sql`
-      select payable_amount, total_paid, status
-      from payment_advices
-      where id = ${id}
-      for update
-    `);
-    const row = rows.rows[0];
-    if (!row) {
-      return { ok: false, status: 404, error: "Not found" };
-    }
-    if (row.status === "APPROVED") {
-      return { ok: false, status: 409, error: "This advice is already fully settled." };
-    }
-    if (row.status !== "SUBMITTED") {
-      return {
-        ok: false,
-        status: 409,
-        error: "Payments can only be recorded against an active submission.",
-      };
-    }
-    if (!row.payable_amount) {
-      return {
-        ok: false,
-        status: 400,
-        error: "Save the Arrears/TDS payable calculation before recording a payment.",
-      };
-    }
-
-    const payableAmountPaise = Math.round(Number(row.payable_amount) * 100);
-    const totalPaidPaise = Math.round(Number(row.total_paid) * 100);
-    const remainingPaise = payableAmountPaise - totalPaidPaise;
-    if (amountPaise > remainingPaise) {
-      return {
-        ok: false,
-        status: 400,
-        error: `Amount exceeds the remaining balance of ₹ ${money(remainingPaise / 100)}.`,
-      };
-    }
-
-    const newTotalPaidPaise = totalPaidPaise + amountPaise;
-    const newTotalPaid = (newTotalPaidPaise / 100).toFixed(2);
-    const isFinal = newTotalPaidPaise >= payableAmountPaise;
-
-    await tx.insert(paymentEntries).values({
-      paymentAdviceId: id,
-      amount: parsed.data.amount.toFixed(2),
-      remarks,
-      paidAt: now,
-      paidBy,
-    });
-
-    await tx
-      .update(paymentAdvices)
-      .set({
-        totalPaid: newTotalPaid,
-        updatedAt: now,
-        ...(isFinal
-          ? { status: "APPROVED" as const, approvedAt: now, approvedByName: paidBy }
-          : {}),
-      })
-      .where(eq(paymentAdvices.id, id));
-
-    await tx.insert(auditLog).values({
-      paymentAdviceId: id,
-      action: "PAYMENT_ENTRY_RECORDED",
-      actor: paidBy,
-      ipAddress: clientIp(req),
-      details: {
-        amount: parsed.data.amount,
-        remarks,
-        totalPaid: newTotalPaid,
-        payableAmount: row.payable_amount,
-        isFinal,
-      },
-    });
-
-    return {
-      ok: true,
-      totalPaid: newTotalPaid,
-      remaining: ((payableAmountPaise - newTotalPaidPaise) / 100).toFixed(2),
-      payableAmount: row.payable_amount,
-      isFinal,
-      paidAt: now,
-    };
-  });
-
-  if (!result.ok) {
-    return NextResponse.json({ error: result.error }, { status: result.status });
-  }
-
-  await notifyPaymentEntry(
-    {
-      displayNo: displayNoFor(
-        "NEFT",
-        advice.serialNo,
-        advice.cashVoucherNo,
-        advice.isAdvance,
-        advice.advanceNo,
-      ),
-      submittedByName: advice.submittedByName,
-      documentLabel: documentLabelFor("NEFT", advice.isAdvance),
-      payeeName: advice.payeeName,
-      entryAmount: money(parsed.data.amount),
-      remarks,
-      isFinal: result.isFinal,
-      totalPaid: money(Number(result.totalPaid)),
-      payableAmount: money(Number(result.payableAmount)),
-      remaining: money(Number(result.remaining)),
-      formDate: advice.formDate,
-    },
-    advice.submittedByEmail,
-    id,
-  );
-
+  const result = await recordNeftPayment(id, session.fullName, body, { ip: clientIp(req) });
+  if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
   return NextResponse.json({
     ok: true,
-    totalPaid: result.totalPaid,
-    remaining: result.remaining,
-    isFinal: result.isFinal,
-    paidAt: result.paidAt.toISOString(),
+    totalPaid: result.data.totalPaid,
+    remaining: result.data.remaining,
+    isFinal: result.data.isFinal,
+    paidAt: result.data.paidAt.toISOString(),
   });
 }

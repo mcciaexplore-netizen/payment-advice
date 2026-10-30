@@ -22,3 +22,15 @@ export function defaultPaymentModeForRoles(roles: AdminRole[]): PaymentMode | un
   if (financeRoles.length === 1) return defaultPaymentModeForRole(financeRoles[0]);
   return undefined;
 }
+
+/** Whether these roles "own" a submission's payment mode for payment
+ * actions: ALL owns both, PAYMENT_ADVICE owns NEFT, CASH_VOUCHER owns Cash.
+ * Moved here from components/admin/AdviceActions.tsx (2026-10-30) so the
+ * single-item payment buttons and the bulk payment action use one rule. The
+ * single-item routes still do not enforce it (unchanged UI-only default);
+ * the bulk route does, per item. */
+export function ownsSubmissionType(roles: AdminRole[], paymentMode: "NEFT" | "CASH"): boolean {
+  if (roles.includes("ALL")) return true;
+  if (paymentMode === "NEFT") return roles.includes("PAYMENT_ADVICE");
+  return roles.includes("CASH_VOUCHER");
+}

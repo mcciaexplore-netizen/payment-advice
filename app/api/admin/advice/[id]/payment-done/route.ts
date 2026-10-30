@@ -1,11 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { eq } from "drizzle-orm";
-import { db } from "@/lib/db";
-import { paymentAdvices, auditLog } from "@/lib/db/schema";
-import { billPassedForSchema, PaymentMode } from "@/lib/validation/payment-advice";
-import { billPassedForLabelFor, displayNoFor, documentLabelFor } from "@/lib/advice/document-identity";
 import { getAdminSession } from "@/lib/admin-session";
-import { notifyPaymentDone } from "@/lib/email/notify";
+import { markCashPaymentDone } from "@/lib/advice/finance-stage-actions";
 
 export const runtime = "nodejs";
 
@@ -33,7 +28,8 @@ function clientIp(req: NextRequest): string | null {
  * exactly as Sanction used to (human-confirmed judgment call, see
  * AGENT_HANDOFF.md) so Excel export and the Payment Advice PDF's "Approved
  * on" line keep working unchanged, now reflecting Payment Done instead of
- * Sanction.
+ * Sanction. The logic lives in lib/advice/finance-stage-actions.ts, shared
+ * with the bulk action.
  */
 export async function POST(
   req: NextRequest,
@@ -46,113 +42,8 @@ export async function POST(
     return NextResponse.json({ error: "Not signed in." }, { status: 401 });
   }
 
-  const [advice] = await db
-    .select({
-      status: paymentAdvices.status,
-      serialNo: paymentAdvices.serialNo,
-      cashVoucherNo: paymentAdvices.cashVoucherNo,
-      isAdvance: paymentAdvices.isAdvance,
-      advanceNo: paymentAdvices.advanceNo,
-      submittedByName: paymentAdvices.submittedByName,
-      submittedByEmail: paymentAdvices.submittedByEmail,
-      payeeName: paymentAdvices.payeeName,
-      amount: paymentAdvices.amount,
-      formDate: paymentAdvices.formDate,
-      paymentMode: paymentAdvices.paymentMode,
-      billPassedFor: paymentAdvices.billPassedFor,
-      payableAmount: paymentAdvices.payableAmount,
-      verifiedAt: paymentAdvices.verifiedAt,
-      paymentDoneAt: paymentAdvices.paymentDoneAt,
-    })
-    .from(paymentAdvices)
-    .where(eq(paymentAdvices.id, id))
-    .limit(1);
-  if (!advice) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
-  }
-  if (!advice.verifiedAt) {
-    return NextResponse.json(
-      { error: "Must be verified before Payment Done." },
-      { status: 409 },
-    );
-  }
-  if (advice.paymentDoneAt || advice.status === "APPROVED") {
-    return NextResponse.json({ error: "Already marked Payment Done." }, { status: 409 });
-  }
-
   const body = await req.json().catch(() => null);
-  const billPassedForInput = advice.isAdvance
-    ? advice.payableAmount
-      ? Number(advice.payableAmount)
-      : undefined
-    : typeof (body as { billPassedFor?: unknown })?.billPassedFor === "number"
-      ? (body as { billPassedFor: number }).billPassedFor
-      : advice.billPassedFor
-        ? Number(advice.billPassedFor)
-        : undefined;
-  if (billPassedForInput === undefined) {
-    return NextResponse.json(
-      {
-        error: advice.isAdvance
-          ? "Save the Arrears/TDS payable calculation before marking Payment Done."
-          : `${billPassedForLabelFor(false)} must be filled before marking Payment Done.`,
-      },
-      { status: 400 },
-    );
-  }
-  const amountCheck = billPassedForSchema(Number(advice.amount)).safeParse(billPassedForInput);
-  if (!amountCheck.success) {
-    return NextResponse.json(
-      { error: amountCheck.error.issues[0]?.message ?? "Invalid amount" },
-      { status: 400 },
-    );
-  }
-
-  const paymentDoneBy = session.fullName;
-  const now = new Date();
-  await db.transaction(async (tx) => {
-    await tx
-      .update(paymentAdvices)
-      .set({
-        paymentDoneAt: now,
-        paymentDoneBy,
-        ...(!advice.isAdvance ? { billPassedFor: amountCheck.data.toFixed(2) } : {}),
-        status: "APPROVED",
-        approvedAt: now,
-        approvedByName: paymentDoneBy,
-        updatedAt: now,
-      })
-      .where(eq(paymentAdvices.id, id));
-
-    await tx.insert(auditLog).values({
-      paymentAdviceId: id,
-      action: "PAYMENT_DONE",
-      actor: paymentDoneBy,
-      ipAddress: clientIp(req),
-      details: advice.isAdvance
-        ? { paymentDoneBy, payableAmount: amountCheck.data }
-        : { paymentDoneBy, billPassedFor: amountCheck.data },
-    });
-  });
-
-  await notifyPaymentDone(
-    {
-      displayNo: displayNoFor(
-        advice.paymentMode as PaymentMode,
-        advice.serialNo,
-        advice.cashVoucherNo,
-        advice.isAdvance,
-        advice.advanceNo,
-      ),
-      submittedByName: advice.submittedByName,
-      documentLabel: documentLabelFor(advice.paymentMode as PaymentMode, advice.isAdvance),
-      payeeName: advice.payeeName,
-      amount: Number(advice.amount).toLocaleString("en-IN", { minimumFractionDigits: 2 }),
-      formDate: advice.formDate,
-    },
-    advice.submittedByEmail,
-    id,
-  );
-
-  return NextResponse.json({ ok: true, paymentDoneAt: now.toISOString() });
+  const result = await markCashPaymentDone(id, session.fullName, (body as { billPassedFor?: unknown } | null)?.billPassedFor, { ip: clientIp(req) });
+  if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
+  return NextResponse.json({ ok: true, paymentDoneAt: result.data.paymentDoneAt.toISOString() });
 }
