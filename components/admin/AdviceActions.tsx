@@ -9,6 +9,7 @@ import { formatIstDate } from "@/lib/date-time";
 import { PayableCalculator } from "@/components/admin/PayableCalculator";
 import { GstSettlementTracker } from "@/components/admin/GstSettlementTracker";
 import { BackLink } from "@/components/admin/BackLink";
+import { ownsSubmissionType } from "@/lib/admin/role-scope";
 
 const ROLE_LABELS: Record<AdminRole, string> = {
   PAYMENT_ADVICE: "a Payment Advice",
@@ -28,19 +29,6 @@ export type PaymentEntryDisplay = {
   paidAt: string;
   paidBy: string;
 };
-
-/** Whether the current session's roles "own" this submission's payment
- * mode — a UI-only default, not a backend authorization wall (per the
- * human's explicit decision, see AGENT_HANDOFF.md): a session holding ALL
- * (directly, or alongside AUTHORITY for a dual-role account) can mark
- * either mode Payment Done, and PAYMENT_ADVICE/CASH_VOUCHER each own only
- * their matching mode. Multi-role aware: checks list membership, not
- * equality against a single role. */
-function ownsSubmissionType(roles: AdminRole[], paymentMode: "NEFT" | "CASH"): boolean {
-  if (roles.includes("ALL")) return true;
-  if (paymentMode === "NEFT") return roles.includes("PAYMENT_ADVICE");
-  return roles.includes("CASH_VOUCHER");
-}
 
 function formatDateTime(iso: string): string {
   return formatIstDate(iso);

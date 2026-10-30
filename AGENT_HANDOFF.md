@@ -49,7 +49,34 @@ Design system: Navy `#0B1F3A`, Forest green `#2E8B57`, Amber `#E8A33D`. Headings
 
 ## 3. Current State (update this every session)
 
-**Last updated:** 30 October 2026, by Claude Opus 5.5 (Cash Receipt "Cash received" marking, branch `feature/cash-receipt-mark-received`, PR open, NOT merged; migration 0031 must be applied first; see entry below)
+**Last updated:** 30 October 2026, by Claude Opus 5.5 (Finance bulk actions on Submissions, branch `feature/finance-bulk-actions`, PR open, not merged, no migration; see entry below)
+
+### In review: Finance bulk actions on the Submissions page (Claude Opus 5.5, 2026-10-30, branch `feature/finance-bulk-actions`, PR open, not merged). No migration.
+- **One code path**: the single-item stage logic moved unchanged from the four routes into `lib/advice/finance-stage-actions.ts`: `receiveAdvice`, `verifyAdvice`, `markCashPaymentDone`, `recordNeftPayment`. The routes (`receive`, `verify`, `payment-done`, `payment-entries`) are thin wrappers with the same JSON and status codes. The 49 existing single-route tests pass with only their db mock taught `.returning()`; every assertion is unchanged.
+- **Hardening, also for single items**: each write is now conditional on the stage still being open: `finance_received_at IS NULL`; `verified_at IS NULL` with received set; `payment_done_at IS NULL` and status not APPROVED. A double click or two Finance users at once can no longer write twice or email twice; the loser gets the existing 409 text. NEFT already locked the row with FOR UPDATE. Bulk also passes `expectedTotalPaid`, so a payment recorded meanwhile makes the bulk row skip instead of paying on top.
+- **Bulk route** `POST /api/admin/advice/bulk` (`lib/advice/bulk-finance-actions.ts`) takes `{ action: receive|verify|payment, items (1 to 50, no duplicates), batchId, dryRun? }`.
+  - The item must be in the action's stage tab (receive: Awaiting Finance Review or Advance Payment; verify: Received & In Process; payment: Verified, Ready for Payment), else it is skipped with its current stage.
+  - Payment is only for types the user owns (`ownsSubmissionType`, moved to `lib/admin/role-scope.ts`: ALL both, PAYMENT_ADVICE NEFT, CASH_VOUCHER Cash). The single routes still do not enforce this (unchanged UI-only default).
+  - Payment rows are validated for the whole request first; any bad row returns 400 with per-row errors and nothing is processed.
+  - Items run one by one; one failure never stops the others. 404/409 count as skipped, anything else as failed. The loop stops before 45 s and reports the rest as not processed.
+  - `maxDuration` is 60.
+- **Audit**: same event names as single (FINANCE_RECEIVED, VERIFIED, PAYMENT_DONE, PAYMENT_ENTRY_RECORDED), details plus `{ bulk: true, batchId, bulkBy }`. Existing columns only.
+- **Emails**: unchanged, one per item from the same functions, after each save. An email failure never undoes the stage (existing `send()` behaviour).
+- **Per-item input**:
+  - Received and Verified need none (no checklist or note exists in the single actions).
+  - Cash Payment Done uses the saved Bill Passed For (Advance: saved payable amount), same as the single button; any amount from the browser is ignored, and rows without it are refused.
+  - NEFT needs, per row, an amount (prefilled with the remaining balance; partial allowed and capped at remaining, same rule as single) and a UTR or reference. The UTR is required in bulk and stored in the payment entry's existing `remarks` as "UTR / Ref: ...". NEFT rows without a saved payable calculation are refused.
+- **Not built (would need a migration)**: shared payment date and payment mode. `paid_at` is server time and mode is fixed per submission, and there are no columns for them. Nothing was added.
+- **UI** (`components/admin/BulkFinanceActions.tsx`, wired into `app/admin/submissions/page.tsx`):
+  - Checkboxes only on the action tabs, and only on rows the user may act on. Select-all covers this page (max 50).
+  - A sticky bar shows "N selected, ₹ total". The confirm step lists reference, payee and amount, with an email note.
+  - Payment shows an editable table (Due, Amount paid, UTR) and a server dry run of the whole batch, then runs in chunks of 5 with progress.
+  - A summary shows done / skipped / failed with reasons.
+  - Partial Payment Done tab: not included.
+- **Verified**: tsc, lint, full suite (805 at last full run, plus later fixes; all passing) and `next build` clean. New tests: `lib/advice/bulk-finance-actions.test.ts`, `finance-stage-actions.test.ts` and `bulk-finance-ui.test.ts`.
+  - Read-only regression on the local production build against live data: all 11 Submissions tabs, all Finance Admin pages, an advice detail page, issuer tab and public forms all 200.
+  - Screenshots come from the real page with every bulk POST intercepted by Playwright (no writes).
+  - Live data showed that bulk correctly refuses the only verified NEFT row (no payable calculation saved) and Cash rows without Bill Passed For.
 
 ### In review: Cash Receipt "Cash received" marking and issuer email (Claude Opus 5.5, 2026-10-30, branch `feature/cash-receipt-mark-received`, PR open, NOT merged). Do not merge until the owner has applied migration 0031.
 - **Why the order matters (verified)**: `schema.ts` now declares four new `cash_receipts` columns, so every full-row select and every insert names them. A local `next start` of this branch against today's database returned 500 "column received_at does not exist" on `/admin`, `/admin/cash-receipts` and the issuer's Cash Receipts tab. Cash Receipt submit would fail the same way. Every other page was 200. The order is: apply 0031, run `npx tsx scripts/verify-migration-0031.ts` (read-only), then merge and redeploy. This is the same class of failure as the 2026-10-16 refund incident.

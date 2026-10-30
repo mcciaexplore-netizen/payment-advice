@@ -19,7 +19,9 @@ import {
 import { PaymentMode } from "@/lib/validation/payment-advice";
 import { getAdminSession } from "@/lib/admin-session";
 import { displayNoFor, submissionTypeLabelFor } from "@/lib/advice/document-identity";
-import { defaultPaymentModeForRoles } from "@/lib/admin/role-scope";
+import { defaultPaymentModeForRoles, ownsSubmissionType } from "@/lib/admin/role-scope";
+import { bulkActionForTab } from "@/lib/advice/bulk-finance-actions";
+import { BulkFinanceProvider, BulkRowCheckbox, BulkSelectAll, type BulkRow } from "@/components/admin/BulkFinanceActions";
 import { pipelineStageFor } from "@/lib/advice/pipeline-stage";
 import { STAGE_FOR_TAB, STAGE_STYLE } from "@/lib/advice/stage-style";
 import { SentBackIndicators } from "@/components/admin/SentBackIndicators";
@@ -90,6 +92,8 @@ export default async function AdminListPage({
   const tabParam = Array.isArray(sp.tab) ? sp.tab[0] : sp.tab;
   const tab: AdminTab = isAdminTab(tabParam) ? tabParam : "waiting_authority";
   const baseWhere = buildAdviceWhere(filterParams);
+  const bulkAction = bulkActionForTab(tab);
+  const columnCount = (tab === "rejected" ? 11 : tab === "sent_back" ? 10 : 9) + (bulkAction ? 1 : 0);
   const where = and(baseWhere, buildTabCondition(tab));
   const sort = Array.isArray(sp.sort) ? sp.sort[0] : sp.sort;
   const dir = Array.isArray(sp.dir) ? sp.dir[0] : sp.dir;
@@ -140,6 +144,10 @@ export default async function AdminListPage({
         paymentDoneAt: paymentAdvices.paymentDoneAt,
         totalPaid: paymentAdvices.totalPaid,
         bankDetailsMismatch: paymentAdvices.bankDetailsMismatch,
+        // Bulk payment table: what is due per row (same saved values the
+        // single-item payment actions use).
+        payableAmount: paymentAdvices.payableAmount,
+        billPassedFor: paymentAdvices.billPassedFor,
       })
       .from(paymentAdvices)
       .where(where)
@@ -349,10 +357,13 @@ export default async function AdminListPage({
         </div>
       </form>
 
+      {(() => {
+        const table = (
       <div className="overflow-x-auto rounded-md border border-gray-200">
         <table className="w-full min-w-[900px] text-left text-sm">
           <thead className="border-b border-gray-200 bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
             <tr>
+              {bulkAction ? <th className="w-10 px-4 py-3"><BulkSelectAll /></th> : null}
               <th className="px-4 py-3"><SortHeader label="Reference No." column="serialNo" searchParams={sp} currentSort={sort} currentDir={dir} /></th>
               <th className="px-4 py-3"><SortHeader label="Form Date" column="formDate" searchParams={sp} currentSort={sort} currentDir={dir} /></th>
               <th className="px-4 py-3"><SortHeader label="Payee" column="payeeName" searchParams={sp} currentSort={sort} currentDir={dir} /></th>
@@ -369,7 +380,7 @@ export default async function AdminListPage({
           <tbody>
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={tab === "rejected" ? 11 : tab === "sent_back" ? 10 : 9} className="px-4 py-8 text-center text-gray-500">
+                <td colSpan={columnCount} className="px-4 py-8 text-center text-gray-500">
                   No submissions match these filters.
                 </td>
               </tr>
@@ -385,12 +396,13 @@ export default async function AdminListPage({
                 <Fragment key={row.id}>
                 {typeLabel !== previousTypeLabel ? (
                   <tr className="border-y border-gray-200 bg-[#0b1f3a]/5">
-                    <td colSpan={tab === "rejected" ? 11 : tab === "sent_back" ? 10 : 9} className="px-4 py-2 text-xs font-semibold uppercase tracking-wide text-[#0b1f3a]">
+                    <td colSpan={columnCount} className="px-4 py-2 text-xs font-semibold uppercase tracking-wide text-[#0b1f3a]">
                       {typeLabel}
                     </td>
                   </tr>
                 ) : null}
                 <tr className={`border-b border-gray-100 last:border-0 hover:bg-gray-50 ${tab === "sent_back" && sendBack?.isExpired ? "bg-red-50/70" : tab === "sent_back" && sendBack?.isStale ? "bg-amber-50/70" : ""}`}>
+                  {bulkAction ? <td className="px-4 py-3 align-top"><BulkRowCheckbox id={row.id} /></td> : null}
                   <td className="whitespace-nowrap px-4 py-3 font-medium text-[#0b1f3a]">
                     <div>{displayNoFor(
                         row.paymentMode as PaymentMode,
@@ -454,6 +466,29 @@ export default async function AdminListPage({
           </tbody>
         </table>
       </div>
+        );
+        // Bulk actions only on the tabs where the next step is valid (see
+        // lib/advice/bulk-finance-actions.ts BULK_ACTION_TABS).
+        return bulkAction && session ? (
+          <BulkFinanceProvider
+            action={bulkAction}
+            rows={rows.map((row): BulkRow => ({
+              id: row.id,
+              reference: displayNoFor(row.paymentMode as PaymentMode, row.serialNo, row.cashVoucherNo, row.isAdvance, row.advanceNo),
+              payeeName: row.payeeName,
+              amount: row.amount,
+              paymentMode: row.paymentMode as "NEFT" | "CASH",
+              isAdvance: row.isAdvance,
+              payableAmount: row.payableAmount,
+              billPassedFor: row.billPassedFor,
+              totalPaid: row.totalPaid,
+              selectable: bulkAction !== "payment" || ownsSubmissionType(session.roles, row.paymentMode as "NEFT" | "CASH"),
+            }))}
+          >
+            {table}
+          </BulkFinanceProvider>
+        ) : table;
+      })()}
 
       <div className="flex items-center justify-between text-sm text-gray-600">
         <span>

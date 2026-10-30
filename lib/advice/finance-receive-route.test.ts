@@ -6,14 +6,18 @@ const mocks = vi.hoisted(() => {
   const where = vi.fn(() => ({ limit }));
   const from = vi.fn(() => ({ where }));
   const select = vi.fn(() => ({ from }));
-  const txSet = vi.fn(() => ({ where: vi.fn() }));
+  // The write is conditional (stage still open) and returns the updated row;
+  // an empty result means someone else already did it (see
+  // lib/advice/finance-stage-actions.ts).
+  const txReturning = vi.fn(async () => [{ id: "updated" }]);
+  const txSet = vi.fn(() => ({ where: vi.fn(() => ({ returning: txReturning })) }));
   const txUpdate = vi.fn(() => ({ set: txSet }));
   const txValues = vi.fn();
   const txInsert = vi.fn(() => ({ values: txValues }));
   const transaction = vi.fn(async (cb: (tx: unknown) => Promise<void>) =>
     cb({ update: txUpdate, insert: txInsert }),
   );
-  return { limit, select, txSet, txInsert, txValues, transaction };
+  return { limit, select, txSet, txReturning, txInsert, txValues, transaction };
 });
 
 vi.mock("@/lib/db", () => ({ db: { select: mocks.select, transaction: mocks.transaction } }));

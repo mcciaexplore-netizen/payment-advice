@@ -2,9 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { paymentAdvices, auditLog } from "@/lib/db/schema";
-import { notifyVerified } from "@/lib/email/notify";
-import { PaymentMode, verifierNameCorrectionSchema } from "@/lib/validation/payment-advice";
-import { displayNoFor, documentLabelFor } from "@/lib/advice/document-identity";
+import { verifierNameCorrectionSchema } from "@/lib/validation/payment-advice";
+import { verifyAdvice } from "@/lib/advice/finance-stage-actions";
 import { getAdminSession } from "@/lib/admin-session";
 
 export const runtime = "nodejs";
@@ -17,7 +16,9 @@ function clientIp(req: NextRequest): string | null {
  * logged-in Admin's session (real per-person login, admin_users) — no
  * picker, no request body needed. Notifies the submitter — see
  * AGENT_HANDOFF.md for why Received deliberately does not send an email,
- * and for why Sanctioned no longer exists as an active step at all. */
+ * and for why Sanctioned no longer exists as an active step at all. The
+ * logic lives in lib/advice/finance-stage-actions.ts, shared with the bulk
+ * action. */
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
@@ -29,75 +30,9 @@ export async function POST(
     return NextResponse.json({ error: "Not signed in." }, { status: 401 });
   }
 
-  const [advice] = await db
-    .select({
-      serialNo: paymentAdvices.serialNo,
-      cashVoucherNo: paymentAdvices.cashVoucherNo,
-      isAdvance: paymentAdvices.isAdvance,
-      advanceNo: paymentAdvices.advanceNo,
-      submittedByName: paymentAdvices.submittedByName,
-      submittedByEmail: paymentAdvices.submittedByEmail,
-      payeeName: paymentAdvices.payeeName,
-      amount: paymentAdvices.amount,
-      formDate: paymentAdvices.formDate,
-      paymentMode: paymentAdvices.paymentMode,
-      financeReceivedAt: paymentAdvices.financeReceivedAt,
-      verifiedAt: paymentAdvices.verifiedAt,
-    })
-    .from(paymentAdvices)
-    .where(eq(paymentAdvices.id, id))
-    .limit(1);
-  if (!advice) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
-  }
-  if (!advice.financeReceivedAt) {
-    return NextResponse.json(
-      { error: "Must be marked Received & In Process before it can be verified." },
-      { status: 409 },
-    );
-  }
-  if (advice.verifiedAt) {
-    return NextResponse.json({ error: "Already verified." }, { status: 409 });
-  }
-
-  const verifiedBy = session.fullName;
-  const now = new Date();
-  await db.transaction(async (tx) => {
-    await tx
-      .update(paymentAdvices)
-      .set({ verifiedAt: now, verifiedBy, updatedAt: now })
-      .where(eq(paymentAdvices.id, id));
-
-    await tx.insert(auditLog).values({
-      paymentAdviceId: id,
-      action: "VERIFIED",
-      actor: verifiedBy,
-      ipAddress: clientIp(req),
-      details: { verifiedBy },
-    });
-  });
-
-  await notifyVerified(
-    {
-      displayNo: displayNoFor(
-        advice.paymentMode as PaymentMode,
-        advice.serialNo,
-        advice.cashVoucherNo,
-        advice.isAdvance,
-        advice.advanceNo,
-      ),
-      submittedByName: advice.submittedByName,
-      verifiedBy,
-      documentLabel: documentLabelFor(advice.paymentMode as PaymentMode, advice.isAdvance),
-      payeeName: advice.payeeName,
-      amount: Number(advice.amount).toLocaleString("en-IN", { minimumFractionDigits: 2 }),
-      formDate: advice.formDate,
-    },
-    advice.submittedByEmail,
-    id,
-  );
-
-  return NextResponse.json({ ok: true, verifiedAt: now.toISOString() });
+  const result = await verifyAdvice(id, session.fullName, { ip: clientIp(req) });
+  if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
+  return NextResponse.json({ ok: true, verifiedAt: result.data.verifiedAt.toISOString() });
 }
 
 /**
