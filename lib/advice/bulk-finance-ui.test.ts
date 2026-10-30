@@ -28,6 +28,6 @@ describe("bulk selection UI", () => {
   });
 
   it("no em dashes in the bulk UI copy", () => {
-    expect(fs.readFileSync(path.join(process.cwd(), "components/admin/BulkFinanceActions.tsx"), "utf8")).not.toContain("—");
+    expect(fs.readFileSync(path.join(process.cwd(), "components/admin/BulkFinanceActions.tsx"), "utf8")).not.toContain("\u2014");
   });
 });

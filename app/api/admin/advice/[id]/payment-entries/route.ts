@@ -27,7 +27,7 @@ function clientIp(req: NextRequest): string | null {
  * atomically in the same transaction as the insert. The entry that brings
  * total_paid to payable_amount performs the same
  * status/approved_at/approved_by_name dual-write the old single Payment
- * Done action used to — partial entries never touch those fields. The logic
+ * Done action used to; partial entries never touch those fields. The logic
  * lives in lib/advice/finance-stage-actions.ts, shared with the bulk action.
  */
 export async function POST(
