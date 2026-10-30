@@ -17,10 +17,12 @@ const mocks = vi.hoisted(() => {
   const transaction = vi.fn(async (cb: (tx: unknown) => Promise<void>) =>
     cb({ update: txUpdate, insert: txInsert }),
   );
-  return { limit, select, txSet, txReturning, txInsert, txValues, transaction };
+  const getAdminSession = vi.fn();
+  return { limit, select, txSet, txReturning, txInsert, txValues, transaction, getAdminSession };
 });
 
 vi.mock("@/lib/db", () => ({ db: { select: mocks.select, transaction: mocks.transaction } }));
+vi.mock("@/lib/admin-session", () => ({ getAdminSession: mocks.getAdminSession }));
 
 import { POST } from "../../app/api/admin/advice/[id]/receive/route";
 
@@ -35,6 +37,14 @@ function req() {
 describe("POST /api/admin/advice/[id]/receive", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.getAdminSession.mockResolvedValue({ adminUserId: "a-1", fullName: "Abha Khatavkar", roles: ["CASH_VOUCHER"], recommendingAuthorityId: null });
+  });
+
+  it("401s without a session (Received now records who did it)", async () => {
+    mocks.getAdminSession.mockResolvedValueOnce(null);
+    const res = await POST(req(), { params: Promise.resolve({ id: ADVICE_ID }) });
+    expect(res.status).toBe(401);
+    expect(mocks.select).not.toHaveBeenCalled();
   });
 
   it("404s when the advice doesn't exist", async () => {
@@ -72,7 +82,7 @@ describe("POST /api/admin/advice/[id]/receive", () => {
       expect.objectContaining({ financeReceivedAt: expect.any(Date) }),
     );
     expect(mocks.txValues).toHaveBeenCalledWith(
-      expect.objectContaining({ action: "FINANCE_RECEIVED", actor: "ADMIN" }),
+      expect.objectContaining({ action: "FINANCE_RECEIVED", actor: "Abha Khatavkar", details: { receivedBy: "Abha Khatavkar" } }),
     );
   });
 });

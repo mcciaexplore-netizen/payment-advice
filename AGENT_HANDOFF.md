@@ -49,7 +49,22 @@ Design system: Navy `#0B1F3A`, Forest green `#2E8B57`, Amber `#E8A33D`. Headings
 
 ## 3. Current State (update this every session)
 
-**Last updated:** 30 October 2026, by Claude Opus 5.5 (Finance bulk actions on Submissions, branch `feature/finance-bulk-actions`, PR open, not merged, no migration; see entry below)
+**Last updated:** 30 October 2026, by Claude Opus 5.5 (payment role rules enforced on the server, named receiver; branch `fix/finance-payment-role-rules`, PR open, not merged; see entry below)
+
+### Merged and live: Finance bulk actions (PR #18, merge commit `c10452d`, deployed 2026-10-30 07:21 UTC)
+- Verified read-only on production with a Finance session: all 11 Submissions tabs and all Finance Admin pages 200. The Received & In Process tab shows the bulk checkboxes, Sent Back shows none. No 5xx or runtime errors in the first minutes; the 30-minute check is recorded in the PR #18 thread / session report.
+
+### In review: payment role rules on the server, and a named Received user (Claude Opus 5.5, 2026-10-30, branch `fix/finance-payment-role-rules`, PR open, not merged). No migration.
+These are access changes requested by the owner. They are listed for approval in the PR under "Access or role changes".
+- **Cash Payment Done** (`POST /api/admin/advice/[id]/payment-done`): CASH_VOUCHER or ALL only. Others get 403 "Only a Cash Voucher account (or an All-Access account) can mark this Payment Done." before anything is read further or written.
+- **NEFT Record a Payment** (`POST /api/admin/advice/[id]/payment-entries`): PAYMENT_ADVICE or ALL only. Others get 403 "Only a Payment Advice account (or an All-Access account) can record a payment."
+- Both replace the 2026 "default filter, not an authorization wall" rule for payments. They are enforced inside `markCashPaymentDone` / `recordNeftPayment` (`lib/advice/finance-stage-actions.ts`), so the single routes and the bulk action share one rule (`ownsSubmissionType`). The UI already showed the buttons only to these roles, so normal use is unchanged.
+- **Mark received** now requires a session (401 without one, previously only the proxy's Finance check). Its `FINANCE_RECEIVED` audit entry names the Finance user (`actor` = session full name, `details.receivedBy`) instead of "ADMIN". Older entries keep "ADMIN". Received & In Process still sends no email.
+- **Tests**:
+  - Single routes: payment-done 403 for PAYMENT_ADVICE, 200 for CASH_VOUCHER; payment-entries 403 for CASH_VOUCHER; receive 401 without a session and named actor. Existing fixtures now carry a real `roles` array: the payment-done default session is ALL because some of its fixtures are NEFT from before NEFT moved to payment-entries.
+  - Shared functions: role checks and the named receiver.
+  - Bulk tests updated for the new signatures.
+  - tsc, lint, 812 tests and `next build` clean.
 
 ### In review: Finance bulk actions on the Submissions page (Claude Opus 5.5, 2026-10-30, branch `feature/finance-bulk-actions`, PR open, not merged). No migration.
 - **One code path**: the single-item stage logic moved unchanged from the four routes into `lib/advice/finance-stage-actions.ts`: `receiveAdvice`, `verifyAdvice`, `markCashPaymentDone`, `recordNeftPayment`. The routes (`receive`, `verify`, `payment-done`, `payment-entries`) are thin wrappers with the same JSON and status codes. The 49 existing single-route tests pass with only their db mock taught `.returning()`; every assertion is unchanged.

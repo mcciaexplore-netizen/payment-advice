@@ -42,7 +42,8 @@ export async function POST(
   }
 
   const body = await req.json().catch(() => null);
-  const result = await recordNeftPayment(id, session.fullName, body, { ip: clientIp(req) });
+  // Role-gated since 2026-10-30: PAYMENT_ADVICE or ALL only (403 otherwise).
+  const result = await recordNeftPayment(id, session.fullName, session.roles, body, { ip: clientIp(req) });
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
   return NextResponse.json({
     ok: true,

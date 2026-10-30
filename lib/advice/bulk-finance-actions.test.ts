@@ -139,14 +139,14 @@ describe("bulk payment rows", () => {
     fake.selects = [[row(1, { payableAmount: "1000.00" })], [{ id: id(1) }]];
     fake.neft.mockResolvedValue({ ok: true, data: { isFinal: false } });
     const body = await (await pay([{ id: id(1), amount: 400, reference: " UTR123 ", expectedTotalPaid: "0.00" }])).json();
-    expect(fake.neft).toHaveBeenCalledWith(id(1), "Finance User", { amount: 400, remarks: "UTR / Ref: UTR123" }, expect.objectContaining({ expectedTotalPaid: "0.00", extra: expect.objectContaining({ bulk: true }) }));
+    expect(fake.neft).toHaveBeenCalledWith(id(1), "Finance User", ["ALL"], { amount: 400, remarks: "UTR / Ref: UTR123" }, expect.objectContaining({ expectedTotalPaid: "0.00", extra: expect.objectContaining({ bulk: true }) }));
     expect(body.results[0]).toMatchObject({ outcome: "done", message: "Partial payment recorded. Submitter emailed." });
   });
 
   it("Cash rows use the saved Bill Passed For: any amount the browser sends is not used", async () => {
     fake.selects = [[cash(1)], [{ id: id(1) }]];
     await pay([{ id: id(1), amount: 5 }]);
-    expect(fake.cashDone).toHaveBeenCalledWith(id(1), "Finance User", undefined, expect.objectContaining({ extra: expect.objectContaining({ bulk: true }) }));
+    expect(fake.cashDone).toHaveBeenCalledWith(id(1), "Finance User", ["ALL"], undefined, expect.objectContaining({ extra: expect.objectContaining({ bulk: true }) }));
   });
 
   it("dryRun checks the whole batch and changes nothing", async () => {

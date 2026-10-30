@@ -22,7 +22,7 @@ const mocks = vi.hoisted(() => {
 
   const notifyPaymentEntry = vi.fn();
   const getAdminSession = vi.fn(
-    async (): Promise<{ adminUserId: string; fullName: string; adminRole: string } | null> => ({
+    async (): Promise<{ adminUserId: string; fullName: string; roles?: string[]; adminRole?: string; recommendingAuthorityId?: null } | null> => ({
       adminUserId: "admin-1",
       fullName: "Sunil Salunke",
       adminRole: "PAYMENT_ADVICE",
@@ -80,7 +80,9 @@ describe("POST /api/admin/advice/[id]/payment-entries", () => {
     mocks.getAdminSession.mockResolvedValue({
       adminUserId: "admin-1",
       fullName: "Sunil Salunke",
-      adminRole: "PAYMENT_ADVICE",
+      // Record a Payment is PAYMENT_ADVICE or ALL only since 2026-10-30.
+      roles: ["PAYMENT_ADVICE"],
+      recommendingAuthorityId: null,
     });
   });
 
@@ -282,5 +284,14 @@ describe("POST /api/admin/advice/[id]/payment-entries", () => {
     expect(auditCall?.[0]).toEqual(
       expect.objectContaining({ paymentAdviceId: ADVICE_ID, actor: "Sunil Salunke" }),
     );
+  });
+
+  it("403s for a Cash Voucher account (Record a Payment is Payment Advice or All only) and records nothing", async () => {
+    mocks.getAdminSession.mockResolvedValueOnce({ adminUserId: "a-2", fullName: "Abha Khatavkar", roles: ["CASH_VOUCHER"], recommendingAuthorityId: null });
+    mocks.limit.mockResolvedValueOnce([verifiedNeft]);
+    const res = await POST(req({ amount: 100 }), { params: Promise.resolve({ id: ADVICE_ID }) });
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({ error: "Only a Payment Advice account (or an All-Access account) can record a payment." });
+    expect(mocks.transaction).not.toHaveBeenCalled();
   });
 });

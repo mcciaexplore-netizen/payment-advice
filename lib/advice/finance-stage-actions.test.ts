@@ -35,7 +35,7 @@ describe("no double processing: the losing click writes and emails nothing", () 
   it("receive: the write requires finance_received_at IS NULL; nothing updated means 409 and no audit", async () => {
     fake.state.selectRow = [{ status: "SUBMITTED", authorityApprovedAt: new Date(), financeReceivedAt: null }];
     fake.state.returning = [[]];
-    expect(await receiveAdvice(ID, { ip: null })).toEqual({ ok: false, status: 409, error: "Already marked Received & In Process." });
+    expect(await receiveAdvice(ID, "Abha", { ip: null })).toEqual({ ok: false, status: 409, error: "Already marked Received & In Process." });
     expect(sqlOf(fake.state.wheres[0])).toContain('"payment_advices"."finance_received_at" is null');
     expect(fake.state.inserts).toHaveLength(0);
   });
@@ -51,7 +51,7 @@ describe("no double processing: the losing click writes and emails nothing", () 
   it("cash payment done: the write requires payment_done_at IS NULL and status not APPROVED; the loser sends no email", async () => {
     fake.state.selectRow = [{ ...base, paymentMode: "CASH", status: "SUBMITTED", billPassedFor: "900.00", payableAmount: null, verifiedAt: new Date(), paymentDoneAt: null }];
     fake.state.returning = [[]];
-    expect(await markCashPaymentDone(ID, "Abha", undefined, { ip: null })).toEqual({ ok: false, status: 409, error: "Already marked Payment Done." });
+    expect(await markCashPaymentDone(ID, "Abha", ["CASH_VOUCHER"], undefined, { ip: null })).toEqual({ ok: false, status: 409, error: "Already marked Payment Done." });
     const where = sqlOf(fake.state.wheres[0]);
     expect(where).toContain('"payment_advices"."payment_done_at" is null');
     expect(where).toContain('"payment_advices"."status" <> $');
@@ -61,7 +61,7 @@ describe("no double processing: the losing click writes and emails nothing", () 
   it("NEFT payment: if another payment was recorded since the user loaded the row (bulk), nothing is recorded or emailed", async () => {
     fake.state.selectRow = [{ ...base, verifiedAt: new Date() }];
     fake.state.execute = [{ payable_amount: "1000.00", total_paid: "400.00", status: "SUBMITTED" }];
-    const result = await recordNeftPayment(ID, "Abha", { amount: 600 }, { ip: null, expectedTotalPaid: "0.00" });
+    const result = await recordNeftPayment(ID, "Abha", ["PAYMENT_ADVICE"], { amount: 600 }, { ip: null, expectedTotalPaid: "0.00" });
     expect(result).toMatchObject({ ok: false, status: 409 });
     expect(fake.state.inserts).toHaveLength(0);
     expect(fake.notifyPaymentEntry).not.toHaveBeenCalled();
@@ -82,10 +82,39 @@ describe("a stage change stands even when its email fails", () => {
   it("NEFT partial payment: entry + audit (tagged bulk) then one email; the final one settles", async () => {
     fake.state.selectRow = [{ ...base, verifiedAt: new Date() }];
     fake.state.execute = [{ payable_amount: "1000.00", total_paid: "0", status: "SUBMITTED" }];
-    const partial = await recordNeftPayment(ID, "Abha", { amount: 400, remarks: "UTR / Ref: U1" }, { ip: null, extra: { bulk: true }, expectedTotalPaid: "0.00" });
+    const partial = await recordNeftPayment(ID, "Abha", ["ALL"], { amount: 400, remarks: "UTR / Ref: U1" }, { ip: null, extra: { bulk: true }, expectedTotalPaid: "0.00" });
     expect(partial).toMatchObject({ ok: true, data: { isFinal: false, totalPaid: "400.00", remaining: "600.00" } });
     expect(fake.state.inserts.map((i) => i.values.action ?? "entry")).toEqual(["entry", "PAYMENT_ENTRY_RECORDED"]);
     expect(fake.state.inserts[1].values.details).toMatchObject({ bulk: true, isFinal: false, remarks: "UTR / Ref: U1" });
     expect(fake.notifyPaymentEntry).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("role rules and the named receiver (2026-10-30)", () => {
+  it("Cash Payment Done: only CASH_VOUCHER or ALL; PAYMENT_ADVICE gets 403 before anything is written or emailed", async () => {
+    const cashRow = { ...base, paymentMode: "CASH", status: "SUBMITTED", billPassedFor: "900.00", payableAmount: null, verifiedAt: new Date(), paymentDoneAt: null };
+    fake.state.selectRow = [cashRow];
+    expect(await markCashPaymentDone(ID, "Sunil", ["PAYMENT_ADVICE"], undefined, { ip: null })).toEqual({ ok: false, status: 403, error: "Only a Cash Voucher account (or an All-Access account) can mark this Payment Done." });
+    expect(fake.state.wheres).toHaveLength(0);
+    expect(fake.notifyPaymentDone).not.toHaveBeenCalled();
+    for (const roles of [["CASH_VOUCHER"], ["ALL"]] as const) {
+      fake.state.selectRow = [cashRow];
+      fake.state.returning = [[{ id: ID }]];
+      expect((await markCashPaymentDone(ID, "Abha", [...roles], undefined, { ip: null })).ok).toBe(true);
+    }
+  });
+
+  it("NEFT Record a Payment: only PAYMENT_ADVICE or ALL; CASH_VOUCHER gets 403 and nothing is recorded", async () => {
+    fake.state.selectRow = [{ ...base, verifiedAt: new Date() }];
+    expect(await recordNeftPayment(ID, "Abha", ["CASH_VOUCHER"], { amount: 100 }, { ip: null })).toEqual({ ok: false, status: 403, error: "Only a Payment Advice account (or an All-Access account) can record a payment." });
+    expect(fake.state.inserts).toHaveLength(0);
+    expect(fake.notifyPaymentEntry).not.toHaveBeenCalled();
+  });
+
+  it("Mark received records the named Finance user, not ADMIN", async () => {
+    fake.state.selectRow = [{ status: "SUBMITTED", authorityApprovedAt: new Date(), financeReceivedAt: null }];
+    fake.state.returning = [[{ id: ID }]];
+    expect((await receiveAdvice(ID, "Abha Khatavkar", { ip: null })).ok).toBe(true);
+    expect(fake.state.inserts[0].values).toMatchObject({ action: "FINANCE_RECEIVED", actor: "Abha Khatavkar", details: { receivedBy: "Abha Khatavkar" } });
   });
 });
