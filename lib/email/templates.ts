@@ -229,6 +229,42 @@ export function renderPaymentDoneEmail(data: PaymentDoneEmailData) {
   };
 }
 
+export interface CashReceiptReceivedEmailData {
+  serialNo: string;
+  issuerName: string;
+  partyName: string;
+  amount: string | number;
+  receiptDate: string;
+  /** Already formatted for display (IST date and time). */
+  receivedOn: string;
+  receivedBy: string;
+  note?: string | null;
+}
+
+/** Sent to the issuer when Finance marks a Cash Receipt's cash as received.
+ * Same shell, colours and escaping as the Payment Done email; the Note row
+ * appears only when Finance wrote one. */
+export function renderCashReceiptReceivedEmail(data: CashReceiptReceivedEmailData) {
+  const rows: [string, string][] = [
+    ["Receipt No.", "{{serial_no}}"],
+    ["Party", "{{party_name}}"],
+    ["Amount", "₹ {{amount}}"],
+    ["Receipt date", "{{receipt_date}}"],
+    ["Received on", "{{received_on}}"],
+    ["Received by", "{{received_by}}"],
+    ...(data.note ? [["Note", "{{note}}"] as [string, string]] : []),
+  ];
+  const template = shell("#2E8B57", `<tr><td style="padding:32px;"><p style="margin:0 0 4px;font-size:13px;color:#2E8B57;text-transform:uppercase;letter-spacing:.5px;font-weight:600;">Cash Received</p><h1 style="margin:0 0 20px;font-family:Georgia,'Times New Roman',serif;font-size:22px;color:#0B1F3A;">{{serial_no}}</h1><p style="margin:0 0 20px;font-size:15px;line-height:1.6;color:#1F2937;">Dear {{issuer_name}}, the Accounts Department has received the cash for Cash Receipt {{serial_no}}.</p>${details(rows)}</td></tr>`);
+  return {
+    subject: `Cash received: ${data.serialNo}`,
+    html: replaceTokens(template, {
+      serial_no: data.serialNo, issuer_name: data.issuerName, party_name: data.partyName,
+      amount: data.amount, receipt_date: formatDateOnly(data.receiptDate),
+      received_on: data.receivedOn, received_by: data.receivedBy, note: data.note ?? "",
+    }),
+  };
+}
+
 /**
  * One email per payment_entries row — NEFT (Payment Advice) only, per the
  * multi-part payment model (see AGENT_HANDOFF.md). Deliberately not a

@@ -49,7 +49,38 @@ Design system: Navy `#0B1F3A`, Forest green `#2E8B57`, Amber `#E8A33D`. Headings
 
 ## 3. Current State (update this every session)
 
-**Last updated:** 16 October 2026, by Codex (sent-back edit action in submitter dashboard, branch `feature/sent-back-dashboard-edit`, PR #16 open, not merged; see entry below)
+**Last updated:** 30 October 2026, by Claude Opus 5.5 (Cash Receipt "Cash received" marking, branch `feature/cash-receipt-mark-received`, PR open, NOT merged; migration 0031 must be applied first; see entry below)
+
+### In review: Cash Receipt "Cash received" marking and issuer email (Claude Opus 5.5, 2026-10-30, branch `feature/cash-receipt-mark-received`, PR open, NOT merged). Do not merge until the owner has applied migration 0031.
+- **Why the order matters (verified)**: `schema.ts` now declares four new `cash_receipts` columns, so every full-row select and every insert names them. A local `next start` of this branch against today's database returned 500 "column received_at does not exist" on `/admin`, `/admin/cash-receipts` and the issuer's Cash Receipts tab. Cash Receipt submit would fail the same way. Every other page was 200. The order is: apply 0031, run `npx tsx scripts/verify-migration-0031.ts` (read-only), then merge and redeploy. This is the same class of failure as the 2026-10-16 refund incident.
+- **Migration 0031** (`drizzle-kit generate --name cash_receipt_received`, not hand-edited): four `ALTER TABLE "cash_receipts" ADD COLUMN` statements, all nullable, no defaults or data: `received_at timestamptz`, `received_by text`, `received_note text`, `received_email_sent_at timestamptz`. No audit_log change: the existing `cash_receipt_id` is used.
+- **Who**: `canMarkCashReceiptReceived` allows roles ALL and CASH_VOUCHER (Abha Khatavkar is CASH_VOUCHER). `canUndoCashReceiptReceived` allows ALL only. proxy.ts already limits `/api/admin/*` to Finance; the routes narrow it further (PAYMENT_ADVICE gets 403). No role or login changes.
+- **Routes**:
+  - `POST /api/admin/cash-receipts/received` takes `{ ids, note? }` (1 to 100 ids, note up to 200 characters).
+  - `POST /api/admin/cash-receipts/[id]/received/resend-email`.
+  - `POST /api/admin/cash-receipts/[id]/received/undo` takes `{ reason }` (3 to 300 characters).
+  - Any time or user in the body is ignored: server time, session user.
+- **Once only**: marking is a single `UPDATE ... WHERE id IN (...) AND received_at IS NULL RETURNING`, with one `CASH_RECEIPT_RECEIVED` audit row per newly marked receipt in the same transaction. A double click or second tab marks nothing and sends nothing; those receipts come back as `alreadyReceived`.
+- **Email** (`renderCashReceiptReceivedEmail`, same shell and escaping as Payment Done):
+  - Subject "Cash received: CR/...". It lists receipt no., party, amount, receipt date, received on (IST), received by, and the note if any.
+  - It is sent after commit to `submitted_by_email`, falling back to the issuer's `admin_users.email`.
+  - `send()` in `lib/email/notify.ts` now returns `"sent" | "preview" | "failed"`. Existing callers ignore the value, so their behaviour is unchanged. On failure it writes `EMAIL_SEND_FAILED` linked to the Cash Receipt.
+  - `received_email_sent_at` is set only on a real send, guarded by IS NULL. A failure never undoes the marking. The row shows "Email not sent" with "Resend email", which claims the send atomically (no double send) and releases the claim if it fails. In preview mode nothing sends and the row honestly shows "Email not sent".
+- **Undo** (ALL only): requires a reason, clears the four fields under a row lock, and writes `CASH_RECEIPT_RECEIVED_UNDONE` with the reason and the previous values. No email.
+- **UI**:
+  - `components/admin/CashReceiptsTable.tsx` (client), used by `CashReceiptsSection`, adds a Status column ("Pending" or "Received on dd/mm/yyyy by name", note, "Email not sent").
+  - For ALL and CASH_VOUCHER: checkboxes on pending rows with select-all, a bulk bar showing count and total with "Mark selected as received", and per-row "Mark received", "Resend email" and (ALL only) "Undo".
+  - A confirm step lists the receipt numbers and total, with an optional note. Undo asks for a reason.
+  - The compact list on the Finance dashboard and PAYMENT_ADVICE users see status only.
+  - The issuer's Cash Receipts tab (`app/authority/page.tsx`) shows the same status read only (`lib/cash-receipts/status.ts`).
+- **Unchanged**: Daily Report Excel, Cash Receipt PDF, numbering and every other form.
+- **Verified**: tsc, lint, 777 tests and `next build` clean. New tests:
+  - `lib/cash-receipts/received.test.ts`: roles, server time and user, IS NULL guards, double click gives one email, bulk, failed email keeps the marking, resend claim and release, undo rules.
+  - `lib/email/cash-receipt-received-email.test.ts`: template, escaping, note row, and send outcomes including the unchanged Payment Done failure path.
+  - `lib/cash-receipts/finance-table-ui.test.ts` and `lib/cash-receipts/issuer-status-ui.test.ts`.
+  - `lib/db/migrations/cash-receipt-received-migration.test.ts`.
+  - Screenshots came from a temporary fixture page (deleted, not committed) and a fixture render of the issuer tab; no production writes. Running `verify-migration-0031.ts` read-only before the apply fails only on the four missing columns and the migration row, as expected.
+- **Local note**: on 2026-10-30 this machine's DNS refused the Neon host while public DNS resolved it. Local read-only checks used a preload that resolves via 1.1.1.1; production was unaffected.
 
 ### In review: sent-back edit action in My Submissions (Codex, 2026-10-16, branch `feature/sent-back-dashboard-edit`, PR #16 open)
 - Adds the same **Edit & Resubmit** link sent by email to the submitter-scoped My Submissions dashboard for SENT_BACK requests with a valid existing edit token.

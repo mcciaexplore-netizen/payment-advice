@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { auditLog } from "@/lib/db/schema";
 import {
   type AuthorityApprovalEmailData,
+  type CashReceiptReceivedEmailData,
   type PaymentDoneEmailData,
   type PaymentEntryEmailData,
   type SentBackEmailData,
@@ -16,6 +17,7 @@ import {
   type VerifiedEmailData,
   LOGO_CID,
   renderAuthorityApprovalEmail,
+  renderCashReceiptReceivedEmail,
   renderPaymentDoneEmail,
   renderPaymentEntryEmail,
   renderSentBackEmail,
@@ -181,15 +183,24 @@ async function dispatch(
  * admin UI instead of only existing in Vercel's function logs. Best-effort:
  * a failure to write that row must not itself throw.
  */
+/** What happened to one send() call. Existing notify*() callers ignore it;
+ * the Cash Receipt "Cash received" flow uses it to record whether the email
+ * really went out (and offer Resend when it did not). */
+export type SendOutcome = "sent" | "preview" | "failed";
+
+/** Where an EMAIL_SEND_FAILED audit row is linked: an advice id (the
+ * original, unchanged form) or a Cash Receipt. */
+type AuditLink = string | { cashReceiptId: string };
+
 async function send(
   kind: string,
   to: string,
   message: EmailMessage,
-  adviceId?: string,
-): Promise<void> {
+  auditLink?: AuditLink,
+): Promise<SendOutcome> {
   if (!isLiveMode()) {
     preview(kind, message);
-    return;
+    return "preview";
   }
 
   const override = process.env.EMAIL_TEST_OVERRIDE_RECIPIENT;
@@ -201,13 +212,14 @@ async function send(
     console.info(
       `[Email sent: ${kind}] to ${recipient}${override ? ` (redirected from ${to})` : ""}, id ${result.id}`,
     );
+    return "sent";
   } catch (err) {
     const provider = getProvider();
     console.error(`[Email] Failed to send "${kind}" via ${provider}:`, err);
-    if (adviceId) {
+    if (auditLink) {
       try {
         await db.insert(auditLog).values({
-          paymentAdviceId: adviceId,
+          ...(typeof auditLink === "string" ? { paymentAdviceId: auditLink } : { cashReceiptId: auditLink.cashReceiptId }),
           action: "EMAIL_SEND_FAILED",
           actor: "System",
           details: {
@@ -220,6 +232,7 @@ async function send(
         console.error(`[Email] Also failed to write EMAIL_SEND_FAILED audit_log row:`, auditErr);
       }
     }
+    return "failed";
   }
 }
 
@@ -320,6 +333,17 @@ export async function notifyVerified(data: VerifiedEmailData, to: string, advice
   const message = renderVerifiedEmail(data);
   await send("verified", to, message, adviceId);
   return message;
+}
+
+/** "Cash received" email to a Cash Receipt's issuer. Returns the outcome so
+ * the caller can record received_email_sent_at only when it really sent. */
+export async function notifyCashReceiptReceived(
+  data: CashReceiptReceivedEmailData,
+  to: string,
+  cashReceiptId: string,
+): Promise<SendOutcome> {
+  const message = renderCashReceiptReceivedEmail(data);
+  return send("cash receipt received", to, message, { cashReceiptId });
 }
 
 export async function notifyPaymentDone(data: PaymentDoneEmailData, to: string, adviceId?: string) {

@@ -1,18 +1,16 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
 import { cashReceipts } from "@/lib/db/schema";
-import { formatDateOnly } from "@/lib/date-time";
 import { BRANCH_OPTIONS } from "@/lib/validation/payment-advice";
+import { getAdminSession } from "@/lib/admin-session";
+import { canMarkCashReceiptReceived, canUndoCashReceiptReceived } from "@/lib/cash-receipts/received";
+import { CashReceiptsTable } from "@/components/admin/CashReceiptsTable";
 import {
   CASH_RECEIPT_LIST_ORDER,
   buildCashReceiptWhere,
   parseCashReceiptFilterParams,
   type CashReceiptFilterParams,
 } from "@/lib/advice/cash-receipt-query";
-
-function formatAmount(value: string): string {
-  return `₹ ${Number(value).toLocaleString("en-IN", { minimumFractionDigits: 2 })}`;
-}
 
 function toSearchParams(record: Record<string, string | string[] | undefined>): URLSearchParams {
   const params = new URLSearchParams();
@@ -45,7 +43,7 @@ export async function CashReceiptsSection({
   const params = parseCashReceiptFilterParams(toSearchParams(searchParams));
   const where = buildCashReceiptWhere(params);
   const query = db.select().from(cashReceipts).where(where).orderBy(CASH_RECEIPT_LIST_ORDER);
-  const rows = limit ? await query.limit(limit) : await query;
+  const [rows, session] = await Promise.all([limit ? query.limit(limit) : query, getAdminSession()]);
 
   return (
     <section className="flex flex-col gap-4">
@@ -82,47 +80,24 @@ export async function CashReceiptsSection({
         </form>
       ) : null}
 
-      <div className="overflow-x-auto rounded-md border border-gray-200">
-        <table className="w-full min-w-[900px] text-left text-sm">
-          <thead className="border-b border-gray-200 bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
-            <tr>
-              <th className="px-4 py-3">Reference</th>
-              <th className="px-4 py-3">Branch</th>
-              <th className="px-4 py-3">Party Name</th>
-              <th className="px-4 py-3 text-right">Amount</th>
-              <th className="px-4 py-3">Receipt Date</th>
-              <th className="px-4 py-3">Issued By</th>
-              <th className="px-4 py-3">Documents</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.length === 0 ? (
-              <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-gray-500">
-                  No Cash Receipts found.
-                </td>
-              </tr>
-            ) : (
-              rows.map((row) => (
-                <tr key={row.id} className="border-b border-gray-100 last:border-0 hover:bg-gray-50">
-                  <td className="whitespace-nowrap px-4 py-3 font-medium text-[#0b1f3a]">{row.serialNo}</td>
-                  <td className="whitespace-nowrap px-4 py-3">{row.branch}</td>
-                  <td className="px-4 py-3">{row.partyName}</td>
-                  <td className="whitespace-nowrap px-4 py-3 text-right">{formatAmount(row.total)}</td>
-                  <td className="whitespace-nowrap px-4 py-3">{formatDateOnly(row.receiptDate)}</td>
-                  <td className="px-4 py-3">{row.submittedByName}</td>
-                  <td className="whitespace-nowrap px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      <a href={`/cash-receipt/${row.id}`} target="_blank" rel="noreferrer" className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50">View</a>
-                      <a href={`/api/cash-receipt/${row.id}/pdf`} className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50">Download</a>
-                    </div>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+      <CashReceiptsTable
+        rows={rows.map((row) => ({
+          id: row.id,
+          serialNo: row.serialNo,
+          branch: row.branch,
+          partyName: row.partyName,
+          total: row.total,
+          receiptDate: row.receiptDate,
+          submittedByName: row.submittedByName,
+          receivedAt: row.receivedAt?.toISOString() ?? null,
+          receivedBy: row.receivedBy,
+          receivedNote: row.receivedNote,
+          receivedEmailSentAt: row.receivedEmailSentAt?.toISOString() ?? null,
+        }))}
+        canMark={canMarkCashReceiptReceived(session)}
+        canUndo={canUndoCashReceiptReceived(session)}
+        interactive={!limit}
+      />
     </section>
   );
 }
