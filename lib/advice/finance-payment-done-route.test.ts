@@ -19,7 +19,7 @@ const mocks = vi.hoisted(() => {
   );
   const notifyPaymentDone = vi.fn();
   const getAdminSession = vi.fn(
-    async (): Promise<{ adminUserId: string; fullName: string; adminRole: string } | null> => ({
+    async (): Promise<{ adminUserId: string; fullName: string; roles?: string[]; adminRole?: string; recommendingAuthorityId?: null } | null> => ({
       adminUserId: "admin-1",
       fullName: "Sunil Salunke",
       adminRole: "PAYMENT_ADVICE",
@@ -66,7 +66,11 @@ describe("POST /api/admin/advice/[id]/payment-done", () => {
     mocks.getAdminSession.mockResolvedValue({
       adminUserId: "admin-1",
       fullName: "Sunil Salunke",
-      adminRole: "PAYMENT_ADVICE",
+      // Cash Payment Done is CASH_VOUCHER or ALL only since 2026-10-30. ALL
+      // owns every mode, so these existing cases (some with an NEFT fixture
+      // from before NEFT moved to payment-entries) keep their assertions.
+      roles: ["ALL"],
+      recommendingAuthorityId: null,
     });
   });
 
@@ -183,7 +187,8 @@ describe("POST /api/admin/advice/[id]/payment-done", () => {
     mocks.getAdminSession.mockResolvedValueOnce({
       adminUserId: "admin-3",
       fullName: "MCCIA Finance (All Access)",
-      adminRole: "ALL",
+      roles: ["ALL"],
+      recommendingAuthorityId: null,
     });
     mocks.limit.mockResolvedValueOnce([verified]);
     const res = await POST(req(), { params: Promise.resolve({ id: ADVICE_ID }) });
@@ -191,5 +196,21 @@ describe("POST /api/admin/advice/[id]/payment-done", () => {
     expect(mocks.txSet).toHaveBeenCalledWith(
       expect.objectContaining({ paymentDoneBy: "MCCIA Finance (All Access)" }),
     );
+  });
+
+  it("403s for a Payment Advice account (Cash Payment Done is Cash Voucher or All only) and writes nothing", async () => {
+    mocks.getAdminSession.mockResolvedValueOnce({ adminUserId: "admin-1", fullName: "Sunil Salunke", roles: ["PAYMENT_ADVICE"], recommendingAuthorityId: null });
+    mocks.limit.mockResolvedValueOnce([{ ...verified, paymentMode: "CASH" }]);
+    const res = await POST(req(), { params: Promise.resolve({ id: ADVICE_ID }) });
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({ error: "Only a Cash Voucher account (or an All-Access account) can mark this Payment Done." });
+    expect(mocks.transaction).not.toHaveBeenCalled();
+    expect(mocks.notifyPaymentDone).not.toHaveBeenCalled();
+  });
+
+  it("a Cash Voucher account can mark a Cash advice Payment Done", async () => {
+    mocks.getAdminSession.mockResolvedValueOnce({ adminUserId: "a-2", fullName: "Abha Khatavkar", roles: ["CASH_VOUCHER"], recommendingAuthorityId: null });
+    mocks.limit.mockResolvedValueOnce([{ ...verified, paymentMode: "CASH" }]);
+    expect((await POST(req(), { params: Promise.resolve({ id: ADVICE_ID }) })).status).toBe(200);
   });
 });

@@ -177,11 +177,11 @@ export async function runBulkFinanceAction(
     }
     let result: StageActionResult<unknown>;
     try {
-      result = request.action === "receive" ? await receiveAdvice(item.id, { ip, extra })
+      result = request.action === "receive" ? await receiveAdvice(item.id, session.fullName, { ip, extra })
         : request.action === "verify" ? await verifyAdvice(item.id, session.fullName, { ip, extra })
           : row.paymentMode === "NEFT"
-            ? await recordNeftPayment(item.id, session.fullName, { amount: item.amount, remarks: `UTR / Ref: ${item.reference}` }, { ip, extra, expectedTotalPaid: item.expectedTotalPaid })
-            : await markCashPaymentDone(item.id, session.fullName, undefined, { ip, extra });
+            ? await recordNeftPayment(item.id, session.fullName, session.roles, { amount: item.amount, remarks: `UTR / Ref: ${item.reference}` }, { ip, extra, expectedTotalPaid: item.expectedTotalPaid })
+            : await markCashPaymentDone(item.id, session.fullName, session.roles, undefined, { ip, extra });
     } catch (error) {
       console.error("[Bulk] item failed", item.id, error instanceof Error ? error.message : error);
       results.push({ id: item.id, reference, outcome: "failed", message: "Unexpected error. Nothing was changed for this item." });

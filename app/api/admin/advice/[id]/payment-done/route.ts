@@ -15,12 +15,10 @@ function clientIp(req: NextRequest): string | null {
  * moment earlier. `payment_done_by` is auto-attributed from the logged-in
  * Admin's session, same pattern as Verify — no picker.
  *
- * Not backend-role-gated to a specific admin_users.role (e.g. PAYMENT_ADVICE
- * vs CASH_VOUCHER) — per the human's explicit "default filter, not an
- * authorization wall" decision for this whole feature, the UI only shows
- * this button to whichever role owns that submission's payment mode (or the
- * ALL-role account); any signed-in Admin session can still call this route
- * directly. Regular Cash Voucher retains its existing Bill Passed For
+ * Role-gated since 2026-10-30 (owner decision, replacing the earlier
+ * "default filter, not an authorization wall" rule): only CASH_VOUCHER or
+ * ALL may mark a Cash submission Payment Done; anyone else gets 403. Same
+ * rule the UI buttons and the bulk action use. Regular Cash Voucher retains its existing Bill Passed For
  * requirement unchanged. A Cash-routed Advance instead requires the new
  * persisted payable calculation; it never writes the retired field.
  *
@@ -43,7 +41,7 @@ export async function POST(
   }
 
   const body = await req.json().catch(() => null);
-  const result = await markCashPaymentDone(id, session.fullName, (body as { billPassedFor?: unknown } | null)?.billPassedFor, { ip: clientIp(req) });
+  const result = await markCashPaymentDone(id, session.fullName, session.roles, (body as { billPassedFor?: unknown } | null)?.billPassedFor, { ip: clientIp(req) });
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
   return NextResponse.json({ ok: true, paymentDoneAt: result.data.paymentDoneAt.toISOString() });
 }
