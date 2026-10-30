@@ -629,6 +629,18 @@ export const cashReceipts = pgTable(
     submittedByName: text("submitted_by_name").notNull(),
     submittedByEmail: text("submitted_by_email"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    // Finance's "Cash received" acknowledgment (2026-10-30). All null until
+    // a CASH_VOUCHER/ALL user marks the cash as handed over. received_at is
+    // server time, received_by the Finance user's name from the session,
+    // received_note optional (e.g. "short by 50"). A receipt is marked once;
+    // only ALL can undo, with a reason, audit logged.
+    receivedAt: timestamp("received_at", { withTimezone: true }),
+    receivedBy: text("received_by"),
+    receivedNote: text("received_note"),
+    // When the "Cash received" email to the issuer actually went out. Null
+    // while received means it failed (or preview mode) and Finance sees
+    // "Email not sent" with a Resend button.
+    receivedEmailSentAt: timestamp("received_email_sent_at", { withTimezone: true }),
   },
   (table) => [
     check(
@@ -710,7 +722,7 @@ export const auditLog = pgTable("audit_log", {
   vendorRequestId: uuid("vendor_request_id").references(() => vendorRequests.id),
   cashReceiptId: uuid("cash_receipt_id").references(() => cashReceipts.id),
   refundRequestId: uuid("refund_request_id").references(() => refundRequests.id),
-  action: text("action").notNull(), // 'SUBMITTED' | 'RESUBMITTED' | 'APPROVED' | 'SENT_BACK' | 'PDF_GENERATED' | 'EXPORTED' | 'VENDOR_REQUEST_SUBMITTED' | 'VENDOR_REQUEST_APPROVED' | 'VENDOR_REQUEST_SENT_BACK' | 'VENDOR_MSME_EMAIL_SENT' | 'CASH_RECEIPT_SUBMITTED' | 'CASH_RECEIPT_PDF_GENERATED' | 'REFUND_REQUEST_SUBMITTED' | 'REFUND_REQUEST_PDF_GENERATED'
+  action: text("action").notNull(), // 'SUBMITTED' | 'RESUBMITTED' | 'APPROVED' | 'SENT_BACK' | 'PDF_GENERATED' | 'EXPORTED' | 'VENDOR_REQUEST_SUBMITTED' | 'VENDOR_REQUEST_APPROVED' | 'VENDOR_REQUEST_SENT_BACK' | 'VENDOR_MSME_EMAIL_SENT' | 'CASH_RECEIPT_SUBMITTED' | 'CASH_RECEIPT_PDF_GENERATED' | 'REFUND_REQUEST_SUBMITTED' | 'REFUND_REQUEST_PDF_GENERATED' | 'CASH_RECEIPT_RECEIVED' | 'CASH_RECEIPT_RECEIVED_UNDONE'
   actor: text("actor").notNull(),
   ipAddress: text("ip_address"),
   details: jsonb("details"),

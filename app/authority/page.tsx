@@ -18,6 +18,7 @@ import { compareByCurrentStageAge } from "@/lib/advice/stage-aging";
 import { DgExecutiveDashboard } from "@/components/admin/DgExecutiveDashboard";
 import { buildDgSummaryMetrics, calculateDgIntervalMetrics } from "@/lib/advice/dg-dashboard";
 import { submissionPdfHref, submissionPdfLabel } from "@/lib/advice/submission-pdf";
+import { cashReceiptStatusText } from "@/lib/cash-receipts/status";
 import { SubmissionDownloadButtons, type SubmissionAttachment } from "@/components/admin/SubmissionDownloadButtons";
 import { SubmitterEditAction } from "@/components/admin/SubmitterEditAction";
 
@@ -310,12 +311,14 @@ async function loadCashReceiptsTab(
     {rows.length === 0 ? <div className="rounded-lg border border-gray-200 p-10 text-center text-sm text-gray-500">
       You have no Cash Receipts {rangeLabel}.
     </div> : <div className="overflow-x-auto rounded-lg border border-gray-200"><table className="w-full text-left text-sm">
-      <thead className="bg-gray-50 text-xs uppercase text-gray-500"><tr><th className="p-3">Reference</th><th className="p-3">Party Name</th><th className="p-3">Amount</th><th className="p-3">Receipt Date</th><th className="p-3">Documents</th></tr></thead>
+      <thead className="bg-gray-50 text-xs uppercase text-gray-500"><tr><th className="p-3">Reference</th><th className="p-3">Party Name</th><th className="p-3">Amount</th><th className="p-3">Receipt Date</th><th className="p-3">Status</th><th className="p-3">Documents</th></tr></thead>
       <tbody className="divide-y divide-gray-100">{rows.map((row) => <tr key={row.id} className="align-top">
         <td className="p-3 font-medium text-[#0b1f3a]">{row.serialNo}</td>
         <td className="p-3">{row.partyName}</td>
         <td className="p-3 whitespace-nowrap">{formatAmount(row.total)}</td>
         <td className="p-3 whitespace-nowrap">{formatDateOnly(row.receiptDate)}</td>
+        {/* Read only: the issuer sees whether Finance has received the cash. */}
+        <td className="p-3">{row.receivedAt ? <span className="block max-w-[12rem] rounded-md bg-green-50 px-2 py-1 text-xs font-medium text-green-800">{cashReceiptStatusText(row)}</span> : <span className="inline-flex rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800">{cashReceiptStatusText(row)}</span>}{row.receivedNote ? <div className="mt-1 max-w-[14rem] text-xs text-gray-600">Note: {row.receivedNote}</div> : null}</td>
         <td className="p-3"><div className="flex items-center gap-2">
           <a href={`/cash-receipt/${row.id}`} target="_blank" rel="noreferrer" className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50">View</a>
           <a href={`/api/cash-receipt/${row.id}/pdf`} className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50">Download</a>
