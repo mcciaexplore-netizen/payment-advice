@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { attachments, paymentAdvices } from "@/lib/db/schema";
 import { getAdminSession } from "@/lib/admin-session";
 import { hasRole } from "@/lib/auth";
+import { contentDisposition } from "@/lib/advice/attachment-access";
 
 export const runtime = "nodejs";
 
@@ -24,5 +25,5 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   if (!attachment) return NextResponse.json({ error: "Not found" }, { status: 404 });
   const result = await get(attachment.blobPathname, { access: "private" });
   if (!result || result.statusCode !== 200) return NextResponse.json({ error: "Could not fetch attachment" }, { status: 502 });
-  return new NextResponse(result.stream, { headers: { "Content-Type": contentTypeFor(attachment.fileName), "Content-Disposition": `inline; filename="${attachment.fileName}"` } });
+  return new NextResponse(result.stream, { headers: { "Content-Type": contentTypeFor(attachment.fileName), "Content-Disposition": contentDisposition("inline", attachment.fileName) } });
 }

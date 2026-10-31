@@ -34,6 +34,6 @@ describe("authenticated attachment previews", () => {
     expect(route).toContain('return "image/jpeg"');
     expect(route).toContain('return "image/png"');
     expect(route).toContain('return "application/pdf"');
-    expect(route).toContain('"Content-Disposition": `inline;');
+    expect(route).toContain('"Content-Disposition": contentDisposition("inline", attachment.fileName)');
   });
 });
