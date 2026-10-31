@@ -3,6 +3,7 @@ import { and, eq } from "drizzle-orm";
 import { get } from "@vercel/blob";
 import { db } from "@/lib/db";
 import { attachments, paymentAdvices } from "@/lib/db/schema";
+import { contentDisposition } from "@/lib/advice/attachment-access";
 
 export const runtime = "nodejs";
 
@@ -52,7 +53,7 @@ export async function GET(
     status: 200,
     headers: {
       "Content-Type": contentTypeFor(attachment.fileName),
-      "Content-Disposition": `inline; filename="${attachment.fileName}"`,
+      "Content-Disposition": contentDisposition("inline", attachment.fileName),
     },
   });
 }
