@@ -2,6 +2,8 @@
 
 import { createContext, useContext, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { payableIsSet, payableNotSetLabel } from "@/lib/advice/payable-status";
+import { dueFor, paymentRowError, prefillAmount } from "@/lib/advice/bulk-payment-rows";
 
 export type BulkAction = "receive" | "verify" | "payment";
 
@@ -15,6 +17,11 @@ export type BulkRow = {
   payableAmount: string | null;
   billPassedFor: string | null;
   totalPaid: string;
+  /** Stored Basic and GST (NEFT Payment Advice); null for Cash and Advances. */
+  basicAmount: string | null;
+  gstAmount: string | null;
+  /** The item's detail page, where the payable calculation is saved. */
+  href: string;
   /** False when this user's role may not run the action on this row. */
   selectable: boolean;
 };
@@ -34,10 +41,6 @@ const rupees = (value: number) => `₹ ${value.toLocaleString("en-IN", { minimum
 const paise = (value: string | number) => Math.round(Number(value) * 100);
 const smallButton = "rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50";
 
-function remainingFor(row: BulkRow): number {
-  return (paise(row.payableAmount ?? 0) - paise(row.totalPaid)) / 100;
-}
-
 /** What a Cash row will be paid, from saved data (same as the single Mark
  * Payment Done button): Bill Passed For, or the payable amount for an Advance. */
 function cashAmountFor(row: BulkRow): string | null {
@@ -50,14 +53,20 @@ const BulkContext = createContext<Ctx | null>(null);
 export function BulkRowCheckbox({ id }: { id: string }) {
   const ctx = useContext(BulkContext);
   const row = ctx?.rows.find((candidate) => candidate.id === id);
-  if (!ctx || !row?.selectable) return null;
+  if (!ctx || !row) return null;
+  // Payment needs the saved payable amount (or Bill passed for): such rows
+  // stay out of the selection until it is set on the item.
+  if (ctx.action === "payment" && !payableIsSet(row)) {
+    return <a href={row.href} title={`${payableNotSetLabel(row)}. Open the item to set it.`} className="inline-block whitespace-nowrap rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-800 hover:underline">Set payable first</a>;
+  }
+  if (!row.selectable) return null;
   return <input type="checkbox" aria-label={`Select ${row.reference}`} checked={ctx.selected.has(id)} onChange={() => ctx.toggle(id)} />;
 }
 
 export function BulkSelectAll() {
   const ctx = useContext(BulkContext);
   if (!ctx) return null;
-  const selectable = ctx.rows.filter((row) => row.selectable).map((row) => row.id).slice(0, MAX_ITEMS);
+  const selectable = ctx.rows.filter((row) => row.selectable && (ctx.action !== "payment" || payableIsSet(row))).map((row) => row.id).slice(0, MAX_ITEMS);
   const all = selectable.length > 0 && selectable.every((id) => ctx.selected.has(id));
   return <input type="checkbox" aria-label="Select all on this page" disabled={selectable.length === 0} checked={all} onChange={() => ctx.setAll(all ? [] : selectable)} />;
 }
@@ -87,8 +96,9 @@ export function BulkFinanceProvider({ action, rows, children }: { action: BulkAc
     action, rows, selected,
     toggle: (id) => setSelected((current) => {
       const next = new Set(current);
+      const row = byId.get(id);
       if (next.has(id)) next.delete(id);
-      else if (next.size < MAX_ITEMS) next.add(id);
+      else if (next.size < MAX_ITEMS && row && (action !== "payment" || payableIsSet(row))) next.add(id);
       return next;
     }),
     setAll: (ids) => setSelected(new Set(ids)),
@@ -100,7 +110,8 @@ export function BulkFinanceProvider({ action, rows, children }: { action: BulkAc
     setResults(null);
     if (action === "payment") {
       const initial: Record<string, PaymentInput> = {};
-      for (const row of chosen) initial[row.id] = payments[row.id] ?? { amount: row.paymentMode === "NEFT" ? remainingFor(row).toFixed(2) : cashAmountFor(row) ?? "", reference: "" };
+      // Prefill: the Due amount (payable minus paid so far), editable.
+      for (const row of chosen) initial[row.id] = payments[row.id] ?? { amount: prefillAmount(row), reference: "" };
       setPayments(initial);
     }
     setOpen(true);
@@ -110,24 +121,15 @@ export function BulkFinanceProvider({ action, rows, children }: { action: BulkAc
   function validateLocally(): Record<string, string> {
     const errors: Record<string, string> = {};
     for (const row of chosen) {
-      if (row.paymentMode === "NEFT") {
-        const input = payments[row.id];
-        const amount = Number(input?.amount);
-        if (!row.payableAmount) errors[row.id] = "Save the payable calculation on this advice first.";
-        else if (!input?.amount || !Number.isFinite(amount) || amount <= 0) errors[row.id] = "Enter an amount greater than 0.";
-        else if (!/^\d+(\.\d{1,2})?$/.test(input.amount.trim())) errors[row.id] = "At most 2 decimal places.";
-        else if (paise(amount) > paise(remainingFor(row))) errors[row.id] = `More than the remaining ${rupees(remainingFor(row))}.`;
-        else if (!input.reference.trim()) errors[row.id] = "Enter the UTR or reference.";
-      } else if (!cashAmountFor(row)) {
-        errors[row.id] = row.isAdvance ? "Save the payable calculation on this advice first." : "Save Bill passed for Rs. on this advice first.";
-      }
+      const error = paymentRowError(row, payments[row.id] ?? { amount: "" });
+      if (error) errors[row.id] = error;
     }
     return errors;
   }
 
   function itemsFor(list: BulkRow[]) {
     return list.map((row) => action === "payment" && row.paymentMode === "NEFT"
-      ? { id: row.id, amount: Number(payments[row.id].amount), reference: payments[row.id].reference.trim(), expectedTotalPaid: Number(row.totalPaid).toFixed(2) }
+      ? { id: row.id, amount: Number(payments[row.id].amount), ...(payments[row.id].reference.trim() ? { reference: payments[row.id].reference.trim() } : {}), expectedTotalPaid: Number(row.totalPaid).toFixed(2) }
       : { id: row.id });
   }
 
@@ -180,7 +182,7 @@ export function BulkFinanceProvider({ action, rows, children }: { action: BulkAc
   }
 
   const emailNote = action === "receive" ? "No email is sent for Received & In Process (same as the single action)."
-    : action === "verify" ? "Each submitter gets the usual Verified email, one per submission."
+    : action === "verify" ? "Each submitter gets the usual Verified email, one per submission. NEFT items still need their payable calculation before payment."
       : "Each submitter gets the usual email, one per submission: Payment Done for Cash, Payment recorded for NEFT.";
   const payTotal = action === "payment"
     ? chosen.reduce((sum, row) => sum + paise(row.paymentMode === "NEFT" ? payments[row.id]?.amount || 0 : cashAmountFor(row) ?? 0), 0) / 100
@@ -221,29 +223,45 @@ export function BulkFinanceProvider({ action, rows, children }: { action: BulkAc
                 <h3 className="font-heading text-xl text-[#0b1f3a]">{labels.title}</h3>
                 <p className="mt-1 text-sm text-gray-600">{chosen.length} submission{chosen.length === 1 ? "" : "s"}. Recorded now, by you. {emailNote}</p>
                 {action === "payment" ? (
+                  <>
+                  <p className="mt-2 rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-900">GST is settled separately, one by one, from each item. This records the basic payment only.</p>
                   <div className="mt-3 overflow-x-auto rounded-md border border-gray-200">
-                    <table className="w-full min-w-[820px] text-left text-sm">
-                      <thead className="bg-gray-50 text-xs uppercase text-gray-500"><tr><th className="px-3 py-2">Reference</th><th className="px-3 py-2">Payee</th><th className="px-3 py-2">Mode</th><th className="px-3 py-2 text-right">Due</th><th className="px-3 py-2">Amount paid</th><th className="px-3 py-2">UTR / reference</th></tr></thead>
+                    <table className="w-full min-w-[1040px] text-left text-sm">
+                      <thead className="bg-gray-50 text-xs uppercase text-gray-500"><tr><th className="px-3 py-2">Reference</th><th className="px-3 py-2">Payee</th><th className="px-3 py-2">Mode</th><th className="px-3 py-2 text-right">Basic amount</th><th className="px-3 py-2 text-right">GST amount</th><th className="px-3 py-2 text-right">Payable</th><th className="px-3 py-2 text-right">Due</th><th className="px-3 py-2">Amount paid</th><th className="px-3 py-2">UTR / Reference (optional)</th></tr></thead>
                       <tbody className="divide-y divide-gray-100">
                         {chosen.map((row) => {
                           const input = payments[row.id] ?? { amount: "", reference: "" };
                           const set = (patch: Partial<PaymentInput>) => setPayments((current) => ({ ...current, [row.id]: { ...input, ...patch } }));
-                          const due = row.paymentMode === "NEFT" ? remainingFor(row) : Number(cashAmountFor(row) ?? 0);
+                          const isSet = payableIsSet(row);
+                          const neft = row.paymentMode === "NEFT";
+                          const payable = neft ? row.payableAmount : cashAmountFor(row);
+                          const due = dueFor(row) ?? 0;
+                          const money = (value: string | null) => value === null ? "-" : rupees(Number(value));
                           return (
-                            <tr key={row.id} className={rowErrors[row.id] ? "bg-red-50" : ""}>
+                            <tr key={row.id} className={rowErrors[row.id] ? "bg-red-50" : !isSet ? "bg-amber-50/60" : ""}>
                               <td className="px-3 py-2 align-top font-medium text-[#0b1f3a]">{row.reference}</td>
                               <td className="px-3 py-2 align-top">{row.payeeName}</td>
-                              <td className="px-3 py-2 align-top">{row.paymentMode === "NEFT" ? "NEFT" : "Cash"}{row.isAdvance ? " (Advance)" : ""}</td>
-                              <td className="whitespace-nowrap px-3 py-2 text-right align-top">{rupees(due)}</td>
+                              <td className="px-3 py-2 align-top">{neft ? "NEFT" : "Cash"}{row.isAdvance ? " (Advance)" : ""}</td>
+                              <td className="whitespace-nowrap px-3 py-2 text-right align-top">{money(row.basicAmount)}</td>
+                              <td className="whitespace-nowrap px-3 py-2 text-right align-top">{money(row.gstAmount)}</td>
+                              {isSet ? <>
+                                <td className="whitespace-nowrap px-3 py-2 text-right align-top">{money(payable)}</td>
+                                <td className="whitespace-nowrap px-3 py-2 text-right align-top font-medium">{rupees(due)}</td>
+                              </> : <>
+                                <td className="whitespace-nowrap px-3 py-2 text-right align-top text-amber-800">Not set</td>
+                                <td className="whitespace-nowrap px-3 py-2 text-right align-top text-amber-800">Not set</td>
+                              </>}
                               <td className="px-3 py-2 align-top">
-                                {row.paymentMode === "NEFT"
-                                  ? <input aria-label={`Amount paid for ${row.reference}`} inputMode="decimal" value={input.amount} onChange={(event) => set({ amount: event.target.value })} className="w-32 rounded-md border border-gray-300 px-2 py-1 text-sm" />
-                                  : <span title="Uses the saved Bill passed for Rs. (or payable amount), same as the single action">{rupees(due)}</span>}
-                                {row.paymentMode === "NEFT" && Number(input.amount) > 0 && paise(input.amount) < paise(due) ? <div className="mt-1 text-xs text-amber-800">Partial payment</div> : null}
+                                {!isSet
+                                  ? <span className="text-xs text-amber-800">{payableNotSetLabel(row)}. <a href={row.href} className="font-medium underline">Open to set</a></span>
+                                  : neft
+                                    ? <input aria-label={`Amount paid for ${row.reference}`} inputMode="decimal" value={input.amount} onChange={(event) => set({ amount: event.target.value })} className="w-32 rounded-md border border-gray-300 px-2 py-1 text-sm" />
+                                    : <span title="Uses the saved Bill passed for Rs. (or payable amount), same as the single action">{rupees(due)}</span>}
+                                {isSet && neft && Number(input.amount) > 0 && paise(input.amount) < paise(due) ? <div className="mt-1 text-xs text-amber-800">Partial payment</div> : null}
                               </td>
                               <td className="px-3 py-2 align-top">
-                                {row.paymentMode === "NEFT"
-                                  ? <input aria-label={`UTR or reference for ${row.reference}`} maxLength={200} value={input.reference} onChange={(event) => set({ reference: event.target.value })} placeholder="Required" className="w-44 rounded-md border border-gray-300 px-2 py-1 text-sm" />
+                                {neft
+                                  ? <input aria-label={`UTR or reference for ${row.reference}`} maxLength={200} value={input.reference} disabled={!isSet} onChange={(event) => set({ reference: event.target.value })} className="w-44 rounded-md border border-gray-300 px-2 py-1 text-sm disabled:bg-gray-100" />
                                   : <span className="text-xs text-gray-500">Not needed for Cash</span>}
                                 {rowErrors[row.id] ? <div className="mt-1 text-xs font-medium text-red-700">{rowErrors[row.id]}</div> : null}
                               </td>
@@ -253,12 +271,13 @@ export function BulkFinanceProvider({ action, rows, children }: { action: BulkAc
                       </tbody>
                     </table>
                   </div>
+                  </>
                 ) : (
                   <ul className="mt-3 max-h-72 divide-y divide-gray-100 overflow-y-auto rounded-md border border-gray-200 text-sm">
                     {chosen.map((row) => <li key={row.id} className="flex justify-between gap-3 px-3 py-1.5"><span><span className="font-medium text-[#0b1f3a]">{row.reference}</span> <span className="text-gray-600">{row.payeeName}</span></span><span className="whitespace-nowrap">{rupees(Number(row.amount))}</span></li>)}
                   </ul>
                 )}
-                <p className="mt-2 flex justify-between text-sm font-semibold text-[#0b1f3a]"><span>Total</span><span>{rupees(payTotal)}</span></p>
+                <p className="mt-2 flex justify-between text-sm font-semibold text-[#0b1f3a]"><span>{action === "payment" ? "Total basic being paid (GST not included)" : "Total"}</span><span>{rupees(payTotal)}</span></p>
                 {error ? <p role="alert" className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">{error}</p> : null}
                 {progress ? <p role="status" className="mt-3 text-sm text-gray-600">{progress}</p> : null}
                 <div className="mt-5 flex justify-end gap-2">

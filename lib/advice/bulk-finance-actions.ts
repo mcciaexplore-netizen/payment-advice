@@ -1,4 +1,4 @@
-import { and, inArray, or } from "drizzle-orm";
+import { and, eq, inArray, isNull, or, type SQL } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { paymentAdvices } from "@/lib/db/schema";
@@ -33,6 +33,17 @@ export const BULK_ACTION_TABS: Record<BulkAction, AdminTab[]> = {
   payment: ["verified_ready_payment"],
 };
 
+/** SQL twin of payableIsSet (lib/advice/payable-status.ts): Verified items
+ * that cannot be paid yet because their saved amount is missing. Drives the
+ * "Needs payable calculation" filter and the count above the table. */
+export function needsPayableCondition(): SQL {
+  return or(
+    and(eq(paymentAdvices.paymentMode, "NEFT"), isNull(paymentAdvices.payableAmount)),
+    and(eq(paymentAdvices.paymentMode, "CASH"), eq(paymentAdvices.isAdvance, false), isNull(paymentAdvices.billPassedFor)),
+    and(eq(paymentAdvices.paymentMode, "CASH"), eq(paymentAdvices.isAdvance, true), isNull(paymentAdvices.payableAmount)),
+  )!;
+}
+
 export function bulkActionForTab(tab: AdminTab): BulkAction | null {
   for (const action of BULK_ACTIONS) if (BULK_ACTION_TABS[action].includes(tab)) return action;
   return null;
@@ -40,8 +51,8 @@ export function bulkActionForTab(tab: AdminTab): BulkAction | null {
 
 const itemSchema = z.object({
   id: z.string().uuid(),
-  // payment only. NEFT: the amount paid now (partial allowed) and the
-  // UTR / reference, stored as the payment entry's remarks.
+  // payment only. NEFT: the amount paid now (partial allowed) and an
+  // optional UTR / reference, stored as the payment entry's remarks.
   amount: z.number().optional(),
   reference: z.string().trim().max(200, "Keep the UTR or reference under 200 characters.").optional(),
   // NEFT payment only: the total already paid when the Finance user loaded
@@ -75,7 +86,7 @@ const referenceOf = (row: Pick<Loaded, "paymentMode" | "serialNo" | "cashVoucher
 
 /** NEFT payment row check, mirroring the single action's rules (positive,
  * at most 2 decimals, not above the remaining balance, payable amount saved)
- * plus the bulk-only required UTR / reference. Cash rows need the saved
+ * (the UTR / reference is optional, as in the single form). Cash rows need the saved
  * Bill Passed For (or, for an Advance, the saved payable amount), same as
  * the single Mark Payment Done button. */
 export function validatePaymentRow(row: Loaded, item: BulkRequest["items"][number]): string | null {
@@ -85,7 +96,6 @@ export function validatePaymentRow(row: Loaded, item: BulkRequest["items"][numbe
     if (Math.abs(item.amount * 100 - Math.round(item.amount * 100)) > 1e-6) return "The amount can have at most 2 decimal places.";
     const remainingPaise = Math.round(Number(row.payableAmount) * 100) - Math.round(Number(row.totalPaid) * 100);
     if (Math.round(item.amount * 100) > remainingPaise) return `The amount is more than the remaining ₹ ${(remainingPaise / 100).toLocaleString("en-IN", { minimumFractionDigits: 2 })}.`;
-    if (!item.reference) return "Enter the UTR or payment reference.";
     if (item.expectedTotalPaid === undefined) return "Reload the page and try again.";
     return null;
   }
@@ -180,7 +190,9 @@ export async function runBulkFinanceAction(
       result = request.action === "receive" ? await receiveAdvice(item.id, session.fullName, { ip, extra })
         : request.action === "verify" ? await verifyAdvice(item.id, session.fullName, { ip, extra })
           : row.paymentMode === "NEFT"
-            ? await recordNeftPayment(item.id, session.fullName, session.roles, { amount: item.amount, remarks: `UTR / Ref: ${item.reference}` }, { ip, extra, expectedTotalPaid: item.expectedTotalPaid })
+            // Basic payment only: GST is never touched here (it is settled
+            // separately per item). UTR goes into remarks only when given.
+            ? await recordNeftPayment(item.id, session.fullName, session.roles, { amount: item.amount, ...(item.reference ? { remarks: `UTR / Ref: ${item.reference}` } : {}) }, { ip, extra, expectedTotalPaid: item.expectedTotalPaid })
             : await markCashPaymentDone(item.id, session.fullName, session.roles, undefined, { ip, extra });
     } catch (error) {
       console.error("[Bulk] item failed", item.id, error instanceof Error ? error.message : error);

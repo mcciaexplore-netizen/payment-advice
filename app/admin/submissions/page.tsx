@@ -20,7 +20,8 @@ import { PaymentMode } from "@/lib/validation/payment-advice";
 import { getAdminSession } from "@/lib/admin-session";
 import { displayNoFor, submissionTypeLabelFor } from "@/lib/advice/document-identity";
 import { defaultPaymentModeForRoles, ownsSubmissionType } from "@/lib/admin/role-scope";
-import { bulkActionForTab } from "@/lib/advice/bulk-finance-actions";
+import { bulkActionForTab, needsPayableCondition } from "@/lib/advice/bulk-finance-actions";
+import { payableIsSet, payableNotSetLabel } from "@/lib/advice/payable-status";
 import { BulkFinanceProvider, BulkRowCheckbox, BulkSelectAll, type BulkRow } from "@/components/admin/BulkFinanceActions";
 import { pipelineStageFor } from "@/lib/advice/pipeline-stage";
 import { STAGE_FOR_TAB, STAGE_STYLE } from "@/lib/advice/stage-style";
@@ -94,7 +95,11 @@ export default async function AdminListPage({
   const baseWhere = buildAdviceWhere(filterParams);
   const bulkAction = bulkActionForTab(tab);
   const columnCount = (tab === "rejected" ? 11 : tab === "sent_back" ? 10 : 9) + (bulkAction ? 1 : 0);
-  const where = and(baseWhere, buildTabCondition(tab));
+  // "Needs payable calculation" filter, Verified tab only: items that cannot
+  // be paid yet because their saved payable amount (or Bill passed for) is
+  // missing. Verify itself is never blocked; the calculator appears after it.
+  const needsPayableFilter = tab === "verified_ready_payment" && (Array.isArray(sp.needsPayable) ? sp.needsPayable[0] : sp.needsPayable) === "1";
+  const where = and(baseWhere, buildTabCondition(tab), needsPayableFilter ? needsPayableCondition() : undefined);
   const sort = Array.isArray(sp.sort) ? sp.sort[0] : sp.sort;
   const dir = Array.isArray(sp.dir) ? sp.dir[0] : sp.dir;
   const orderBy = buildAdminListOrderBy(tab, sort, dir);
@@ -148,6 +153,8 @@ export default async function AdminListPage({
         // single-item payment actions use).
         payableAmount: paymentAdvices.payableAmount,
         billPassedFor: paymentAdvices.billPassedFor,
+        basicAmount: paymentAdvices.basicAmount,
+        gstAmount: paymentAdvices.gstAmount,
       })
       .from(paymentAdvices)
       .where(where)
@@ -205,6 +212,17 @@ export default async function AdminListPage({
   const totalCount = totalsRow[0]?.count ?? 0;
   const totalAmount = Number(totalsRow[0]?.sum ?? 0);
   const totalPages = Math.max(1, Math.ceil(totalCount / ADMIN_LIST_PAGE_SIZE));
+  // Counted over every page (and the current filters), not only the rows shown.
+  const needsPayableCount = tab === "verified_ready_payment"
+    ? (await db.select({ count: count() }).from(paymentAdvices).where(and(baseWhere, buildTabCondition(tab), needsPayableCondition())))[0]?.count ?? 0
+    : 0;
+  const needsPayableHref = (on: boolean) => {
+    const params = searchParamsRecordToURLSearchParams(sp);
+    params.set("tab", "verified_ready_payment");
+    params.delete("page");
+    if (on) params.set("needsPayable", "1"); else params.delete("needsPayable");
+    return `/admin/submissions?${params.toString()}`;
+  };
 
   return (
     <div className="flex flex-col gap-6">
@@ -357,6 +375,14 @@ export default async function AdminListPage({
         </div>
       </form>
 
+      {tab === "verified_ready_payment" && (needsPayableCount > 0 || needsPayableFilter) ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <p><strong>{needsPayableCount}</strong> item{needsPayableCount === 1 ? "" : "s"} need{needsPayableCount === 1 ? "s" : ""} a payable calculation before payment. Open each item to save it (Cash Vouchers: Bill passed for).</p>
+          <Link href={needsPayableHref(!needsPayableFilter)} className={`rounded-md border px-3 py-1.5 text-sm font-medium ${needsPayableFilter ? "border-[#0b1f3a] bg-[#0b1f3a] text-white" : "border-amber-400 bg-white text-amber-900 hover:bg-amber-100"}`}>
+            {needsPayableFilter ? "Show all Verified" : "Needs payable calculation"}
+          </Link>
+        </div>
+      ) : null}
       {(() => {
         const table = (
       <div className="overflow-x-auto rounded-md border border-gray-200">
@@ -443,6 +469,12 @@ export default async function AdminListPage({
                           isAdvance: row.isAdvance,
                         })}
                       />
+                      {tab === "verified_ready_payment" && !payableIsSet(row) ? (
+                        <span className="text-xs text-amber-800">
+                          {payableNotSetLabel(row)}.{" "}
+                          <Link href={`/admin/advice/${row.id}`} className="font-medium underline">Open to set</Link>
+                        </span>
+                      ) : null}
                       {tab === "sent_back" ? <SentBackIndicators sentBackAt={row.sentBackAt} editTokenExpiresAt={row.editTokenExpiresAt} /> : null}
                     </div>
                   </td>
@@ -482,6 +514,9 @@ export default async function AdminListPage({
               payableAmount: row.payableAmount,
               billPassedFor: row.billPassedFor,
               totalPaid: row.totalPaid,
+              basicAmount: row.basicAmount,
+              gstAmount: row.gstAmount,
+              href: `/admin/advice/${row.id}`,
               selectable: bulkAction !== "payment" || ownsSubmissionType(session.roles, row.paymentMode as "NEFT" | "CASH"),
             }))}
           >

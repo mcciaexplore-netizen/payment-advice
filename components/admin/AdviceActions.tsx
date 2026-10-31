@@ -573,6 +573,15 @@ export function AdviceActions({
                   ? "Partial Payment Done."
                   : "Ready for Payment."}
             </p>
+            {/* Stored Basic and GST (same values as above; nothing recalculated).
+                Payments here are against the basic amount after TDS; GST is
+                settled separately on this page. */}
+            {basicAmount !== null || gstAmount !== null ? (
+              <p className="mt-1 text-[#1e5c39]">
+                Basic amount: ₹ {formatMoney(basicAmount ?? "0")} · GST amount: ₹ {formatMoney(gstAmount ?? "0")}
+                {initialPayableAmount ? <> · Payable: ₹ {formatMoney(initialPayableAmount)}</> : null}
+              </p>
+            ) : null}
             {remaining !== null ? (
               <p className="mt-1 text-[#1e5c39]">
                 Paid so far: ₹ {formatMoney(totalPaid)} of ₹ {formatMoney(initialPayableAmount ?? "0")}{" "}
@@ -585,8 +594,8 @@ export function AdviceActions({
 
           {status === "SUBMITTED" && canManagePayments ? (
             !initialPayableAmount ? (
-              <p className="text-xs text-gray-500">
-                The payable calculation above must be saved before recording a payment.
+              <p className="text-xs font-medium text-amber-800">
+                Payable amount not set. Save the payable calculation above before recording a payment.
               </p>
             ) : (
               <div className="flex flex-col gap-2 rounded-md border border-[#2e8b57]/30 bg-white p-3">

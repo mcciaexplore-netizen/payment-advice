@@ -118,3 +118,21 @@ describe("role rules and the named receiver (2026-10-30)", () => {
     expect(fake.state.inserts[0].values).toMatchObject({ action: "FINANCE_RECEIVED", actor: "Abha Khatavkar", details: { receivedBy: "Abha Khatavkar" } });
   });
 });
+
+describe("stage after a bulk payment, GST untouched", () => {
+  it("the payment that reaches the payable amount settles the item (Fully Payment Settled) and never touches the GST flag", async () => {
+    const sets: Array<Record<string, unknown>> = [];
+    const realUpdate = fake.db.transaction;
+    fake.db.transaction = (async (cb: (t: unknown) => unknown) => realUpdate(async (tx: Record<string, unknown>) => cb({
+      ...tx,
+      update: () => ({ set: (values: Record<string, unknown>) => { sets.push(values); return { where: () => ({ returning: async () => [], then: (r: (v: unknown) => unknown) => Promise.resolve(undefined).then(r) }) }; } }),
+    }))) as typeof fake.db.transaction;
+    fake.state.selectRow = [{ ...base, verifiedAt: new Date() }];
+    fake.state.execute = [{ payable_amount: "1000.00", total_paid: "400.00", status: "SUBMITTED" }];
+    const result = await recordNeftPayment(ID, "Abha", ["PAYMENT_ADVICE"], { amount: 600 }, { ip: null, extra: { bulk: true }, expectedTotalPaid: "400.00" });
+    fake.db.transaction = realUpdate;
+    expect(result).toMatchObject({ ok: true, data: { isFinal: true, totalPaid: "1000.00", remaining: "0.00" } });
+    expect(sets[0]).toMatchObject({ totalPaid: "1000.00", status: "APPROVED", approvedByName: "Abha" });
+    expect(Object.keys(sets[0]).filter((key) => key.toLowerCase().includes("gst"))).toEqual([]);
+  });
+});

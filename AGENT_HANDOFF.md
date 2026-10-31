@@ -49,12 +49,23 @@ Design system: Navy `#0B1F3A`, Forest green `#2E8B57`, Amber `#E8A33D`. Headings
 
 ## 3. Current State (update this every session)
 
-**Last updated:** 30 October 2026, by Claude Opus 5.5 (payment role rules enforced on the server, named receiver; branch `fix/finance-payment-role-rules`, PR open, not merged; see entry below)
+**Last updated:** 31 October 2026, by Claude Opus 5.5 (bulk payment screen amounts; branch `fix/bulk-payment-screen-amounts`, PR open, not merged; see entry below)
+
+### In review: bulk payment screen amounts (Claude Opus 5.5, 2026-10-31, branch `fix/bulk-payment-screen-amounts`, PR open, not merged). No migration, no data change.
+How the amounts relate (checked read-only on 156 NEFT items with a payable): amount = basic + GST; payable = basic minus TDS (125 equal basic, 30 lower, 1 higher); Due = payable minus total_paid. GST is a separate per-item flag (`gst_settled`, set from the item page by PAYMENT_ADVICE or ALL) and never affects the stage. An item reaches Fully Payment Settled when total_paid reaches payable, even with GST unsettled (157 APPROVED NEFT items had gst_settled false on 2026-10-31). Bulk keeps that rule exactly.
+- Not-set rows: NEFT (and Cash advance) without `payable_amount`, or a non-advance Cash Voucher without `bill_passed_for`. `lib/advice/payable-status.ts` (`payableIsSet`, `payableNotSetLabel`). In bulk payment they show "Not set" for Payable and Due, an "Open to set" link, disabled inputs, and a "Set payable first" tag instead of a checkbox; select-all skips them. The server already refused them; that check is unchanged.
+- Verified tab: note "N items need a payable calculation before payment." counted over all pages with the current filters (`needsPayableCondition()` in `lib/advice/bulk-finance-actions.ts`), and a "Needs payable calculation" filter (`needsPayable=1`, Verified tab only).
+- Bulk payment table: Reference, Payee, Mode, Basic amount, GST amount, Payable, Due, Amount paid, UTR / Reference (optional), in its own horizontal scroll frame. Prefill = Due, editable, refused above Due (`lib/advice/bulk-payment-rows.ts`). Total is "Total basic being paid (GST not included)". Note: "GST is settled separately, one by one, from each item."
+- UTR is optional in bulk only. When filled it is stored as the entry remark "UTR / Ref: ..."; when empty nothing is stored. The single Record a payment form is unchanged.
+- Bulk verify confirm adds "NEFT items still need their payable calculation before payment." It does not block.
+- Single NEFT panel shows "Basic amount · GST amount · Payable" and "Payable amount not set. Save the payable calculation above before recording a payment."
+- Also fixes main's lint error (`react/no-children-prop` in the PR #18 bulk UI test): the test is now `lib/advice/bulk-finance-ui.test.tsx` using JSX.
+- Found, not fixed (out of scope): `app/api/admin/attachments/[id]/route.ts` and `app/api/authority-approval/[token]/attachments/[attachmentId]/route.ts` put the raw file name in Content-Disposition, so a name with a non-Latin-1 character (an en dash was seen locally) throws "Cannot convert argument to a ByteString" and the file fails to open. The other attachment routes already use `contentDisposition()`.
 
 ### Merged and live: Finance bulk actions (PR #18, merge commit `c10452d`, deployed 2026-10-30 07:21 UTC)
 - Verified read-only on production with a Finance session: all 11 Submissions tabs and all Finance Admin pages 200. The Received & In Process tab shows the bulk checkboxes, Sent Back shows none. No 5xx or runtime errors in the first minutes; the 30-minute check is recorded in the PR #18 thread / session report.
 
-### In review: payment role rules on the server, and a named Received user (Claude Opus 5.5, 2026-10-30, branch `fix/finance-payment-role-rules`, PR open, not merged). No migration.
+### Merged: payment role rules on the server, and a named Received user (Claude Opus 5.5, 2026-10-30, PR #19, merge commit `7fc3463`). No migration.
 These are access changes requested by the owner. They are listed for approval in the PR under "Access or role changes".
 - **Cash Payment Done** (`POST /api/admin/advice/[id]/payment-done`): CASH_VOUCHER or ALL only. Others get 403 "Only a Cash Voucher account (or an All-Access account) can mark this Payment Done." before anything is read further or written.
 - **NEFT Record a Payment** (`POST /api/admin/advice/[id]/payment-entries`): PAYMENT_ADVICE or ALL only. Others get 403 "Only a Payment Advice account (or an All-Access account) can record a payment."
@@ -1557,6 +1568,8 @@ Status legend: 🔴 unverified / high risk · 🟡 unverified / lower risk · �
 - **`lib/email/templates.ts`'s `shell()` loads the MCCIA logo from `https://payment-advice.vercel.app/mccia-logo.png` (this app's own domain), not from `mcciapune.com` directly (2026-10-01, fixed a real broken-image bug affecting every email this app sends).** Don't revert to hotlinking the logo from `mcciapune.com` or any other third-party host — email clients need a stable, reliably-reachable image URL, and this app doesn't control that site's hotlinking/availability. The underlying asset is `public/mccia-logo.png`, the same file the Payment Advice/Cash Voucher/Forwarding Memo PDFs already embed — if that file is ever replaced with a different logo, no code change is needed here, but re-check the hardcoded `width="160" height="38"` in `shell()` still matches its aspect ratio (currently ~4.2:1, matching the real 1085x258 asset).
 
 ## 6. Session Log
+
+2026-10-31 - Claude Opus 5.5 - `fix/bulk-payment-screen-amounts`: bulk payment shows Basic, GST, Payable and Due, prefills Due, optional UTR, not-set rows tagged and kept out of selection, Verified-tab note and "Needs payable calculation" filter, single panel shows Basic and GST. GST never touched by bulk; stage logic, roles, emails unchanged. Fixed main's lint error from the PR #18 test. tsc, lint, 823 tests, build clean; read-only regression over all tabs. PR open, not merged. No migration.
 
 2026-10-15 - Codex - Added Refund request form and local Tax Invoice auto-fill fix on `feature/refund-request-form`; pushed branch and opened PR #6 into `main`. Production Refund card/page/submit endpoint stay disabled unless `REFUND_REQUESTS_ENABLED=true`; do not set it until owner-generated migration is applied. Drizzle migration generation failed with `uv_os_get_passwd returned ENOMEM`; no migration files were hand-edited. TypeScript, lint, 669 tests (11 skipped), and production build pass. The unrelated Cash Receipt report work remains stashed and was not included.
 
