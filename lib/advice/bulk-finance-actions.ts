@@ -34,8 +34,9 @@ export const BULK_ACTION_TABS: Record<BulkAction, AdminTab[]> = {
 };
 
 /** SQL twin of payableIsSet (lib/advice/payable-status.ts): Verified items
- * that cannot be paid yet because their saved amount is missing. Drives the
- * "Needs payable calculation" filter and the count above the table. */
+ * with no saved payable calculation (Cash Voucher: Bill passed for). Bulk
+ * pays them on Basic with no deductions; drives the "Needs payable
+ * calculation" filter and the count above the table. */
 export function needsPayableCondition(): SQL {
   return or(
     and(eq(paymentAdvices.paymentMode, "NEFT"), isNull(paymentAdvices.payableAmount)),
@@ -76,7 +77,7 @@ export type BulkRowError = { id: string; reference: string; error: string };
 
 type Loaded = {
   id: string; serialNo: string; cashVoucherNo: string | null; isAdvance: boolean; advanceNo: string | null; paymentMode: string;
-  status: string; amount: string; payableAmount: string | null; billPassedFor: string | null; totalPaid: string;
+  status: string; amount: string; basicAmount: string | null; payableAmount: string | null; billPassedFor: string | null; totalPaid: string;
   authorityApprovedAt: Date | null; financeReceivedAt: Date | null; verifiedAt: Date | null; paymentDoneAt: Date | null;
   sentBackAt: Date | null; rejectedAt: Date | null; updatedAt: Date;
 };
@@ -84,29 +85,36 @@ type Loaded = {
 const referenceOf = (row: Pick<Loaded, "paymentMode" | "serialNo" | "cashVoucherNo" | "isAdvance" | "advanceNo">) =>
   displayNoFor(row.paymentMode as PaymentMode, row.serialNo, row.cashVoucherNo, row.isAdvance, row.advanceNo);
 
+/** Audit note when bulk pays a Cash Voucher that had no Bill passed for. */
+export const BULK_CASH_VOUCHER_AMOUNT_NOTE = "bill passed for set to the voucher amount by bulk payment, no deductions";
+
 /** NEFT payment row check, mirroring the single action's rules (positive,
- * at most 2 decimals, not above the remaining balance, payable amount saved)
- * (the UTR / reference is optional, as in the single form). Cash rows need the saved
- * Bill Passed For (or, for an Advance, the saved payable amount), same as
- * the single Mark Payment Done button. */
+ * at most 2 decimals, not above the remaining balance) (the UTR / reference
+ * is optional, as in the single form). With no saved payable calculation
+ * the cap is the Basic amount (an Advance: its amount): bulk pays it with
+ * no deductions. Cash Vouchers without Bill passed for are paid on the
+ * voucher amount, which the single Mark Payment Done action also accepts.
+ * A Cash-routed Advance still needs its saved payable amount. */
 export function validatePaymentRow(row: Loaded, item: BulkRequest["items"][number]): string | null {
   if (row.paymentMode === "NEFT") {
-    if (!row.payableAmount) return "Save the Arrears/TDS payable calculation on this advice first.";
+    const payable = row.payableAmount ?? (row.isAdvance ? row.amount : row.basicAmount);
+    if (!payable || !(Number(payable) > 0)) return "Basic Amount is unavailable for this submission; contact Accounts before paying it.";
     if (typeof item.amount !== "number" || !Number.isFinite(item.amount) || item.amount <= 0) return "Enter an amount paid greater than 0.";
     if (Math.abs(item.amount * 100 - Math.round(item.amount * 100)) > 1e-6) return "The amount can have at most 2 decimal places.";
-    const remainingPaise = Math.round(Number(row.payableAmount) * 100) - Math.round(Number(row.totalPaid) * 100);
-    if (Math.round(item.amount * 100) > remainingPaise) return `The amount is more than the remaining ₹ ${(remainingPaise / 100).toLocaleString("en-IN", { minimumFractionDigits: 2 })}.`;
+    const remainingPaise = Math.round(Number(payable) * 100) - Math.round(Number(row.totalPaid) * 100);
+    const limit = row.payableAmount ? "the remaining" : "the Basic amount of";
+    if (Math.round(item.amount * 100) > remainingPaise) return `The amount is more than ${limit} ₹ ${(remainingPaise / 100).toLocaleString("en-IN", { minimumFractionDigits: 2 })}.`;
     if (item.expectedTotalPaid === undefined) return "Reload the page and try again.";
     return null;
   }
   if (row.isAdvance) return row.payableAmount ? null : "Save the Arrears/TDS payable calculation on this advice first.";
-  return row.billPassedFor ? null : "Save Bill passed for Rs. on this advice first.";
+  return null;
 }
 
 async function loadItems(ids: string[]): Promise<{ rows: Map<string, Loaded>; inStage: (action: BulkAction) => Promise<Set<string>> }> {
   const loaded = await db.select({
     id: paymentAdvices.id, serialNo: paymentAdvices.serialNo, cashVoucherNo: paymentAdvices.cashVoucherNo, isAdvance: paymentAdvices.isAdvance,
-    advanceNo: paymentAdvices.advanceNo, paymentMode: paymentAdvices.paymentMode, status: paymentAdvices.status, amount: paymentAdvices.amount,
+    advanceNo: paymentAdvices.advanceNo, paymentMode: paymentAdvices.paymentMode, status: paymentAdvices.status, amount: paymentAdvices.amount, basicAmount: paymentAdvices.basicAmount,
     payableAmount: paymentAdvices.payableAmount, billPassedFor: paymentAdvices.billPassedFor, totalPaid: paymentAdvices.totalPaid,
     authorityApprovedAt: paymentAdvices.authorityApprovedAt, financeReceivedAt: paymentAdvices.financeReceivedAt, verifiedAt: paymentAdvices.verifiedAt,
     paymentDoneAt: paymentAdvices.paymentDoneAt, sentBackAt: paymentAdvices.sentBackAt, rejectedAt: paymentAdvices.rejectedAt, updatedAt: paymentAdvices.updatedAt,
@@ -192,8 +200,11 @@ export async function runBulkFinanceAction(
           : row.paymentMode === "NEFT"
             // Basic payment only: GST is never touched here (it is settled
             // separately per item). UTR goes into remarks only when given.
-            ? await recordNeftPayment(item.id, session.fullName, session.roles, { amount: item.amount, ...(item.reference ? { remarks: `UTR / Ref: ${item.reference}` } : {}) }, { ip, extra, expectedTotalPaid: item.expectedTotalPaid })
-            : await markCashPaymentDone(item.id, session.fullName, session.roles, undefined, { ip, extra });
+            // No saved payable calculation: paid on Basic, no deductions.
+            ? await recordNeftPayment(item.id, session.fullName, session.roles, { amount: item.amount, ...(item.reference ? { remarks: `UTR / Ref: ${item.reference}` } : {}) }, { ip, extra, expectedTotalPaid: item.expectedTotalPaid, payableFromBasicIfUnset: true })
+            : !row.isAdvance && !row.billPassedFor
+              ? await markCashPaymentDone(item.id, session.fullName, session.roles, Number(row.amount), { ip, extra: { ...extra, note: BULK_CASH_VOUCHER_AMOUNT_NOTE } })
+              : await markCashPaymentDone(item.id, session.fullName, session.roles, undefined, { ip, extra });
     } catch (error) {
       console.error("[Bulk] item failed", item.id, error instanceof Error ? error.message : error);
       results.push({ id: item.id, reference, outcome: "failed", message: "Unexpected error. Nothing was changed for this item." });

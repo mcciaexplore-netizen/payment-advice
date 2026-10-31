@@ -226,17 +226,26 @@ export async function markCashPaymentDone(id: string, paymentDoneBy: string, rol
 
 export type NeftPaymentData = { totalPaid: string; remaining: string; payableAmount: string; isFinal: boolean; paidAt: Date };
 
+/** Audit note on the payable calculation bulk saves for an item that had none. */
+export const BULK_BASIC_PAYABLE_NOTE = "payable set to basic by bulk payment, no deductions";
+
 /** NEFT "Record a Payment": one payment_entries row, capped at the remaining
  * balance inside a SELECT ... FOR UPDATE transaction; the entry that reaches
  * the payable amount settles the advice. `expectedTotalPaid` (bulk only) is
  * the total paid the Finance user saw; if another payment was recorded in
- * the meantime the entry is refused rather than recorded on top of it. */
+ * the meantime the entry is refused rather than recorded on top of it.
+ * `payableFromBasicIfUnset` (bulk only): an item with no saved payable
+ * calculation is paid on its Basic amount (an Advance: its amount, the same
+ * base the calculator uses) with no deductions. That calculation (TDS 0,
+ * arrears 0) is saved in the same transaction, before the entry, with its
+ * own PAYABLE_CALCULATION_SAVED audit row; every check runs before any
+ * write, and an error in any write rolls the whole transaction back. */
 export async function recordNeftPayment(
   id: string,
   paidBy: string,
   roles: AdminRole[],
   body: unknown,
-  ctx: StageActionContext & { expectedTotalPaid?: string },
+  ctx: StageActionContext & { expectedTotalPaid?: string; payableFromBasicIfUnset?: boolean },
 ): Promise<StageActionResult<NeftPaymentData>> {
   const [advice] = await db
     .select({
@@ -267,8 +276,8 @@ export async function recordNeftPayment(
   const remarks = parsed.data.remarks ?? "";
 
   const result: StageActionResult<NeftPaymentData> = await db.transaction(async (tx) => {
-    const rows = await tx.execute<{ payable_amount: string | null; total_paid: string; status: string }>(sql`
-      select payable_amount, total_paid, status
+    const rows = await tx.execute<{ payable_amount: string | null; total_paid: string; status: string; is_advance: boolean; amount: string; basic_amount: string | null }>(sql`
+      select payable_amount, total_paid, status, is_advance, amount, basic_amount
       from payment_advices
       where id = ${id}
       for update
@@ -277,10 +286,19 @@ export async function recordNeftPayment(
     if (!row) return fail(404, "Not found");
     if (row.status === "APPROVED") return fail(409, "This advice is already fully settled.");
     if (row.status !== "SUBMITTED") return fail(409, "Payments can only be recorded against an active submission.");
-    if (!row.payable_amount) return fail(400, "Save the Arrears/TDS payable calculation before recording a payment.");
+    if (!row.payable_amount && !ctx.payableFromBasicIfUnset) return fail(400, "Save the Arrears/TDS payable calculation before recording a payment.");
 
-    const payableAmountPaise = Math.round(Number(row.payable_amount) * 100);
     const totalPaidPaise = Math.round(Number(row.total_paid) * 100);
+    const setFromBasic = !row.payable_amount;
+    let payableAmount = row.payable_amount;
+    if (setFromBasic) {
+      const basic = Number(row.is_advance ? row.amount : row.basic_amount);
+      if (!Number.isFinite(basic) || basic <= 0) return fail(409, "Basic Amount is unavailable for this submission; contact Accounts before paying it.");
+      // No saved calculation means no payment yet (a payment needs one).
+      if (totalPaidPaise !== 0) return fail(409, "This advice has payments but no payable calculation. Open it and check before paying.");
+      payableAmount = basic.toFixed(2);
+    }
+    const payableAmountPaise = Math.round(Number(payableAmount) * 100);
     if (ctx.expectedTotalPaid !== undefined && Math.round(Number(ctx.expectedTotalPaid) * 100) !== totalPaidPaise) {
       return fail(409, "Another payment was recorded on this advice meanwhile. Reload and check the balance.");
     }
@@ -291,6 +309,21 @@ export async function recordNeftPayment(
     const newTotalPaid = (newTotalPaidPaise / 100).toFixed(2);
     const isFinal = newTotalPaidPaise >= payableAmountPaise;
 
+    if (setFromBasic) {
+      // Same fields and audit action as saving the calculator with TDS 0%
+      // and no arrears (PATCH /api/admin/advice/[id]).
+      await tx
+        .update(paymentAdvices)
+        .set({ arrearsAmount: "0.00", arrearsTdsPercent: "0.00", currentTdsPercent: "0.00", payableAmount, updatedAt: now })
+        .where(eq(paymentAdvices.id, id));
+      await tx.insert(auditLog).values({
+        paymentAdviceId: id,
+        action: "PAYABLE_CALCULATION_SAVED",
+        actor: paidBy,
+        ipAddress: ctx.ip,
+        details: { arrearsAmount: 0, arrearsTdsPercent: 0, currentTdsPercent: 0, payableAmount: Number(payableAmount), note: BULK_BASIC_PAYABLE_NOTE, ...ctx.extra },
+      });
+    }
     await tx.insert(paymentEntries).values({ paymentAdviceId: id, amount: parsed.data.amount.toFixed(2), remarks, paidAt: now, paidBy });
     await tx
       .update(paymentAdvices)
@@ -301,9 +334,9 @@ export async function recordNeftPayment(
       action: "PAYMENT_ENTRY_RECORDED",
       actor: paidBy,
       ipAddress: ctx.ip,
-      details: { amount: parsed.data.amount, remarks, totalPaid: newTotalPaid, payableAmount: row.payable_amount, isFinal, ...ctx.extra },
+      details: { amount: parsed.data.amount, remarks, totalPaid: newTotalPaid, payableAmount, isFinal, ...ctx.extra },
     });
-    return { ok: true as const, data: { totalPaid: newTotalPaid, remaining: ((payableAmountPaise - newTotalPaidPaise) / 100).toFixed(2), payableAmount: row.payable_amount, isFinal, paidAt: now } };
+    return { ok: true as const, data: { totalPaid: newTotalPaid, remaining: ((payableAmountPaise - newTotalPaidPaise) / 100).toFixed(2), payableAmount: payableAmount!, isFinal, paidAt: now } };
   });
   if (!result.ok) return result;
 
