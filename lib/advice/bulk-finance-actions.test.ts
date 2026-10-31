@@ -113,10 +113,9 @@ describe("bulk payment rows", () => {
   const pay = (items: unknown[], dryRun = false) => post({ action: "payment", batchId: BATCH, dryRun, items });
 
   it.each([
-    ["missing UTR", { amount: 1000, expectedTotalPaid: "0.00" }, "Enter the UTR or payment reference."],
     ["zero amount", { amount: 0, reference: "U", expectedTotalPaid: "0.00" }, "Enter an amount paid greater than 0."],
     ["three decimals", { amount: 10.123, reference: "U", expectedTotalPaid: "0.00" }, "The amount can have at most 2 decimal places."],
-    ["more than remaining", { amount: 1000.01, reference: "U", expectedTotalPaid: "0.00" }, "The amount is more than the remaining ₹ 1,000.00."],
+    ["more than Due", { amount: 1000.01, reference: "U", expectedTotalPaid: "0.00" }, "The amount is more than the remaining ₹ 1,000.00."],
   ])("%s rejects the whole batch and pays nothing", async (_label, input, message) => {
     fake.selects = [[row(1), row(2)], [{ id: id(1) }, { id: id(2) }]];
     const response = await pay([{ id: id(1), ...input }, { id: id(2), amount: 1000, reference: "UTR2", expectedTotalPaid: "0.00" }]);
@@ -154,5 +153,20 @@ describe("bulk payment rows", () => {
     const response = await pay([{ id: id(1), amount: 1000, reference: "U", expectedTotalPaid: "0.00" }], true);
     expect((await response.json()).kind).toBe("checked");
     expect(fake.neft).not.toHaveBeenCalled();
+  });
+
+  it("UTR is optional: empty adds no remarks, filled is stored as UTR / Ref", async () => {
+    fake.selects = [[row(1), row(2)], [{ id: id(1) }, { id: id(2) }]];
+    fake.neft.mockResolvedValue({ ok: true, data: { isFinal: true } });
+    const response = await pay([{ id: id(1), amount: 1000, expectedTotalPaid: "0.00" }, { id: id(2), amount: 1000, reference: "UTR9", expectedTotalPaid: "0.00" }]);
+    expect(response.status).toBe(200);
+    expect(fake.neft.mock.calls[0][3]).toEqual({ amount: 1000 });
+    expect(fake.neft.mock.calls[1][3]).toEqual({ amount: 1000, remarks: "UTR / Ref: UTR9" });
+  });
+
+  it("GST is never sent: bulk passes only the basic payment amount and remarks", async () => {
+    fake.selects = [[row(1)], [{ id: id(1) }]];
+    await pay([{ id: id(1), amount: 500, reference: "U", expectedTotalPaid: "0.00", gstSettled: true, gstAmount: 99 } as never]);
+    expect(Object.keys(fake.neft.mock.calls[0][3]).sort()).toEqual(["amount", "remarks"]);
   });
 });
