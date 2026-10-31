@@ -376,9 +376,9 @@ export default async function AdminListPage({
       </form>
 
       {tab === "verified_ready_payment" && (needsPayableCount > 0 || needsPayableFilter) ? (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          <p><strong>{needsPayableCount}</strong> item{needsPayableCount === 1 ? "" : "s"} need{needsPayableCount === 1 ? "s" : ""} a payable calculation before payment. Open each item to save it (Cash Vouchers: Bill passed for).</p>
-          <Link href={needsPayableHref(!needsPayableFilter)} className={`rounded-md border px-3 py-1.5 text-sm font-medium ${needsPayableFilter ? "border-[#0b1f3a] bg-[#0b1f3a] text-white" : "border-amber-400 bg-white text-amber-900 hover:bg-amber-100"}`}>
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900">
+          <p><strong>{needsPayableCount}</strong> item{needsPayableCount === 1 ? " has" : "s have"} no payable calculation. Bulk payment will use the Basic amount with no deductions.</p>
+          <Link href={needsPayableHref(!needsPayableFilter)} className={`rounded-md border px-3 py-1.5 text-sm font-medium ${needsPayableFilter ? "border-[#0b1f3a] bg-[#0b1f3a] text-white" : "border-sky-300 bg-white text-sky-900 hover:bg-sky-100"}`}>
             {needsPayableFilter ? "Show all Verified" : "Needs payable calculation"}
           </Link>
         </div>
@@ -470,7 +470,7 @@ export default async function AdminListPage({
                         })}
                       />
                       {tab === "verified_ready_payment" && !payableIsSet(row) ? (
-                        <span className="text-xs text-amber-800">
+                        <span className="text-xs text-gray-600">
                           {payableNotSetLabel(row)}.{" "}
                           <Link href={`/admin/advice/${row.id}`} className="font-medium underline">Open to set</Link>
                         </span>

@@ -124,14 +124,36 @@ describe("bulk payment rows", () => {
     expect(fake.neft).not.toHaveBeenCalled();
   });
 
-  it("refuses NEFT rows without a saved payable amount and Cash rows without Bill Passed For", async () => {
-    fake.selects = [[row(1, { payableAmount: null }), cash(2, { billPassedFor: null }), cash(3, { isAdvance: true, advanceNo: "ADV/1", payableAmount: null })], [{ id: id(1) }, { id: id(2) }, { id: id(3) }]];
-    const body = await (await pay([{ id: id(1), amount: 1, reference: "U", expectedTotalPaid: "0.00" }, { id: id(2) }, { id: id(3) }])).json();
+  it("NEFT without a saved payable is paid on Basic: capped at Basic, sent with payableFromBasicIfUnset; saved-payable rows keep the Due cap", async () => {
+    fake.selects = [[row(1, { payableAmount: null, basicAmount: "800.00" })], [{ id: id(1) }]];
+    let body = await (await pay([{ id: id(1), amount: 800.01, expectedTotalPaid: "0.00" }])).json();
+    expect(body.errors.map((e: { error: string }) => e.error)).toEqual(["The amount is more than the Basic amount of ₹ 800.00."]);
+    expect(fake.neft).not.toHaveBeenCalled();
+
+    fake.selects = [[row(1, { payableAmount: null, basicAmount: "800.00" }), row(2, { payableAmount: "1000.00", totalPaid: "400.00" })], [{ id: id(1) }, { id: id(2) }]];
+    body = await (await pay([{ id: id(1), amount: 800, expectedTotalPaid: "0.00" }, { id: id(2), amount: 600.01, expectedTotalPaid: "400.00" }])).json();
+    expect(body.errors.map((e: { error: string }) => e.error)).toEqual(["The amount is more than the remaining ₹ 600.00."]);
+
+    fake.selects = [[row(1, { payableAmount: null, basicAmount: "800.00" })], [{ id: id(1) }]];
+    body = await (await pay([{ id: id(1), amount: 800, expectedTotalPaid: "0.00" }])).json();
+    expect(fake.neft).toHaveBeenCalledWith(id(1), "Finance User", ["ALL"], { amount: 800 }, expect.objectContaining({ payableFromBasicIfUnset: true, expectedTotalPaid: "0.00" }));
+    expect(body.results[0].outcome).toBe("done");
+  });
+
+  it("refuses an NEFT row with no Basic stored, and a Cash Advance without its payable amount", async () => {
+    fake.selects = [[row(1, { payableAmount: null, basicAmount: null }), cash(3, { isAdvance: true, advanceNo: "ADV/1", payableAmount: null })], [{ id: id(1) }, { id: id(3) }]];
+    const body = await (await pay([{ id: id(1), amount: 1, reference: "U", expectedTotalPaid: "0.00" }, { id: id(3) }])).json();
     expect(body.errors.map((e: { error: string }) => e.error)).toEqual([
-      "Save the Arrears/TDS payable calculation on this advice first.",
-      "Save Bill passed for Rs. on this advice first.",
+      "Basic Amount is unavailable for this submission; contact Accounts before paying it.",
       "Save the Arrears/TDS payable calculation on this advice first.",
     ]);
+  });
+
+  it("Cash Voucher without Bill passed for: the single Cash action gets the voucher amount, with the audit note", async () => {
+    fake.selects = [[cash(1, { billPassedFor: null, amount: "950.00" })], [{ id: id(1) }]];
+    const body = await (await pay([{ id: id(1), amount: 5 }])).json();
+    expect(fake.cashDone).toHaveBeenCalledWith(id(1), "Finance User", ["ALL"], 950, expect.objectContaining({ extra: expect.objectContaining({ bulk: true, note: "bill passed for set to the voucher amount by bulk payment, no deductions" }) }));
+    expect(body.results[0].outcome).toBe("done");
   });
 
   it("a partial NEFT amount is allowed and goes through the single-item function with the UTR in remarks and the seen total", async () => {
