@@ -1,7 +1,7 @@
 import { PgDialect } from "drizzle-orm/pg-core";
 import type { SQL } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { baseFilterCondition, dashboardCountFields, dashboardFilterCondition, decisionCondition, hasActiveFilters, parseDashboardFilters, readDashboardCounts, searchCondition, submittedRangeConditions } from "@/lib/advice/dashboard-filters";
+import { stageFilterLabel, baseFilterCondition, dashboardCountFields, dashboardFilterCondition, decisionCondition, hasActiveFilters, parseDashboardFilters, readDashboardCounts, searchCondition, submittedRangeConditions } from "@/lib/advice/dashboard-filters";
 
 const render = (condition: SQL | undefined) => new PgDialect().sqlToQuery(condition!);
 
@@ -84,5 +84,14 @@ describe("counts", () => {
     expect(counts.stages.rejected).toBe(0);
     expect(counts.decisions.rejected).toBe(1);
     expect(readDashboardCounts(undefined).all).toBe(0);
+  });
+});
+
+describe("stage names", () => {
+  it("names every stage exactly as the filter buttons do", () => {
+    expect(stageFilterLabel("Received & In Process")).toBe("Received & In Process");
+    expect(stageFilterLabel("Payment Done")).toBe("Payment Done (Cash)");
+    expect(stageFilterLabel("Verified - Ready for Payment")).toBe("Verified - Ready for Payment");
+    expect(stageFilterLabel("Waiting on Authority")).toBe("Waiting on Authority");
   });
 });

@@ -11,7 +11,7 @@ export function NewSubmissionLink() {
       href="/"
       target="_blank"
       rel="noopener noreferrer"
-      className="rounded-md border border-white/30 px-3 py-1.5 text-sm font-medium text-white/80 hover:border-white/50 hover:text-white"
+      className="whitespace-nowrap rounded-md border border-white/30 px-3 py-1.5 text-sm font-medium text-white/80 hover:border-white/50 hover:text-white"
     >
       + New Submission
     </Link>

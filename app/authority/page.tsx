@@ -12,7 +12,8 @@ import { addCalendarDays, formatDateOnly, formatIstDate, todayInIst } from "@/li
 import { parseReportRange } from "@/lib/cash-receipt-report";
 import { CashReceiptReportBar } from "@/components/account/CashReceiptReportBar";
 import { buildTabCondition } from "@/lib/admin/filters";
-import { PIPELINE_SUMMARY_STAGES, PipelineSummary } from "@/components/admin/PipelineSummary";
+import { PIPELINE_SUMMARY_STAGES } from "@/components/admin/PipelineSummary";
+import { stageFilterLabel } from "@/lib/advice/dashboard-filters";
 import { StageAgingIndicator } from "@/components/admin/StageAgingIndicator";
 import { compareByCurrentStageAge } from "@/lib/advice/stage-aging";
 import { DgExecutiveDashboard } from "@/components/admin/DgExecutiveDashboard";
@@ -135,8 +136,6 @@ export default async function TeamDashboard({ searchParams }: { searchParams: Pr
       ? or(isNotNull(paymentAdvices.authorityApprovedAt), isNotNull(paymentAdvices.authorityRejectedAt), eq(paymentAdvices.status, "REJECTED"))
       : and(eq(paymentAdvices.status, "SUBMITTED"), isNull(paymentAdvices.authorityApprovedAt), isNull(paymentAdvices.authorityRejectedAt)))
     : teamScope;
-  const showSummary = view === "my-submissions" || !isAuthority;
-  const summaryScope = view === "my-submissions" ? ownSubmissions : teamScope;
   // Stage / Decision / search / date filters (History, My Submissions, Team
   // Submissions; Pending My Recommendation has none). Always ANDed onto
   // scopeWhere above, which is unchanged, so they only ever narrow it.
@@ -147,7 +146,7 @@ export default async function TeamDashboard({ searchParams }: { searchParams: Pr
   const filterCondition = dashboardFilterCondition(filters);
   const where = filterCondition ? and(scopeWhere, filterCondition) : scopeWhere;
 
-  const [rawRows, summaryRows, countRows] = await Promise.all([
+  const [rawRows, countRows] = await Promise.all([
     db.select({
     id: paymentAdvices.id, serialNo: paymentAdvices.serialNo, cashVoucherNo: paymentAdvices.cashVoucherNo,
     advanceNo: paymentAdvices.advanceNo, isAdvance: paymentAdvices.isAdvance, paymentMode: paymentAdvices.paymentMode,
@@ -162,12 +161,6 @@ export default async function TeamDashboard({ searchParams }: { searchParams: Pr
     finalRejectedAt: paymentAdvices.rejectedAt, finalRejectedBy: paymentAdvices.rejectedBy,
     finalRejectionRemarks: paymentAdvices.rejectionRemarks,
   }).from(paymentAdvices).where(where).orderBy(desc(paymentAdvices.submittedAt)),
-    showSummary ? Promise.all(PIPELINE_SUMMARY_STAGES.map(async ({ tab }) => {
-      const [result] = await db.select({ count: count(), sum: sum(paymentAdvices.amount) })
-        .from(paymentAdvices)
-        .where(and(summaryScope, buildTabCondition(tab)));
-      return { tab, count: result?.count ?? 0, sum: Number(result?.sum ?? 0) };
-    })) : Promise.resolve([]),
     // One query for every filter count, over the same scope as the table.
     filtersEnabled ? db.select(dashboardCountFields(filters)).from(paymentAdvices).where(scopeWhere) : Promise.resolve([]),
   ]);
@@ -238,15 +231,11 @@ export default async function TeamDashboard({ searchParams }: { searchParams: Pr
       </>}
       <div className="ml-auto mb-1.5"><StageLegend /></div>
     </nav>
-    {showSummary ? <PipelineSummary
-      metrics={summaryRows}
-      hrefFor={(tab) => `/authority?role=${activeGrant.role}&view=${view}&stage=${tab}`}
-    /> : null}
     {filtersEnabled && (scopeTotal > 0 || hasActiveFilters(filters)) ? <DashboardFilters base={filterBase} filters={filters} counts={counts} showDecision={showDecision} /> : null}
     {rows.length === 0 && hasActiveFilters(filters) ? <FilteredEmptyState base={filterBase} filters={filters} /> : rows.length === 0 ? <div className="rounded-lg border border-gray-200 p-10 text-center text-sm text-gray-500">
       {isAuthority && view === "history" ? "No decisions recorded yet." : view === "my-submissions" ? "No submissions found for your login email." : isAuthority ? "Nothing is waiting for your recommendation." : "No submissions found for this team scope."}
     </div> : <div className="dashboard-scroll-frame overflow-x-auto rounded-lg border border-gray-200"><table className={`w-full text-left text-sm ${showDownloads ? "dashboard-compact-table" : ""}`}>
-      <thead className="bg-gray-50/80 text-xs uppercase text-gray-500"><tr><th className="p-3">Reference</th><th className="p-3">Payee / Particulars</th><th className="p-3">Amount</th><th className="p-3">Submitted</th><th className="p-3">{isAuthority && view === "history" ? "Decision" : isAuthority && view === "pending" ? "Action" : "Current Stage"}</th>{showDownloads ? <th className="p-3">Download</th> : null}{isAuthority && view === "history" ? <th className="p-3">Action</th> : null}</tr></thead>
+      <thead className="bg-gray-50/80 text-xs uppercase text-gray-500"><tr><th className="p-3">Reference</th><th className="p-3">Payee / Particulars</th><th className="p-3">Amount</th><th className="p-3">Submitted</th><th className="p-3">{isAuthority && view === "history" ? "Decision" : isAuthority && view === "pending" ? "Action" : "Current Stage"}</th>{showDownloads ? <th className="p-3">Download</th> : null}{isAuthority && view === "history" ? <><th className="p-3">Current Stage</th><th className="p-3">Action</th></> : null}</tr></thead>
       <tbody className="divide-y divide-gray-100">{rows.map((row) => <tr key={row.id} className="align-top">
         <td className="p-3 font-medium text-[#0b1f3a]">{showDownloads ? withSlashBreaks(displayNoFor(row.paymentMode as PaymentMode, row.serialNo, row.cashVoucherNo, row.isAdvance, row.advanceNo)) : displayNoFor(row.paymentMode as PaymentMode, row.serialNo, row.cashVoucherNo, row.isAdvance, row.advanceNo)}</td>
         <td className={`p-3 ${showDownloads ? "max-w-[10rem] xl:max-w-[14rem]" : ""}`}><div className={`font-medium ${showDownloads ? "truncate" : ""}`} title={row.payeeName}>{row.payeeName}</div><div className={`mt-1 max-w-xs text-xs text-gray-600 ${showDownloads ? "line-clamp-2" : ""}`} title={row.nature}>{row.nature}</div>{isAuthority && view === "pending" && row.revisionCount >= 1 ? <div className="mt-2 max-w-sm rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs text-amber-900"><strong>Resubmission - revision {row.revisionCount}</strong>{row.adminRemarks ? <div className="mt-1">Previous remarks: {row.adminRemarks}</div> : null}</div> : null}</td>
@@ -254,7 +243,11 @@ export default async function TeamDashboard({ searchParams }: { searchParams: Pr
         <td className="p-3 whitespace-nowrap">{view !== "my-submissions" ? <div className={showDownloads ? "max-w-[5.5rem] truncate" : ""} title={row.submittedBy}>{row.submittedBy}</div> : null}<div className="text-xs text-gray-500">{date(row.submittedAt)}</div></td>
         <td className="p-3">{isAuthority && view === "pending" ? <div className="flex flex-col items-start gap-2"><StageBadge stage="Waiting on Authority" /><StageAgingIndicator advice={row} /><ViewLink adviceId={row.id} from="pending" /></div> : isAuthority && view === "history" ? <div className="text-xs"><StageBadge stage={row.status === "REJECTED" ? "Rejected" : row.approvedAt ? "Awaiting Finance Review" : "Sent Back"} /><div className="mt-1 text-gray-500">{date(row.finalRejectedAt ?? row.approvedAt ?? row.rejectedAt!)}</div>{(row.finalRejectionRemarks ?? row.authorityRemarks) ? <div className="mt-1 max-w-xs text-gray-600">{row.finalRejectionRemarks ?? row.authorityRemarks}</div> : null}</div> : <div className="text-xs"><StageBadge stage={pipelineStageFor(row)} /><div><StageAgingIndicator advice={row} /></div>{row.adminRemarks ? <div className="mt-2 max-w-xs rounded bg-amber-50 px-2 py-1 text-amber-800">Sent-back remarks: {row.adminRemarks}</div> : null}{view === "my-submissions" ? <div className="mt-2"><SubmitterEditAction status={row.status} editToken={row.editToken} editTokenExpiresAt={row.editTokenExpiresAt} /></div> : null}</div>}</td>
         {showDownloads ? <td className="p-3"><SubmissionDownloadButtons adviceId={row.id} attachments={attachmentsByAdvice.get(row.id) ?? []} pdfHref={submissionPdfHref(row)} pdfLabel={submissionPdfLabel(row)} /></td> : null}
-        {isAuthority && view === "history" ? <td className="p-3"><ViewLink adviceId={row.id} from="history" /></td> : null}
+        {isAuthority && view === "history" ? <>
+          {/* Where the submission is now, named and colored exactly like the stage filter above. */}
+          <td className="p-3"><StageBadge stage={pipelineStageFor(row)} label={stageFilterLabel(pipelineStageFor(row))} /></td>
+          <td className="p-3"><ViewLink adviceId={row.id} from="history" /></td>
+        </> : null}
       </tr>)}</tbody>
     </table></div>}
   </div>;
