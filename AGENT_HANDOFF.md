@@ -49,9 +49,15 @@ Design system: Navy `#0B1F3A`, Forest green `#2E8B57`, Amber `#E8A33D`. Headings
 
 ## 3. Current State (update this every session)
 
-**Last updated:** 4 November 2026, by Claude Opus 5.5 (stage filters on the Authority and Team dashboards; branch `feature/dashboard-stage-filters`, PR open, not merged; see entry below)
+**Last updated:** 4 November 2026, by Claude Opus 5.5 (dashboard polish; branch `feature/dashboard-polish`, PR open, not merged; see entry below)
 
-### In review: stage filters on the Authority and Team dashboards (Claude Opus 5.5, 2026-11-04, branch `feature/dashboard-stage-filters`, PR open, not merged). No migration, no access change.
+### In review: dashboard polish (Claude Opus 5.5, 2026-11-04, branch `feature/dashboard-polish`, PR open, not merged). No migration, no access change.
+- Removed the old Pipeline Summary cards from My Submissions and Team Submissions on `/authority` (the stage filter buttons show the same counts). The component stays: Finance Admin home and the DG Executive Dashboard still use it. Nothing else linked to the cards; old `?stage=` links keep working through the filter. The ten per-stage summary queries are gone too. The cards also showed a rupee total per stage; that total is no longer shown on these two tabs.
+- Authority History has a new "Current Stage" column (after Decision, before Action): `StageBadge` with the stage filter's own name (`stageFilterLabel` in `lib/advice/dashboard-filters.ts`) and the same colors. `StageBadge` got an optional `label` prop; without it every other table is unchanged (short labels).
+- Header at 390px: `app/authority/layout.tsx` (Authority and Team Dashboard header) now wraps like the Finance Admin header, the title is `text-base` on phones and may wrap, and `+ New Submission` (`components/account/NewSubmissionLink.tsx`, shared) no longer breaks inside the button. Checked at 390 and 1440: Authority, Team (Branch), Self, DG Executive and Finance Admin headers, no overlap and no horizontal scroll.
+
+### Merged and live: stage filters on the Authority and Team dashboards (Claude Opus 5.5, 2026-11-04, PR #23, merge commit `a8266ca`, deployed 2026-11-04 07:41 UTC). No migration, no access change.
+- Verified read-only on production: Authority History and My Submissions, Team Submissions and My Submissions, and SELF My Submissions load for real accounts, and every stage and decision count matches the database. No 5xx or runtime errors in the first minutes; the 30-minute check is in the session report.
 - Where: `/authority` History and My Submissions (AUTHORITY), and My Submissions plus Team Submissions (BRANCH, DEPARTMENT; SELF has My Submissions only). Pending My Recommendation and the Cash Receipts tab are unchanged and ignore the new URL parameters.
 - One shared component, `components/dashboard/DashboardFilters.tsx`, and one pure module, `lib/advice/dashboard-filters.ts`. Stage names and order come from `PIPELINE_SUMMARY_STAGES`, colors from `STAGE_STYLE` / `STAGE_FOR_TAB` (the Finance ones); the existing "Stage colors" legend in the tab bar is kept as is.
 - Stage buttons with counts (only stages with rows, plus All, plus the selected one); History also has a Decision filter (Recommended, Sent Back, Rejected: exactly what the Decision column shows). Search (serial, Cash Voucher or Advance number, payee, particulars; LIKE wildcards escaped) and a submitted date range (inclusive IST days). All combine with AND.
@@ -1595,6 +1601,8 @@ Status legend: 🔴 unverified / high risk · 🟡 unverified / lower risk · �
 - **`lib/email/templates.ts`'s `shell()` loads the MCCIA logo from `https://payment-advice.vercel.app/mccia-logo.png` (this app's own domain), not from `mcciapune.com` directly (2026-10-01, fixed a real broken-image bug affecting every email this app sends).** Don't revert to hotlinking the logo from `mcciapune.com` or any other third-party host — email clients need a stable, reliably-reachable image URL, and this app doesn't control that site's hotlinking/availability. The underlying asset is `public/mccia-logo.png`, the same file the Payment Advice/Cash Voucher/Forwarding Memo PDFs already embed — if that file is ever replaced with a different logo, no code change is needed here, but re-check the hardcoded `width="160" height="38"` in `shell()` still matches its aspect ratio (currently ~4.2:1, matching the real 1085x258 asset).
 
 ## 6. Session Log
+
+2026-11-04 - Claude Opus 5.5 - Merged PR #23 (dashboard stage filters) and checked production read-only (counts match the database). Then `feature/dashboard-polish`: removed the duplicate Pipeline Summary cards from My Submissions / Team Submissions, added a Current Stage column to Authority History, fixed the 390px dashboard header overlap. PR open, not merged. No migration.
 
 2026-11-04 - Claude Opus 5.5 - `feature/dashboard-stage-filters`: stage filter (and Decision on History), search and submitted date range on the Authority History / My Submissions and Team My Submissions / Team Submissions tabs, one shared component, counts and rows always within the existing scope. Also recorded PR #22 as merged and live. PR open, not merged. No migration.
 

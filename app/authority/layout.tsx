@@ -18,13 +18,15 @@ export default async function AuthorityLayout({ children }: { children: React.Re
   return (
     <div className="flex min-h-full flex-1 flex-col">
       <header className="border-b border-gray-200 bg-[#0b1f3a]">
-        <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-3">
-          <Link href="/authority" className="flex items-center gap-3">
-            <Image src="/mccia-logo.png" alt="MCCIA logo" width={1085} height={258} className="h-7 w-auto" />
-            <span className="font-heading text-lg text-white">{isAuthorityContext ? "Authority Recommendations" : "Team Dashboard"}</span>
+        {/* Wraps like the Finance Admin header: on a phone the buttons move
+            under the title instead of squeezing on top of it. */}
+        <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-x-6 gap-y-3 px-6 py-3">
+          <Link href="/authority" className="flex min-w-0 items-center gap-3">
+            <Image src="/mccia-logo.png" alt="MCCIA logo" width={1085} height={258} className="h-7 w-auto shrink-0" />
+            <span className="font-heading text-base text-white sm:text-lg">{isAuthorityContext ? "Authority Recommendations" : "Team Dashboard"}</span>
           </Link>
           {session && hasTeamDashboardRole(session) ? (
-            <div className="flex items-center gap-5 text-sm">
+            <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
               {showFullAdminSwitch ? (
                 <Link href="/admin" className="font-medium text-white/80 hover:text-white">
                   Full Admin

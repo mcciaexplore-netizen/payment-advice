@@ -202,3 +202,36 @@ describe("filter buttons, URL state and empty state", () => {
     expect(html).not.toContain('aria-label="Filter by stage"');
   });
 });
+
+describe("dashboard polish (2026-11-04)", () => {
+  it.each([["AUTHORITY", "my-submissions"], ["BRANCH", "team-submissions"], ["BRANCH", "my-submissions"], ["DEPARTMENT", "team-submissions"], ["SELF", "my-submissions"]] as const)(
+    "%s %s: no Pipeline Summary cards (the filter buttons carry the counts), and no per-stage summary queries",
+    async (role, view) => {
+      const html = await render(role, { view });
+      expect(html).not.toContain("Pipeline Summary");
+      expect(html).toContain('aria-label="Filter by stage"');
+      expect(adviceQueries().filter((query) => query.fields && "count" in query.fields)).toEqual([]);
+    },
+  );
+
+  it("an old ?stage= link (as the cards used) still filters the table", async () => {
+    await render("BRANCH", { view: "team-submissions", stage: "fully_payment_settled" });
+    expect(rowsQuery().sql).toContain('"payment_advices"."status" = $');
+  });
+
+  it("History has a Current Stage column named and colored like the stage filter; the Decision column is unchanged", async () => {
+    state.rows = [advice(1, { verifiedAt: daysAgo(2) }), advice(2, { status: "APPROVED", paymentMode: "CASH", paymentDoneAt: daysAgo(1) })];
+    const html = await render("AUTHORITY", { view: "history" });
+    expect(html).toMatch(/<th class="p-3">Decision<\/th><th class="p-3">Current Stage<\/th><th class="p-3">Action<\/th>/);
+    expect(html).toMatch(/<span title="Verified - Ready for Payment" class="[^"]*bg-teal-100[^"]*">Verified - Ready for Payment<\/span>/);
+    expect(html).toMatch(/<span title="Payment Done" class="[^"]*">Payment Done \(Cash\)<\/span>/);
+    expect(html).toContain(">Recommended</span>");
+  });
+
+  it("My Submissions keeps its own Current Stage column with the short badge labels", async () => {
+    state.rows = [advice(1, { verifiedAt: daysAgo(2) })];
+    const html = await render("SELF", { view: "my-submissions" });
+    expect(html).toMatch(/<span title="Verified - Ready for Payment" class="[^"]*">Verified<\/span>/);
+    expect(html).not.toContain("<th class=\"p-3\">Action</th>");
+  });
+});

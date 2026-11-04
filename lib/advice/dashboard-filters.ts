@@ -2,6 +2,8 @@ import { and, gte, ilike, isNotNull, isNull, lt, ne, or, sql, type SQL } from "d
 import { paymentAdvices } from "@/lib/db/schema";
 import { buildTabCondition, isAdminTab, type AdminTab } from "@/lib/admin/filters";
 import { PIPELINE_SUMMARY_STAGES } from "@/components/admin/PipelineSummary";
+import { STAGE_FOR_TAB } from "@/lib/advice/stage-style";
+import type { PipelineStage } from "@/lib/advice/pipeline-stage";
 import { addCalendarDays } from "@/lib/date-time";
 
 /** Filters for the Authority / Team dashboard tables (History, My
@@ -18,6 +20,12 @@ export const DECISIONS = [
   { value: "rejected", label: "Rejected" },
 ] as const;
 export type Decision = (typeof DECISIONS)[number]["value"];
+
+/** The stage filter's button name for a stage (e.g. "Payment Done (Cash)"),
+ * so a table column can name a stage exactly as the filter does. */
+export function stageFilterLabel(stage: PipelineStage): string {
+  return PIPELINE_SUMMARY_STAGES.find(({ tab }) => STAGE_FOR_TAB[tab] === stage)?.label ?? stage;
+}
 
 export type DashboardFilters = { stage?: StageTab; decision?: Decision; q?: string; dateFrom?: string; dateTo?: string };
 

@@ -10,7 +10,7 @@ import { STAGE_STYLE } from "@/lib/advice/stage-style";
  * stage's color — color is reinforcement, the text is what actually
  * carries the meaning. Shared by the Finance Admin and Authority
  * dashboards so a given stage always looks identical in both. */
-export function StageBadge({ stage, className }: { stage: PipelineStage; className?: string }) {
+export function StageBadge({ stage, className, label }: { stage: PipelineStage; className?: string; /** Text to show instead of the short label (same colors). */ label?: string }) {
   const style = STAGE_STYLE[stage];
   return (
     <span
@@ -21,7 +21,7 @@ export function StageBadge({ stage, className }: { stage: PipelineStage; classNa
         className,
       )}
     >
-      {style.shortLabel}
+      {label ?? style.shortLabel}
     </span>
   );
 }
