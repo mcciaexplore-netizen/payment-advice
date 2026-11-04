@@ -11,7 +11,7 @@ import { PaymentMode } from "@/lib/validation/payment-advice";
 import { addCalendarDays, formatDateOnly, formatIstDate, todayInIst } from "@/lib/date-time";
 import { parseReportRange } from "@/lib/cash-receipt-report";
 import { CashReceiptReportBar } from "@/components/account/CashReceiptReportBar";
-import { buildTabCondition, isAdminTab } from "@/lib/admin/filters";
+import { buildTabCondition } from "@/lib/admin/filters";
 import { PIPELINE_SUMMARY_STAGES, PipelineSummary } from "@/components/admin/PipelineSummary";
 import { StageAgingIndicator } from "@/components/admin/StageAgingIndicator";
 import { compareByCurrentStageAge } from "@/lib/advice/stage-aging";
@@ -21,6 +21,8 @@ import { submissionPdfHref, submissionPdfLabel } from "@/lib/advice/submission-p
 import { cashReceiptStatusText } from "@/lib/cash-receipts/status";
 import { SubmissionDownloadButtons, type SubmissionAttachment } from "@/components/admin/SubmissionDownloadButtons";
 import { SubmitterEditAction } from "@/components/admin/SubmitterEditAction";
+import { DashboardFilters, FilteredEmptyState } from "@/components/dashboard/DashboardFilters";
+import { dashboardCountFields, dashboardFilterCondition, hasActiveFilters, parseDashboardFilters, readDashboardCounts } from "@/lib/advice/dashboard-filters";
 
 export const dynamic = "force-dynamic";
 
@@ -43,7 +45,7 @@ function roleLabel(grant: DashboardGrant): string {
     : `${grant.role === "BRANCH" ? "Branch" : "Department"}: ${grant.scopeValue}`;
 }
 
-export default async function TeamDashboard({ searchParams }: { searchParams: Promise<{ view?: string; role?: string; stage?: string; dateFrom?: string; dateTo?: string }> }) {
+export default async function TeamDashboard({ searchParams }: { searchParams: Promise<{ view?: string; role?: string; stage?: string; decision?: string; q?: string; dateFrom?: string; dateTo?: string }> }) {
   const session = await getAdminSession();
   if (!session) return null;
   const [accounts, roleRows, authorityRows] = await Promise.all([
@@ -133,12 +135,19 @@ export default async function TeamDashboard({ searchParams }: { searchParams: Pr
       ? or(isNotNull(paymentAdvices.authorityApprovedAt), isNotNull(paymentAdvices.authorityRejectedAt), eq(paymentAdvices.status, "REJECTED"))
       : and(eq(paymentAdvices.status, "SUBMITTED"), isNull(paymentAdvices.authorityApprovedAt), isNull(paymentAdvices.authorityRejectedAt)))
     : teamScope;
-  const requestedStage = isAdminTab(params.stage) && params.stage !== "all" ? params.stage : undefined;
   const showSummary = view === "my-submissions" || !isAuthority;
   const summaryScope = view === "my-submissions" ? ownSubmissions : teamScope;
-  const where = requestedStage && showSummary ? and(scopeWhere, buildTabCondition(requestedStage)) : scopeWhere;
+  // Stage / Decision / search / date filters (History, My Submissions, Team
+  // Submissions; Pending My Recommendation has none). Always ANDed onto
+  // scopeWhere above, which is unchanged, so they only ever narrow it.
+  const filtersEnabled = view !== "pending";
+  const showDecision = isAuthority && view === "history";
+  const filters = filtersEnabled ? parseDashboardFilters(params, { decision: showDecision }) : {};
+  const filterBase = { role: activeGrant.role, view };
+  const filterCondition = dashboardFilterCondition(filters);
+  const where = filterCondition ? and(scopeWhere, filterCondition) : scopeWhere;
 
-  const [rawRows, summaryRows] = await Promise.all([
+  const [rawRows, summaryRows, countRows] = await Promise.all([
     db.select({
     id: paymentAdvices.id, serialNo: paymentAdvices.serialNo, cashVoucherNo: paymentAdvices.cashVoucherNo,
     advanceNo: paymentAdvices.advanceNo, isAdvance: paymentAdvices.isAdvance, paymentMode: paymentAdvices.paymentMode,
@@ -159,7 +168,12 @@ export default async function TeamDashboard({ searchParams }: { searchParams: Pr
         .where(and(summaryScope, buildTabCondition(tab)));
       return { tab, count: result?.count ?? 0, sum: Number(result?.sum ?? 0) };
     })) : Promise.resolve([]),
+    // One query for every filter count, over the same scope as the table.
+    filtersEnabled ? db.select(dashboardCountFields(filters)).from(paymentAdvices).where(scopeWhere) : Promise.resolve([]),
   ]);
+  const counts = readDashboardCounts(countRows[0]);
+  // Subtitles keep counting the whole tab, whatever the filters.
+  const scopeTotal = filtersEnabled ? counts.total : rawRows.length;
 
   // The Download column (View / Download Attachment + the PDF) shows on My
   // Submissions for every role and on a BRANCH/DEPARTMENT Team Submissions
@@ -195,10 +209,10 @@ export default async function TeamDashboard({ searchParams }: { searchParams: Pr
 
   const subtitle = isAuthority
     ? view === "history" ? "Your previous recommendation decisions"
-      : view === "my-submissions" ? `${rows.length} submission${rows.length === 1 ? "" : "s"} made using ${account.email}`
+      : view === "my-submissions" ? `${scopeTotal} submission${scopeTotal === 1 ? "" : "s"} made using ${account.email}`
       : `${rows.length} submission${rows.length === 1 ? "" : "s"} waiting for you`
-    : view === "my-submissions" ? `${rows.length} submission${rows.length === 1 ? "" : "s"} made using ${account.email}`
-      : `${rows.length} submission${rows.length === 1 ? "" : "s"} in ${activeGrant.scopeValue}`;
+    : view === "my-submissions" ? `${scopeTotal} submission${scopeTotal === 1 ? "" : "s"} made using ${account.email}`
+      : `${scopeTotal} submission${scopeTotal === 1 ? "" : "s"} in ${activeGrant.scopeValue}`;
 
   return <div className="flex flex-col gap-6">
     <header><h1 className="font-heading text-3xl text-[#0b1f3a]">{isAuthority ? "Authority Recommendations" : isRestrictedGrant ? "My Submissions" : "Team Submissions"}</h1><p className="mt-1 text-sm text-gray-600">{subtitle}</p></header>
@@ -228,7 +242,8 @@ export default async function TeamDashboard({ searchParams }: { searchParams: Pr
       metrics={summaryRows}
       hrefFor={(tab) => `/authority?role=${activeGrant.role}&view=${view}&stage=${tab}`}
     /> : null}
-    {rows.length === 0 ? <div className="rounded-lg border border-gray-200 p-10 text-center text-sm text-gray-500">
+    {filtersEnabled && (scopeTotal > 0 || hasActiveFilters(filters)) ? <DashboardFilters base={filterBase} filters={filters} counts={counts} showDecision={showDecision} /> : null}
+    {rows.length === 0 && hasActiveFilters(filters) ? <FilteredEmptyState base={filterBase} filters={filters} /> : rows.length === 0 ? <div className="rounded-lg border border-gray-200 p-10 text-center text-sm text-gray-500">
       {isAuthority && view === "history" ? "No decisions recorded yet." : view === "my-submissions" ? "No submissions found for your login email." : isAuthority ? "Nothing is waiting for your recommendation." : "No submissions found for this team scope."}
     </div> : <div className="dashboard-scroll-frame overflow-x-auto rounded-lg border border-gray-200"><table className={`w-full text-left text-sm ${showDownloads ? "dashboard-compact-table" : ""}`}>
       <thead className="bg-gray-50/80 text-xs uppercase text-gray-500"><tr><th className="p-3">Reference</th><th className="p-3">Payee / Particulars</th><th className="p-3">Amount</th><th className="p-3">Submitted</th><th className="p-3">{isAuthority && view === "history" ? "Decision" : isAuthority && view === "pending" ? "Action" : "Current Stage"}</th>{showDownloads ? <th className="p-3">Download</th> : null}{isAuthority && view === "history" ? <th className="p-3">Action</th> : null}</tr></thead>
