@@ -32,14 +32,14 @@ describe("Payment Desk home page cards (compact, fits a laptop screen)", () => {
 
   it("flag on: owner order, two full rows of three on desktop, then the National Safety Week bar full width", () => {
     const { cards } = render(true);
-    expect(cards.map((card) => card.title)).toEqual(["Payment Advice", "Cash Payment Voucher", "Advance Payment Form", "Refund", "Cash Receipt", "Forwarding Memo", NSW]);
-    expect(cards.map(spans)).toEqual(["", "", "", "", "", "sm:col-span-1 lg:col-span-1", "sm:col-span-2 lg:col-span-3"]);
+    expect(cards.map((card) => card.title)).toEqual(["Payment Advice", "Cash Payment Voucher", "Advance Payment Form", "Refund", "Cash Receipt", "Forwarding Memo", "Reimbursement", NSW]);
+    expect(cards.map(spans)).toEqual(["", "", "", "", "", "sm:col-span-1 lg:col-span-1", "", ""]);
   });
 
   it("flag off: no Refund, Forwarding Memo before Cash Receipt, Cash Receipt spans the gap (2 of 3 desktop columns, full tablet row), then the bar", () => {
     const { cards, html } = render(false);
-    expect(cards.map((card) => card.title)).toEqual(["Payment Advice", "Cash Payment Voucher", "Advance Payment Form", "Forwarding Memo", "Cash Receipt", NSW]);
-    expect(cards.map(spans)).toEqual(["", "", "", "", "sm:col-span-2 lg:col-span-2", "sm:col-span-2 lg:col-span-3"]);
+    expect(cards.map((card) => card.title)).toEqual(["Payment Advice", "Cash Payment Voucher", "Advance Payment Form", "Forwarding Memo", "Cash Receipt", "Reimbursement", NSW]);
+    expect(cards.map(spans)).toEqual(["", "", "", "", "sm:col-span-2 lg:col-span-2", "", ""]);
     expect(html).not.toContain('href="/refund"');
   });
 
@@ -62,22 +62,25 @@ describe("Payment Desk home page cards (compact, fits a laptop screen)", () => {
     const { cards } = render(true);
     const description = (title: string) => /<p[^>]*>([^<]+)<\/p>/.exec(cards.find((card) => card.title === title)!.markup)![1];
     expect(description("Forwarding Memo")).toBe("For forwarding cheques, demand drafts, and other instruments to Accounts.");
-    expect(description("Refund")).toBe("Request a refund with payee, amount, bank details, and documents.");
+    expect(description("Refund")).toBe("Refund for hall booking, event booking, membership, and more.");
     expect(description("Payment Advice")).toBe("For payments made by NEFT to a vendor or beneficiary.");
     expect(description("Cash Payment Voucher")).toBe("For cash reimbursements paid directly to the submitter.");
     expect(description("Advance Payment Form")).toBe("For money needed before travel, events, or other planned expenses.");
     expect(description("Cash Receipt")).toBe("Create and print branch-numbered receipts for cash received.");
   });
 
-  it("National Safety Week is a slim single-row bar: same link (same tab), rose accent, title left, Open portal right", () => {
+  it("National Safety Week sits beside Reimbursement as a half-width card: same link (same tab), rose accent, Open portal", () => {
     expect(NSW_BRANCH_LOGIN_URL).toBe("https://nsw-web.vercel.app/select-branch");
-    const bar = render(true).cards.at(-1)!;
-    expect(bar.href).toBe(NSW_BRANCH_LOGIN_URL);
-    expect(bar.markup).not.toContain("target=");
-    expect(bar.classes).toEqual(expect.arrayContaining(["flex", "items-center", "py-3", "border-rose-300", "hover:border-rose-600"]));
-    expect(bar.markup).toContain("bg-rose-600");
-    expect(bar.markup.indexOf("<h3")).toBeLessThan(bar.markup.indexOf("Open portal →"));
-    expect(bar.markup).toContain("Branch login for the National Safety Week portal.");
+    const { cards, html } = render(true);
+    const nsw = cards.at(-1)!;
+    expect(nsw.href).toBe(NSW_BRANCH_LOGIN_URL);
+    expect(nsw.markup).not.toContain("target=");
+    expect(nsw.classes).toEqual(expect.arrayContaining(["border-rose-300", "hover:border-rose-600"]));
+    expect(nsw.markup).toContain("bg-rose-600");
+    expect(nsw.markup).toContain("Open portal →");
+    expect(nsw.markup).toContain("Branch login for the National Safety Week portal.");
+    expect(cards.at(-2)!.title).toBe("Reimbursement");
+    expect(html).toContain('class="grid grid-cols-1 gap-4 sm:grid-cols-2"');
   });
 
   it("keeps every form link and accent colour", () => {
@@ -87,12 +90,14 @@ describe("Payment Desk home page cards (compact, fits a laptop screen)", () => {
     expect(byTitle["Cash Payment Voucher"].href).toBe("/cash-voucher");
     expect(byTitle["Advance Payment Form"].href).toBe("/advance");
     expect(byTitle["Refund"].href).toBe("/refund");
+    expect(byTitle["Reimbursement"].href).toBe("/reimbursement");
     expect(byTitle["Cash Receipt"].href).toBe("/cash-receipt");
     expect(byTitle["Forwarding Memo"].href).toBe("/forwarding-memo");
     expect(byTitle["Payment Advice"].markup).toContain("bg-[#2e8b57]");
     expect(byTitle["Cash Payment Voucher"].markup).toContain("bg-[#e8a33d]");
     expect(byTitle["Advance Payment Form"].markup).toContain("bg-violet-600");
     expect(byTitle["Refund"].markup).toContain("bg-teal-600");
+    expect(byTitle["Reimbursement"].markup).toContain("bg-fuchsia-600");
     expect(byTitle["Cash Receipt"].markup).toContain("bg-sky-600");
     expect(byTitle["Forwarding Memo"].markup).toContain("bg-[#2e8b57]");
   });

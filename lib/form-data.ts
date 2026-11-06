@@ -71,6 +71,7 @@ export function parsePaymentAdviceFormData(formData: FormData) {
     natureOfExpenditure: str(formData, "natureOfExpenditure"),
     cashVoucherItems,
     isAdvance: rawIsAdvance === "true",
+    isReimbursement: str(formData, "isReimbursement") === "true",
     purposeOfAdvance: str(formData, "purposeOfAdvance"),
     previousPendingAdvanceAmount: rawPreviousPendingAdvanceAmount
       ? Number(rawPreviousPendingAdvanceAmount)

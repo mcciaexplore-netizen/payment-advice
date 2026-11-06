@@ -288,6 +288,11 @@ export const paymentAdviceFormSchema = z
     // Basic/GST split, cashVoucherItems, and natureOfExpenditure inputs are
     // all bypassed in favor of advanceParticulars + purposeOfAdvance below.
     isAdvance: z.boolean().default(false),
+    // Reimbursement — the Cash Payment Voucher layout (expense line items, the
+    // submitter as payee) with a Cash/Online choice. Not persisted: Cash is
+    // stored as a normal CASH voucher, Online as a NEFT row with line items
+    // and bank details but no vendor / Basic-GST split / Tax Invoice.
+    isReimbursement: z.boolean().default(false),
     purposeOfAdvance: optionalTrimmed(),
     // Self-declared by the submitter, not system-verified (no Settlement
     // tracking exists yet — explicitly out of scope). Defaults to 0;
@@ -352,7 +357,7 @@ export const paymentAdviceFormSchema = z
     // an NEFT-routed advance — Finance already has the submitter's bank
     // details on file as staff, and the fields stay visible/editable on the
     // form in case they want to supply them anyway, just not required.
-    if (data.paymentMode === "NEFT" && !data.isAdvance) {
+    if (data.paymentMode === "NEFT" && !data.isAdvance && !data.isReimbursement) {
       // A regular Payment Advice must name a real vendor selected from the
       // list — free-text payee names are no longer accepted here (Advance
       // Payment is unaffected: payee is always the submitter there, via a
@@ -383,6 +388,11 @@ export const paymentAdviceFormSchema = z
           message: "Special Remarks are required",
         });
       }
+    }
+
+    // Bank details: required for a regular NEFT submission; optional for an
+    // NEFT-routed advance (see above) and for an Online reimbursement.
+    if (data.paymentMode === "NEFT" && !data.isAdvance && !data.isReimbursement) {
       if (!data.bankAccountNo) {
         ctx.addIssue({
           code: "custom",
@@ -453,14 +463,15 @@ export const paymentAdviceFormSchema = z
       // Bill & Reference — required for every non-advance submission; an
       // Advance Payment has no bill yet, so this whole section is hidden on
       // the form and skipped entirely when isAdvance is true (see above).
-      if (data.paymentMode === "NEFT" && !data.billNo) {
+      const neftVendorFlow = data.paymentMode === "NEFT" && !data.isReimbursement;
+      if (neftVendorFlow && !data.billNo) {
         ctx.addIssue({
           code: "custom",
           path: ["billNo"],
           message: "Bill number is required",
         });
       }
-      if (data.paymentMode === "NEFT" && !data.billDate) {
+      if (neftVendorFlow && !data.billDate) {
         ctx.addIssue({
           code: "custom",
           path: ["billDate"],
@@ -474,7 +485,7 @@ export const paymentAdviceFormSchema = z
         });
       }
 
-      if (data.paymentMode === "NEFT") {
+      if (neftVendorFlow) {
         if (!data.payeeAddress) {
           ctx.addIssue({ code: "custom", path: ["payeeAddress"], message: "Payee address is required" });
         }
@@ -517,7 +528,7 @@ export const paymentAdviceFormSchema = z
           }
         }
       }
-      if (data.paymentMode === "CASH") {
+      if (data.paymentMode === "CASH" || data.isReimbursement) {
         if (data.cashVoucherItems.length === 0) {
           ctx.addIssue({
             code: "custom",

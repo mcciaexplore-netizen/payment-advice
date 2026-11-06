@@ -4,6 +4,7 @@ import { refundRequests } from "@/lib/db/schema";
 import { formatDateOnly } from "@/lib/date-time";
 import { BRANCH_OPTIONS } from "@/lib/validation/payment-advice";
 import { AttachmentPreview } from "@/components/ui/AttachmentPreview";
+import { RefundReviewActions } from "@/components/admin/RefundReviewActions";
 import { REFUND_DOCUMENT_LABELS, REFUND_LIST_ORDER, buildRefundWhere, parseRefundFilterParams } from "@/lib/advice/refund-query";
 
 export const dynamic = "force-dynamic";
@@ -37,6 +38,8 @@ export default async function RefundRequestsPage({ searchParams }: { searchParam
     natureOfExpenditure: refundRequests.natureOfExpenditure,
     totalAmount: refundRequests.totalAmount,
     documents: refundRequests.documents,
+    status: refundRequests.status,
+    statusRemarks: refundRequests.statusRemarks,
   }).from(refundRequests).where(buildRefundWhere(params)).orderBy(REFUND_LIST_ORDER);
   const total = rows.reduce((sum, row) => sum + Math.round(Number(row.totalAmount) * 100), 0) / 100;
   const filtered = Boolean(params.branch || params.dateFrom || params.dateTo);
@@ -69,7 +72,7 @@ export default async function RefundRequestsPage({ searchParams }: { searchParam
       </form>
 
       <div className="overflow-x-auto rounded-md border border-gray-200">
-        <table className="w-full min-w-[960px] text-left text-sm">
+        <table className="w-full min-w-[1100px] text-left text-sm">
           <thead className="border-b border-gray-200 bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
             <tr>
               <th className="px-4 py-3">Reference</th>
@@ -78,12 +81,14 @@ export default async function RefundRequestsPage({ searchParams }: { searchParam
               <th className="px-4 py-3">Date</th>
               <th className="px-4 py-3">Submitted By</th>
               <th className="px-4 py-3">Documents</th>
+              <th className="px-4 py-3">Status</th>
               <th className="px-4 py-3">Request</th>
+              <th className="px-4 py-3">Review</th>
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 ? (
-              <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-500">No Refund requests found.</td></tr>
+              <tr><td colSpan={9} className="px-4 py-8 text-center text-gray-500">No Refund requests found.</td></tr>
             ) : rows.map((row) => (
               <tr key={row.id} className="border-b border-gray-100 align-top last:border-0 hover:bg-gray-50">
                 <td className="whitespace-nowrap px-4 py-3"><div className="font-medium text-[#0b1f3a]">{row.serialNo}</div><div className="text-xs text-gray-500">{row.branch}</div></td>
@@ -107,11 +112,22 @@ export default async function RefundRequestsPage({ searchParams }: { searchParam
                     </ul>
                   )}
                 </td>
+                <td className="px-4 py-3">
+                  {row.status === "SUBMITTED" ? <span className="text-xs text-gray-500">Submitted</span> : (
+                    <div className="max-w-[12rem] text-xs">
+                      <span className={`rounded px-2 py-0.5 font-medium ${row.status === "CANCELLED" ? "bg-[#b3261e]/10 text-[#b3261e]" : "bg-[#e8a33d]/15 text-[#8a5a00]"}`}>{row.status === "CANCELLED" ? "Cancelled" : "Sent back"}</span>
+                      {row.statusRemarks ? <p className="mt-1 text-gray-600">{row.statusRemarks}</p> : null}
+                    </div>
+                  )}
+                </td>
                 <td className="whitespace-nowrap px-4 py-3">
                   <div className="flex items-center gap-2">
                     <a href={`/api/refund/${row.id}/pdf`} target="_blank" rel="noreferrer" className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50">View</a>
                     <a href={`/api/refund/${row.id}/pdf?download=1`} className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50">Download</a>
                   </div>
+                </td>
+                <td className="px-4 py-3">
+                  {row.status === "SUBMITTED" ? <RefundReviewActions id={row.id} /> : <span className="text-xs text-gray-400">Closed</span>}
                 </td>
               </tr>
             ))}

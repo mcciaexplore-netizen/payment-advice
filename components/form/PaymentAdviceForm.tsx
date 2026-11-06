@@ -20,6 +20,7 @@ import { storeSubmissionSummary } from "@/lib/submission-summary";
 import { bankDetailsMismatch, invoiceBeneficiaryName } from "@/lib/invoice-autofill";
 import { resolveAutoFillEmail } from "@/lib/form/staff-email-autofill";
 import { resolveSourceFieldAutoFill } from "@/lib/form/source-field-autofill";
+import { resolveStaffBranch, resolveStaffDepartment } from "@/lib/form/staff-history-autofill";
 import {
   safeUploadFileName,
   type UploadedAttachment,
@@ -51,13 +52,17 @@ export function PaymentAdviceForm({
   editToken,
   existingAttachments,
   existingCashVoucherItemAttachments,
+  localPreview = false,
 }: {
+  /** Local dev with no database: skip Blob uploads; the server returns a fake
+   * confirmation without saving anything. */
+  localPreview?: boolean;
   /** Fixed per page, never toggled at runtime — "standard" is the plain
    * Dedicated public document route, or the existing Advance route. All render this
    * same component so the shared field logic (submitter/payee auto-fill,
    * Particulars, attachments) only ever lives in one place; only which
    * sections render, and whether isAdvance itself is true, differ. */
-  mode: "payment-advice" | "cash-voucher" | "advance";
+  mode: "payment-advice" | "cash-voucher" | "advance" | "reimbursement";
   recommendingAuthorities: RecommendingAuthority[];
   /** When set, this is a resubmission via /edit/[token] — pre-fill everything. */
   prefill?: Partial<PaymentAdviceFormInput> & { formDate?: string };
@@ -70,7 +75,10 @@ export function PaymentAdviceForm({
   existingCashVoucherItemAttachments?: Record<string, string>;
 }) {
   const isAdvance = mode === "advance";
-  const isCashVoucher = mode === "cash-voucher";
+  // Reimbursement shares the Cash Voucher layout (line items, submitter as
+  // payee), plus a Cash/Online choice and no Documents section.
+  const isReimbursement = mode === "reimbursement";
+  const isCashVoucher = mode === "cash-voucher" || isReimbursement;
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
   const [uploadingAttachments, setUploadingAttachments] = useState(false);
@@ -134,6 +142,7 @@ export function PaymentAdviceForm({
       paymentMode: isCashVoucher ? "CASH" : "NEFT",
       cashVoucherItems: isCashVoucher ? [{ clientKey: crypto.randomUUID(), billNo: "", billDate: undefined, description: "", amount: undefined as unknown as number }] : [],
       isAdvance,
+      isReimbursement,
       previousPendingAdvanceAmount: 0,
       // Seeded directly here (not via a useEffect that appends when empty)
       // since isAdvance is now fixed from the very first render for the
@@ -165,6 +174,8 @@ export function PaymentAdviceForm({
   // (safe to replace on the next match change) apart from a real manual
   // edit or an /edit/[token] resubmit prefill (never touched).
   const lastAutoFilledEmailRef = useRef<string | null>(null);
+  const lastAutoFilledDepartmentRef = useRef<string | null>(null);
+  const lastAutoFilledBranchRef = useRef<string | null>(null);
 
   const paymentMode = useWatch({ control, name: "paymentMode" });
   const hasBankDetailsMismatch = useWatch({ control, name: "bankDetailsMismatch" }) ?? false;
@@ -207,14 +218,14 @@ export function PaymentAdviceForm({
   ) + Object.values(cashVoucherBillFiles).flat().reduce((sum, file) => sum + file.size, 0);
 
   useEffect(() => {
-    if (isAdvance || paymentMode !== "CASH") return;
+    if (isAdvance || (paymentMode !== "CASH" && !isReimbursement)) return;
     const completeItems = cashVoucherItems.filter(
       (item) => Number.isFinite(item?.amount) && item.amount > 0,
     );
     setValue("amount", calculateCashVoucherTotal(completeItems), {
       shouldValidate: false,
     });
-  }, [cashVoucherItems, isAdvance, paymentMode, setValue]);
+  }, [cashVoucherItems, isAdvance, isReimbursement, paymentMode, setValue]);
 
   // Total (Rs.) is always Basic Amount + GST Amount for NEFT — auto-
   // calculated, read-only, updates live as either field changes. Mirrors
@@ -223,9 +234,9 @@ export function PaymentAdviceForm({
     (Number.isFinite(basicAmount) ? Number(basicAmount) : 0) +
     (Number.isFinite(gstAmount) ? Number(gstAmount) : 0);
   useEffect(() => {
-    if (isAdvance || paymentMode !== "NEFT") return;
+    if (isAdvance || isReimbursement || paymentMode !== "NEFT") return;
     setValue("amount", Math.round(neftTotal * 100) / 100, { shouldValidate: false });
-  }, [isAdvance, paymentMode, neftTotal, setValue]);
+  }, [isAdvance, isReimbursement, paymentMode, neftTotal, setValue]);
 
   // Advance Payment's Particulars total — same live-summed-total mechanic
   // as the Cash Voucher line items above. The first row is seeded via
@@ -305,6 +316,40 @@ export function PaymentAdviceForm({
     } else if (action.type === "clear") {
       setValue("submittedByEmail", "");
       lastAutoFilledEmailRef.current = null;
+    }
+
+    const departmentSelection = resolveStaffDepartment(staff?.department ?? null);
+    const department = departmentSelection?.submittedByDepartment ?? "";
+    const departmentAction = resolveSourceFieldAutoFill(
+      department,
+      getValues("submittedByDepartment") ?? "",
+      lastAutoFilledDepartmentRef.current,
+    );
+    if (departmentAction.type === "fill" && departmentSelection) {
+      setValue("submittedByDepartmentOption", departmentSelection.option);
+      setValue("submittedByDepartment", departmentSelection.submittedByDepartment);
+      lastAutoFilledDepartmentRef.current = department;
+    } else if (departmentAction.type === "clear") {
+      setValue(
+        "submittedByDepartmentOption",
+        "" as PaymentAdviceFormInput["submittedByDepartmentOption"],
+      );
+      setValue("submittedByDepartment", "");
+      lastAutoFilledDepartmentRef.current = null;
+    }
+
+    const branch = resolveStaffBranch(staff?.branch ?? null) ?? "";
+    const branchAction = resolveSourceFieldAutoFill(
+      branch,
+      getValues("branch") ?? "",
+      lastAutoFilledBranchRef.current,
+    );
+    if (branchAction.type === "fill") {
+      setValue("branch", branch as PaymentAdviceFormInput["branch"]);
+      lastAutoFilledBranchRef.current = branch;
+    } else if (branchAction.type === "clear") {
+      setValue("branch", "" as PaymentAdviceFormInput["branch"]);
+      lastAutoFilledBranchRef.current = null;
     }
   }
 
@@ -468,12 +513,12 @@ export function PaymentAdviceForm({
     // one per-expense bill below. Approval / Budget Letter is mandatory only
     // for Advance Payment.
     const hasTaxInvoice =
-      values.isAdvance || values.paymentMode === "CASH" ||
+      values.isAdvance || values.paymentMode === "CASH" || values.isReimbursement ||
       taxInvoice.length === 1 ||
       (existingAttachments?.TAX_INVOICE?.length ?? 0) > 0;
     const hasApprovalBudget = !values.isAdvance ||
       approvalBudget.length === 1 || (existingAttachments?.APPROVAL_BUDGET?.length ?? 0) > 0;
-    const missingCashBill = values.paymentMode === "CASH" && !values.isAdvance
+    const missingCashBill = (values.paymentMode === "CASH" || values.isReimbursement) && !values.isAdvance
       ? values.cashVoucherItems.find((item) =>
           (cashVoucherBillFiles[item.clientKey]?.length ?? 0) !== 1 &&
           !existingCashVoucherItemAttachments?.[item.id ?? item.clientKey],
@@ -511,7 +556,7 @@ export function PaymentAdviceForm({
     try {
       setUploadingAttachments(true);
       const uploadBatchId = crypto.randomUUID();
-      for (const { docType, files } of attachmentGroups) {
+      for (const { docType, files } of localPreview ? [] : attachmentGroups) {
         for (const file of files) {
           if (docType === "TAX_INVOICE" && autoFillInvoiceUpload) {
             uploadedAttachments.push(autoFillInvoiceUpload);
@@ -535,7 +580,7 @@ export function PaymentAdviceForm({
           });
         }
       }
-      if (values.paymentMode === "CASH" && !values.isAdvance) {
+      if (!localPreview && (values.paymentMode === "CASH" || values.isReimbursement) && !values.isAdvance) {
         for (const item of values.cashVoucherItems) {
           const file = cashVoucherBillFiles[item.clientKey]?.[0];
           if (!file) continue;
@@ -622,7 +667,7 @@ export function PaymentAdviceForm({
         branch: values.branch,
         natureOfExpenditure: values.isAdvance
           ? values.purposeOfAdvance ?? ""
-          : values.paymentMode === "CASH"
+          : values.paymentMode === "CASH" || values.isReimbursement
             ? values.cashVoucherItems.map((item) => item.description).join("; ")
             : values.natureOfExpenditure ?? "",
         authorityToken: data.authorityToken!,
@@ -1045,7 +1090,31 @@ export function PaymentAdviceForm({
               </div>
             </div>
           ) : null}
-          {!isAdvance && paymentMode === "NEFT" ? (
+          {isReimbursement ? (
+            <div className="sm:col-span-2">
+              <Field label="Payment Mode" required error={errors.paymentMode?.message}>
+                <div className="flex gap-6">
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="radio"
+                      checked={paymentMode === "CASH"}
+                      onChange={() => setValue("paymentMode", "CASH", { shouldValidate: true })}
+                    />
+                    Cash
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="radio"
+                      checked={paymentMode === "NEFT"}
+                      onChange={() => setValue("paymentMode", "NEFT", { shouldValidate: true })}
+                    />
+                    Online
+                  </label>
+                </div>
+              </Field>
+            </div>
+          ) : null}
+          {!isAdvance && !isReimbursement && paymentMode === "NEFT" ? (
             <>
               <Field
                 label="Basic Amount (Rs.) (*Subject to TDS)"
@@ -1090,7 +1159,7 @@ export function PaymentAdviceForm({
               </div>
             </>
           ) : null}
-          {!isAdvance && paymentMode === "CASH" ? (
+          {!isAdvance && (paymentMode === "CASH" || isReimbursement) ? (
             <CashVoucherItemsField
               register={register}
               control={control}
@@ -1113,7 +1182,7 @@ export function PaymentAdviceForm({
         </div>
       </Section>
 
-      {!isCashVoucher ? <Section title={isAdvance ? "4. Payment mode" : "4. Bank details"}>
+      {!isCashVoucher || (isReimbursement && paymentMode === "NEFT") ? <Section title={isAdvance ? "4. Payment mode" : isReimbursement ? "3. Bank details" : "4. Bank details"}>
         <div className="flex flex-col gap-6">
           {isAdvance ? <Field label="Mode" required error={errors.paymentMode?.message}>
             <div className="flex gap-6">
@@ -1143,7 +1212,7 @@ export function PaymentAdviceForm({
                   Optional for an advance - Finance already has your bank details on file. Fill these
                   in only if you want to provide them here as well.
                 </p>
-              ) : (
+              ) : isReimbursement ? null : (
                 <VendorBankAccountFields
                   vendorId={vendorId}
                   submitterEmail={submittedByEmail}
@@ -1152,12 +1221,12 @@ export function PaymentAdviceForm({
               )}
               <Field
                 label="Bank A/c No."
-                required={!isAdvance}
+                required={!isAdvance && !isReimbursement}
                 error={errors.bankAccountNo?.message}
               >
                 <Input hasError={!!errors.bankAccountNo} {...register("bankAccountNo")} />
               </Field>
-              <Field label="IFSC Code" required={!isAdvance} error={errors.bankIfsc?.message}>
+              <Field label="IFSC Code" required={!isAdvance && !isReimbursement} error={errors.bankIfsc?.message}>
                 <Input
                   placeholder="e.g. HDFC0001234"
                   hasError={!!errors.bankIfsc}
@@ -1166,12 +1235,12 @@ export function PaymentAdviceForm({
               </Field>
               <Field
                 label="Beneficiary Name"
-                required={!isAdvance}
+                required={!isAdvance && !isReimbursement}
                 error={errors.beneficiaryName?.message}
               >
                 <Input hasError={!!errors.beneficiaryName} {...register("beneficiaryName")} />
               </Field>
-              {!isAdvance ? <Field label="Bank Name" required error={errors.bankName?.message}>
+              {!isAdvance ? <Field label="Bank Name" required={!isReimbursement} error={errors.bankName?.message}>
                 <Input hasError={!!errors.bankName} {...register("bankName")} />
               </Field> : null}
             </div>
@@ -1179,18 +1248,18 @@ export function PaymentAdviceForm({
         </div>
       </Section> : null}
 
-      <Section title={isCashVoucher ? "3. Enclosures & remarks" : "5. Enclosures & remarks"}>
+      <Section title={isReimbursement ? (paymentMode === "NEFT" ? "4. Enclosures & remarks" : "3. Enclosures & remarks") : isCashVoucher ? "3. Enclosures & remarks" : "5. Enclosures & remarks"}>
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
           <Field
             label="Enclosures"
-            required={!isAdvance && paymentMode === "NEFT"}
+            required={!isAdvance && !isReimbursement && paymentMode === "NEFT"}
             error={errors.enclosures?.message}
           >
             <Textarea rows={2} hasError={!!errors.enclosures} {...register("enclosures")} />
           </Field>
           <Field
             label="Special Remarks"
-            required={!isAdvance && paymentMode === "NEFT"}
+            required={!isAdvance && !isReimbursement && paymentMode === "NEFT"}
             error={errors.specialRemarks?.message}
           >
             <Textarea rows={2} hasError={!!errors.specialRemarks} {...register("specialRemarks")} />
@@ -1198,7 +1267,7 @@ export function PaymentAdviceForm({
         </div>
       </Section>
 
-      <Section title={isCashVoucher ? "4. Documents" : "6. Documents"}>
+      {!isReimbursement ? <Section title={isCashVoucher ? "4. Documents" : "6. Documents"}>
         {attachmentError ? (
           <div className="mb-4 rounded-md border border-[#b3261e]/30 bg-[#b3261e]/5 px-4 py-3 text-sm font-medium text-[#b3261e]">
             {attachmentError}
@@ -1279,7 +1348,7 @@ export function PaymentAdviceForm({
         <p className="text-sm font-medium text-[#0b1f3a]" aria-live="polite">
           {(attachmentTotalBytes / 1024 / 1024).toFixed(2)} MB of new attachments added
         </p>
-      </Section>
+      </Section> : null}
 
       <div className="flex justify-end border-t border-gray-200 pt-6">
         <button
@@ -1295,6 +1364,8 @@ export function PaymentAdviceForm({
               ? "Resubmit"
               : isAdvance
                 ? "Submit Advance Payment Request"
+                : isReimbursement
+                  ? "Submit Reimbursement"
                 : isCashVoucher
                   ? "Submit Cash Payment Voucher"
                   : "Submit Payment Advice"}

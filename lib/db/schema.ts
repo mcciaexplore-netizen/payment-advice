@@ -683,9 +683,15 @@ export const refundRequests = pgTable(
       blobUrl: string;
       sizeBytes: number;
     }>>().notNull().default([]),
+    // Finance review outcome: SUBMITTED (default) | SENT_BACK | CANCELLED.
+    // statusRemarks is Finance's reason, shown to the submitter on send-back.
+    status: text("status").notNull().default("SUBMITTED"),
+    statusRemarks: text("status_remarks"),
+    statusChangedAt: timestamp("status_changed_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
+    check("refund_requests_status_check", sql`${table.status} in ('SUBMITTED', 'SENT_BACK', 'CANCELLED')`),
     check(
       "refund_requests_branch_check",
       sql`${table.branch} in ('SB Road Office', 'Tilak Road Office', 'Hadapsar Office', 'Bhosari Office', 'Ahilyanagar Office')`,

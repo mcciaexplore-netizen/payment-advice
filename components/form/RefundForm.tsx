@@ -1,11 +1,15 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { upload } from "@vercel/blob/client";
 import { Field } from "@/components/ui/Field";
 import { FileUploadSlot } from "@/components/form/FileUploadSlot";
 import { Input, Select, Textarea } from "@/components/ui/Input";
+import { StaffNameTypeahead, type StaffSearchResult } from "@/components/form/StaffNameTypeahead";
+import { resolveAutoFillEmail } from "@/lib/form/staff-email-autofill";
+import { resolveSourceFieldAutoFill } from "@/lib/form/source-field-autofill";
+import { resolveStaffBranch, resolveStaffDepartment } from "@/lib/form/staff-history-autofill";
 import { BRANCH_OPTIONS, DEPARTMENT_OPTIONS, MAX_OTHER_ATTACHMENTS } from "@/lib/validation/payment-advice";
 import { safeUploadFileName, PENDING_UPLOAD_PREFIX } from "@/lib/attachments/client-upload";
 import { todayInIst } from "@/lib/date-time";
@@ -28,12 +32,75 @@ export function RefundForm({ authorityOptions, persist }: { authorityOptions: st
   const [emailFiles, setEmailFiles] = useState<File[]>([]);
   const [chequeFiles, setChequeFiles] = useState<File[]>([]);
   const [otherFiles, setOtherFiles] = useState<File[]>([]);
+  const [submitterName, setSubmitterName] = useState("");
+  const [submitterEmail, setSubmitterEmail] = useState("");
   const [department, setDepartment] = useState("");
+  const [otherDepartment, setOtherDepartment] = useState("");
+  const [branch, setBranch] = useState("");
   const [basicAmount, setBasicAmount] = useState("0");
   const [gstAmount, setGstAmount] = useState("0");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [previewDone, setPreviewDone] = useState(false);
+  const lastMatchedStaffIdRef = useRef<string | null>(null);
+  const lastAutoFilledEmailRef = useRef<string | null>(null);
+  const lastAutoFilledDepartmentRef = useRef<string | null>(null);
+  const lastAutoFilledBranchRef = useRef<string | null>(null);
+
+  function handleStaffMatch(staff: StaffSearchResult | null) {
+    const staffId = staff?.id ?? null;
+    if (staffId === lastMatchedStaffIdRef.current) return;
+    lastMatchedStaffIdRef.current = staffId;
+
+    const emailAction = resolveAutoFillEmail(
+      staff,
+      submitterEmail,
+      lastAutoFilledEmailRef.current,
+    );
+    if (emailAction.type === "fill") {
+      setSubmitterEmail(emailAction.email);
+      lastAutoFilledEmailRef.current = emailAction.email;
+    } else if (emailAction.type === "clear") {
+      setSubmitterEmail("");
+      lastAutoFilledEmailRef.current = null;
+    }
+
+    const currentDepartment = department === "OTHERS" ? otherDepartment : department;
+    const departmentSelection = resolveStaffDepartment(staff?.department ?? null);
+    const departmentValue = departmentSelection?.submittedByDepartment ?? "";
+    const departmentAction = resolveSourceFieldAutoFill(
+      departmentValue,
+      currentDepartment,
+      lastAutoFilledDepartmentRef.current,
+    );
+    if (departmentAction.type === "fill" && departmentSelection) {
+      setDepartment(departmentSelection.option);
+      setOtherDepartment(
+        departmentSelection.option === "OTHERS"
+          ? departmentSelection.submittedByDepartment
+          : "",
+      );
+      lastAutoFilledDepartmentRef.current = departmentValue;
+    } else if (departmentAction.type === "clear") {
+      setDepartment("");
+      setOtherDepartment("");
+      lastAutoFilledDepartmentRef.current = null;
+    }
+
+    const branchValue = resolveStaffBranch(staff?.branch ?? null) ?? "";
+    const branchAction = resolveSourceFieldAutoFill(
+      branchValue,
+      branch,
+      lastAutoFilledBranchRef.current,
+    );
+    if (branchAction.type === "fill") {
+      setBranch(branchValue);
+      lastAutoFilledBranchRef.current = branchValue;
+    } else if (branchAction.type === "clear") {
+      setBranch("");
+      lastAutoFilledBranchRef.current = null;
+    }
+  }
 
   async function uploadDocument(file: File, type: RefundDocumentType): Promise<RefundDocument> {
     const pathname = `${PENDING_UPLOAD_PREFIX}${crypto.randomUUID()}/REFUND_${type}-${safeUploadFileName(file.name)}`;
@@ -103,18 +170,28 @@ export function RefundForm({ authorityOptions, persist }: { authorityOptions: st
       <section className="space-y-5">
         <h2 className="font-heading text-2xl text-[#0b1f3a]">1. Submitter details</h2>
         <div className="grid gap-5 sm:grid-cols-2">
-          <Field label="Your Name" required><Input name="submittedByName" required /></Field>
-          <Field label="Your Email" required><Input name="submittedByEmail" type="email" required /></Field>
+          <Field label="Your Name" required>
+            <StaffNameTypeahead
+              name="submittedByName"
+              required
+              value={submitterName}
+              onChange={setSubmitterName}
+              onMatch={handleStaffMatch}
+            />
+          </Field>
+          <Field label="Your Email" required>
+            <Input name="submittedByEmail" type="email" required value={submitterEmail} onChange={(event) => setSubmitterEmail(event.target.value)} />
+          </Field>
           <Field label="Your Department" required>
             <Select name="submittedByDepartment" required value={department} onChange={(event) => setDepartment(event.target.value)}>
               <option value="" disabled>Select your department</option>
               {DEPARTMENT_OPTIONS.filter((option) => option !== "OTHERS").map((option) => <option key={option} value={option}>{option}</option>)}
               <option value="OTHERS">Others</option>
             </Select>
-            {department === "OTHERS" && <Input name="otherDepartment" placeholder="Enter your department" required />}
+            {department === "OTHERS" && <Input name="otherDepartment" placeholder="Enter your department" required value={otherDepartment} onChange={(event) => setOtherDepartment(event.target.value)} />}
           </Field>
           <Field label="Your Branch" required>
-            <Select name="branch" required defaultValue="">
+            <Select name="branch" required value={branch} onChange={(event) => setBranch(event.target.value)}>
               <option value="" disabled>Select your branch</option>
               {BRANCH_OPTIONS.map((branch) => <option key={branch} value={branch}>{branch}</option>)}
             </Select>

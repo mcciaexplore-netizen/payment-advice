@@ -8,17 +8,23 @@ export type StaffSearchResult = {
   id: string;
   fullName: string;
   email: string | null;
+  department: string | null;
+  branch: string | null;
   authorityOptions: StaffAuthorityOption[];
 };
 
 export function StaffNameTypeahead({
   id,
+  name,
+  required,
   value,
   onChange,
   onMatch,
   hasError,
 }: {
   id?: string;
+  name?: string;
+  required?: boolean;
   value: string;
   onChange: (value: string) => void;
   /** Fired whenever the current value resolves to an active staff member —
@@ -31,6 +37,7 @@ export function StaffNameTypeahead({
   const [results, setResults] = useState<StaffSearchResult[]>([]);
   const [open, setOpen] = useState(false);
   const [debouncedQuery, setDebouncedQuery] = useState("");
+  const [searchError, setSearchError] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const trimmedValue = value.trim();
@@ -47,10 +54,18 @@ export function StaffNameTypeahead({
     if (debouncedQuery.length < 2) return;
     let cancelled = false;
     fetch(`/api/staff/search?q=${encodeURIComponent(debouncedQuery)}`)
-      .then((res) => (res.ok ? res.json() : null))
+      .then((res) => {
+        if (!res.ok) throw new Error(`Staff search failed with status ${res.status}`);
+        return res.json();
+      })
       .then((data) => {
-        if (cancelled || !data) return;
+        if (cancelled) return;
         setResults(data.staff);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setResults([]);
+        setSearchError(true);
       });
     return () => {
       cancelled = true;
@@ -82,11 +97,14 @@ export function StaffNameTypeahead({
     <div ref={containerRef} className="relative">
       <Input
         id={id}
+        name={name}
+        required={required}
         hasError={hasError}
         value={value}
         autoComplete="off"
         placeholder="Start typing your name…"
         onChange={(e) => {
+          setSearchError(false);
           onChange(e.target.value);
           setOpen(true);
         }}
@@ -94,6 +112,11 @@ export function StaffNameTypeahead({
           if (visibleResults.length > 0) setOpen(true);
         }}
       />
+      {searchError && (
+        <p role="alert" className="mt-1 text-sm text-[#b3261e]">
+          Staff lookup is temporarily unavailable. Enter your department and branch manually.
+        </p>
+      )}
       {open && !queryTooShort && (loading || visibleResults.length > 0) && (
         <div className="absolute z-20 mt-1 w-full max-h-64 overflow-auto rounded-md border border-gray-200 bg-white shadow-lg">
           {loading ? (

@@ -55,6 +55,20 @@ export async function POST(req: NextRequest) {
   }
   const values = parsed.data;
 
+  // Local preview only (dev, no database): the form was validated above, so
+  // return a fake confirmation instead of touching Blob/DB. Never in production.
+  if (process.env.NODE_ENV !== "production" && !process.env.DATABASE_URL) {
+    const preview = `PREVIEW/${Date.now()}`;
+    return NextResponse.json({
+      serialNo: preview,
+      cashVoucherNo: values.paymentMode === "CASH" ? preview : null,
+      advanceNo: null,
+      id: "00000000-0000-4000-8000-000000000002",
+      authorityToken: "preview-token",
+      authorityName: "Test Authority (local preview)",
+    });
+  }
+
   // Zod only checked vendorId is a UUID-shaped string; confirm it's an
   // actual, currently-active vendor before writing anything — closes the
   // direct-API-bypass path where a caller skips the typeahead entirely and
@@ -63,6 +77,7 @@ export async function POST(req: NextRequest) {
   if (
     values.paymentMode === "NEFT" &&
     !values.isAdvance &&
+    !values.isReimbursement &&
     !values.isNewVendorRequest &&
     !(await isActiveVendor(values.vendorId!))
   ) {
@@ -78,9 +93,17 @@ export async function POST(req: NextRequest) {
   }
   const attachmentInputs = attachmentResult.attachments;
   const byDocType = groupUploadedAttachments(attachmentInputs);
-  const countError = validateAttachmentCounts(byDocType, values.isAdvance, undefined, values.paymentMode);
+  // An Online reimbursement has the Cash Voucher's attachment rules (one bill
+  // per expense, no Tax Invoice), so it's validated as CASH here.
+  const usesLineItems = (values.paymentMode === "CASH" || values.isReimbursement) && !values.isAdvance;
+  const countError = validateAttachmentCounts(
+    byDocType,
+    values.isAdvance,
+    undefined,
+    values.isReimbursement ? "CASH" : values.paymentMode,
+  );
   if (countError) return NextResponse.json({ error: countError }, { status: 400 });
-  const cashBillError = values.paymentMode === "CASH" && !values.isAdvance
+  const cashBillError = usesLineItems
     ? validateCashVoucherBillUploads(values.cashVoucherItems, attachmentInputs)
     : null;
   if (cashBillError) return NextResponse.json({ error: cashBillError }, { status: 400 });
@@ -149,10 +172,10 @@ export async function POST(req: NextRequest) {
       // any insert below fails, the counter rolls back with the submission.
       billNo = values.isAdvance
         ? (values.billNo ?? advanceNo ?? serialNo)
-        : values.paymentMode === "CASH"
+        : usesLineItems
           ? (values.billNo ?? "")
           : values.billNo!;
-      const billDate = values.isAdvance || values.paymentMode === "CASH" ? (values.billDate ?? formDate) : values.billDate!;
+      const billDate = values.isAdvance || usesLineItems ? (values.billDate ?? formDate) : values.billDate!;
 
       const [advice] = await tx
         .insert(paymentAdvices)
@@ -189,11 +212,11 @@ export async function POST(req: NextRequest) {
           billDate,
           amount: values.amount.toFixed(2),
           basicAmount:
-            values.paymentMode === "NEFT" && !values.isAdvance
+            values.paymentMode === "NEFT" && !values.isAdvance && !values.isReimbursement
               ? values.basicAmount!.toFixed(2)
               : null,
           gstAmount:
-            values.paymentMode === "NEFT" && !values.isAdvance
+            values.paymentMode === "NEFT" && !values.isAdvance && !values.isReimbursement
               ? values.gstAmount!.toFixed(2)
               : null,
           // Mirrored into this NOT NULL column so every existing reader
@@ -201,7 +224,7 @@ export async function POST(req: NextRequest) {
           // — same dual-representation pattern cash_voucher_items uses.
           natureOfExpenditure: values.isAdvance
             ? values.purposeOfAdvance ?? ""
-            : values.paymentMode === "CASH"
+            : usesLineItems
               ? values.cashVoucherItems.map((item) => item.description).join("; ")
               : values.natureOfExpenditure ?? "",
           enclosures: values.enclosures ?? null,
@@ -221,7 +244,7 @@ export async function POST(req: NextRequest) {
         })
         .returning();
 
-      if (values.paymentMode === "NEFT" && !values.isAdvance && !values.isNewVendorRequest) {
+      if (values.paymentMode === "NEFT" && !values.isAdvance && !values.isReimbursement && !values.isNewVendorRequest) {
         await captureVendorBankAccount(tx, {
           vendorId: values.vendorId!,
           bankAccountNo: values.bankAccountNo!,
@@ -244,7 +267,7 @@ export async function POST(req: NextRequest) {
         })),
       );
 
-      if (values.paymentMode === "CASH" && !values.isAdvance) {
+      if (usesLineItems) {
         await tx.insert(cashVoucherItems).values(
           values.cashVoucherItems.map((item, sortOrder) => ({
             paymentAdviceId: advice.id,
@@ -359,7 +382,7 @@ export async function POST(req: NextRequest) {
         amount: values.amount.toLocaleString("en-IN", { minimumFractionDigits: 2 }),
         natureOfExpenditure: values.isAdvance
           ? values.purposeOfAdvance ?? ""
-          : values.paymentMode === "CASH"
+          : usesLineItems
             ? values.cashVoucherItems.map((item) => item.description).join("; ")
             : values.natureOfExpenditure ?? "",
         billReference: billNo,
