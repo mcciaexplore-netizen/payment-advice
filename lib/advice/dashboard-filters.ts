@@ -1,4 +1,4 @@
-import { and, gte, ilike, isNotNull, isNull, lt, ne, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, gte, ilike, isNotNull, isNull, lt, ne, or, sql, type SQL } from "drizzle-orm";
 import { paymentAdvices } from "@/lib/db/schema";
 import { buildTabCondition, isAdminTab, type AdminTab } from "@/lib/admin/filters";
 import { PIPELINE_SUMMARY_STAGES } from "@/components/admin/PipelineSummary";
@@ -27,7 +27,31 @@ export function stageFilterLabel(stage: PipelineStage): string {
   return PIPELINE_SUMMARY_STAGES.find(({ tab }) => STAGE_FOR_TAB[tab] === stage)?.label ?? stage;
 }
 
-export type DashboardFilters = { stage?: StageTab; decision?: Decision; q?: string; dateFrom?: string; dateTo?: string };
+/** How the table (and the Excel report) is ordered. Not a filter: it never
+ * changes which rows show, only their order. No sort means the dashboard's
+ * own default (oldest time in the current stage first, newest first on
+ * History). */
+export const SORTS = [
+  { value: "amount_desc", label: "Amount: High to Low" },
+  { value: "amount_asc", label: "Amount: Low to High" },
+  { value: "submitted_desc", label: "Submitted: Newest first" },
+  { value: "submitted_asc", label: "Submitted: Oldest first" },
+] as const;
+export type DashboardSort = (typeof SORTS)[number]["value"];
+
+export type DashboardFilters = { stage?: StageTab; decision?: Decision; q?: string; dateFrom?: string; dateTo?: string; sort?: DashboardSort };
+
+/** ORDER BY for a chosen sort; submitted time breaks amount ties so the
+ * order is stable. */
+export function dashboardOrderBy(sort: DashboardSort | undefined): SQL[] | undefined {
+  switch (sort) {
+    case "amount_desc": return [desc(paymentAdvices.amount), desc(paymentAdvices.submittedAt)];
+    case "amount_asc": return [asc(paymentAdvices.amount), desc(paymentAdvices.submittedAt)];
+    case "submitted_desc": return [desc(paymentAdvices.submittedAt)];
+    case "submitted_asc": return [asc(paymentAdvices.submittedAt)];
+    default: return undefined;
+  }
+}
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const validDate = (value: string | undefined) => {
@@ -42,15 +66,18 @@ export function parseDashboardFilters(params: Record<string, string | string[] |
   const stage = first(params.stage);
   const decision = first(params.decision);
   const q = first(params.q)?.trim().slice(0, 100);
+  const sort = first(params.sort);
   return {
     stage: isAdminTab(stage) && stage !== "all" ? stage : undefined,
     decision: options.decision && DECISIONS.some((option) => option.value === decision) ? (decision as Decision) : undefined,
     q: q || undefined,
     dateFrom: validDate(first(params.dateFrom)),
     dateTo: validDate(first(params.dateTo)),
+    sort: SORTS.find((option) => option.value === sort)?.value,
   };
 }
 
+/** Sort is deliberately left out: it reorders rows, it never hides any. */
 export function hasActiveFilters(filters: DashboardFilters): boolean {
   return Boolean(filters.stage || filters.decision || filters.q || filters.dateFrom || filters.dateTo);
 }

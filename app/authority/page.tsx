@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { and, count, desc, eq, gte, inArray, isNotNull, isNull, lte, or, sql, sum } from "drizzle-orm";
+import { and, count, desc, eq, gte, inArray, lte, sum } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { adminUserRoles, adminUsers, attachments, cashReceipts, paymentAdvices, paymentEntries, recommendingAuthorities } from "@/lib/db/schema";
 import { getAdminSession } from "@/lib/admin-session";
@@ -23,22 +23,12 @@ import { cashReceiptStatusText } from "@/lib/cash-receipts/status";
 import { SubmissionDownloadButtons, type SubmissionAttachment } from "@/components/admin/SubmissionDownloadButtons";
 import { SubmitterEditAction } from "@/components/admin/SubmitterEditAction";
 import { DashboardFilters, FilteredEmptyState } from "@/components/dashboard/DashboardFilters";
-import { dashboardCountFields, dashboardFilterCondition, hasActiveFilters, parseDashboardFilters, readDashboardCounts } from "@/lib/advice/dashboard-filters";
+import { dashboardCountFields, dashboardFilterCondition, dashboardOrderBy, hasActiveFilters, parseDashboardFilters, readDashboardCounts } from "@/lib/advice/dashboard-filters";
+import { dashboardScopeWhere, isDashboardRole, pickDashboardGrants, resolveDashboardView, type DashboardGrant } from "@/lib/advice/dashboard-scope";
 
 export const dynamic = "force-dynamic";
 
-type AuthorityView = "pending" | "history" | "my-submissions";
-type TeamView = "team-submissions" | "my-submissions" | "cash-receipts";
-type DashboardRole = "AUTHORITY" | "BRANCH" | "DEPARTMENT" | "SELF" | "CASH_RECEIPT";
-type DashboardGrant = { role: DashboardRole; recommendingAuthorityId: string | null; scopeValue: string | null };
-
 function date(value: Date | string) { return formatIstDate(value); }
-function caseInsensitiveEq(column: typeof paymentAdvices.branch | typeof paymentAdvices.submittedByDepartment, value: string) {
-  return sql`lower(${column}) = lower(${value})`;
-}
-function isDashboardRole(value: string | undefined): value is DashboardRole {
-  return value === "AUTHORITY" || value === "BRANCH" || value === "DEPARTMENT" || value === "SELF" || value === "CASH_RECEIPT";
-}
 function roleLabel(grant: DashboardGrant): string {
   return grant.role === "AUTHORITY" ? "Recommendations"
     : grant.role === "SELF" ? "My Submissions"
@@ -46,7 +36,7 @@ function roleLabel(grant: DashboardGrant): string {
     : `${grant.role === "BRANCH" ? "Branch" : "Department"}: ${grant.scopeValue}`;
 }
 
-export default async function TeamDashboard({ searchParams }: { searchParams: Promise<{ view?: string; role?: string; stage?: string; decision?: string; q?: string; dateFrom?: string; dateTo?: string }> }) {
+export default async function TeamDashboard({ searchParams }: { searchParams: Promise<{ view?: string; role?: string; stage?: string; decision?: string; q?: string; dateFrom?: string; dateTo?: string; sort?: string }> }) {
   const session = await getAdminSession();
   if (!session) return null;
   const [accounts, roleRows, authorityRows] = await Promise.all([
@@ -60,82 +50,26 @@ export default async function TeamDashboard({ searchParams }: { searchParams: Pr
   ]);
   const account = accounts[0];
   if (!account) return null;
-  // A CASH_RECEIPT grant only becomes its own dashboard entry when the
-  // account does NOT also hold BRANCH - a BRANCH holder already gets full
-  // Team Submissions plus the Cash Receipts tab below, so a second,
-  // more-restricted CASH_RECEIPT entry would be redundant and confusing.
-  // This keeps "BRANCH holders keep exactly what they have today" true
-  // regardless of whether they also hold CASH_RECEIPT. Likewise a SELF
-  // holder's My Submissions view already carries the Cash Receipts tab when
-  // they hold CASH_RECEIPT, so SELF + CASH_RECEIPT (Advika, Dnyaneshwar) is
-  // one tab bar - My Submissions | My Cash Receipts - not two role entries.
-  const holdsBranchGrant = roleRows.some((row) => row.role === "BRANCH" && Boolean(row.scopeValue));
-  const holdsSelfGrant = roleRows.some((row) => row.role === "SELF");
-  const holdsCashReceiptGrant = roleRows.some((row) => row.role === "CASH_RECEIPT" && Boolean(row.scopeValue));
-  const grants = roleRows.filter((row): row is DashboardGrant =>
-    (row.role === "AUTHORITY" && Boolean(row.recommendingAuthorityId)) ||
-    ((row.role === "BRANCH" || row.role === "DEPARTMENT") && Boolean(row.scopeValue)) ||
-    row.role === "SELF" ||
-    (row.role === "CASH_RECEIPT" && Boolean(row.scopeValue) && !holdsBranchGrant && !holdsSelfGrant),
-  );
+  // Which dashboard entries this account has (see pickDashboardGrants).
+  const { grants, holdsCashReceiptGrant } = pickDashboardGrants(roleRows);
   if (grants.length === 0) return null;
 
   const params = await searchParams;
   const requestedRole = isDashboardRole(params.role) ? params.role : undefined;
   const activeGrant = grants.find((grant) => grant.role === requestedRole) ?? grants[0];
-  const isAuthority = activeGrant.role === "AUTHORITY";
-  // SELF and CASH_RECEIPT (2026-10-07) have no broader "team" to show -
-  // every view is My Submissions or My Cash Receipts, never Team
-  // Submissions and never the branch/department-wide pipeline summary,
-  // regardless of the ?view= param. The Team Submissions tab is hidden
-  // entirely for both, not just blocked server-side - there is nothing to
-  // toggle to.
-  const isRestrictedGrant = activeGrant.role === "SELF" || activeGrant.role === "CASH_RECEIPT";
-  // BRANCH keeps exactly today's behavior: Team Submissions, My
-  // Submissions, and the Cash Receipts tab. CASH_RECEIPT-only grants get
-  // the same Cash Receipts tab (same loadCashReceiptsTab, same
-  // issuedByUserId-scoped query) but never Team Submissions - see
-  // isRestrictedGrant above.
-  const isBranchGrant = activeGrant.role === "BRANCH";
-  // A SELF-only account without CASH_RECEIPT never gets the tab.
-  const canSeeCashReceiptsTab = isBranchGrant || activeGrant.role === "CASH_RECEIPT" || (activeGrant.role === "SELF" && holdsCashReceiptGrant);
+  // SELF and CASH_RECEIPT have no broader "team" to show - every view is My
+  // Submissions or My Cash Receipts, never Team Submissions, whatever ?view=
+  // asks for. resolveDashboardView enforces that server-side, in the view
+  // the query itself is built from, not just in the nav UI.
+  const { view, isAuthority, isRestrictedGrant, isBranchGrant, canSeeCashReceiptsTab } = resolveDashboardView(activeGrant, params.view, holdsCashReceiptGrant);
   const isDg = isAuthority && authorityRows[0]?.authorityName.trim().toUpperCase() === "DG";
   if (isDg && (!params.view || params.view === "executive")) return loadDgExecutiveDashboard();
-  const authorityView: AuthorityView = params.view === "history" ? "history" : params.view === "my-submissions" ? "my-submissions" : "pending";
-  // Cash Receipts is checked first so a restricted grant (SELF/CASH_RECEIPT)
-  // can still reach it; isRestrictedGrant then forces everything else to
-  // My Submissions, so Team Submissions is never reachable for them no
-  // matter what ?view= asks for - enforced here, in the server-computed
-  // view selection the query itself is built from, not just in the nav UI.
-  const teamView: TeamView = params.view === "cash-receipts" && canSeeCashReceiptsTab ? "cash-receipts"
-    : isRestrictedGrant || params.view === "my-submissions" ? "my-submissions"
-    : "team-submissions";
-  const view = isAuthority ? authorityView : teamView;
 
   if (view === "cash-receipts") {
     return loadCashReceiptsTab(activeGrant, grants, session.adminUserId, isRestrictedGrant, params);
   }
 
-  const ownSubmissions = eq(paymentAdvices.submittedByEmail, account.email);
-  const authorityScope = eq(paymentAdvices.recommendingAuthorityId, activeGrant.recommendingAuthorityId!);
-  // teamScope is never actually consulted for a restricted grant (SELF or
-  // CASH_RECEIPT) - view can only ever be "my-submissions" or
-  // "cash-receipts" for them, both computed above without it - but it
-  // still defaults both to ownSubmissions rather than falling through to
-  // authorityScope, so a future code path can't accidentally compute a
-  // branch-wide or authority-wide query for one of them.
-  const teamScope = activeGrant.role === "BRANCH"
-    ? caseInsensitiveEq(paymentAdvices.branch, activeGrant.scopeValue!)
-    : activeGrant.role === "DEPARTMENT"
-      ? caseInsensitiveEq(paymentAdvices.submittedByDepartment, activeGrant.scopeValue!)
-      : activeGrant.role === "SELF" || activeGrant.role === "CASH_RECEIPT"
-        ? ownSubmissions
-        : authorityScope;
-  const scopeWhere = view === "my-submissions" ? ownSubmissions : isAuthority
-    ? and(authorityScope, view === "history"
-      ? or(isNotNull(paymentAdvices.authorityApprovedAt), isNotNull(paymentAdvices.authorityRejectedAt), eq(paymentAdvices.status, "REJECTED"))
-      : and(eq(paymentAdvices.status, "SUBMITTED"), isNull(paymentAdvices.authorityApprovedAt), isNull(paymentAdvices.authorityRejectedAt)))
-    : teamScope;
+  const scopeWhere = dashboardScopeWhere(activeGrant, view, account.email);
   // Stage / Decision / search / date filters (History, My Submissions, Team
   // Submissions; Pending My Recommendation has none). Always ANDed onto
   // scopeWhere above, which is unchanged, so they only ever narrow it.
@@ -160,7 +94,7 @@ export default async function TeamDashboard({ searchParams }: { searchParams: Pr
     updatedAt: paymentAdvices.updatedAt, sentBackAt: paymentAdvices.sentBackAt,
     finalRejectedAt: paymentAdvices.rejectedAt, finalRejectedBy: paymentAdvices.rejectedBy,
     finalRejectionRemarks: paymentAdvices.rejectionRemarks,
-  }).from(paymentAdvices).where(where).orderBy(desc(paymentAdvices.submittedAt)),
+  }).from(paymentAdvices).where(where).orderBy(...(dashboardOrderBy(filters.sort) ?? [desc(paymentAdvices.submittedAt)])),
     // One query for every filter count, over the same scope as the table.
     filtersEnabled ? db.select(dashboardCountFields(filters)).from(paymentAdvices).where(scopeWhere) : Promise.resolve([]),
   ]);
@@ -196,7 +130,9 @@ export default async function TeamDashboard({ searchParams }: { searchParams: Pr
     }
   }
   const rows = rawRows.map((row) => ({ ...row, firstPaymentAt: firstPaymentByAdvice.get(row.id) ?? null }));
-  if (!(isAuthority && view === "history")) {
+  // A chosen sort (amount / submitted) is already applied by the query; only
+  // the default order is the oldest-in-stage-first one.
+  if (!(isAuthority && view === "history") && !filters.sort) {
     rows.sort(compareByCurrentStageAge);
   }
 

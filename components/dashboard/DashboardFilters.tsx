@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { PIPELINE_SUMMARY_STAGES } from "@/components/admin/PipelineSummary";
 import { STAGE_FOR_TAB, STAGE_STYLE } from "@/lib/advice/stage-style";
-import { DECISIONS, hasActiveFilters, type DashboardCounts, type DashboardFilters as Filters } from "@/lib/advice/dashboard-filters";
+import { DECISIONS, SORTS, hasActiveFilters, type DashboardCounts, type DashboardFilters as Filters } from "@/lib/advice/dashboard-filters";
 
 const neutralActive = "border-[#0b1f3a] bg-[#0b1f3a] text-white";
 const neutralInactive = "border-gray-300 bg-white text-gray-600 hover:border-[#0b1f3a] hover:text-[#0b1f3a]";
@@ -22,10 +22,13 @@ export function DashboardFilters({ base, filters, counts, showDecision }: {
   showDecision: boolean;
 }) {
   const href = (patch: Partial<Record<keyof Filters, string | undefined>>) => {
-    const next: Record<string, string | undefined> = { ...base, stage: filters.stage, decision: filters.decision, q: filters.q, dateFrom: filters.dateFrom, dateTo: filters.dateTo, ...patch };
+    const next: Record<string, string | undefined> = { ...base, stage: filters.stage, decision: filters.decision, q: filters.q, dateFrom: filters.dateFrom, dateTo: filters.dateTo, sort: filters.sort, ...patch };
     const query = new URLSearchParams(Object.entries(next).filter((entry): entry is [string, string] => Boolean(entry[1])));
     return `/authority?${query.toString()}`;
   };
+  // The Excel report is exactly what the table shows: same tab, stage,
+  // search, dates and sort, so it is the same query string on the report URL.
+  const reportHref = href({}).replace("/authority?", "/api/authority/report?");
   // Only stages with rows, plus the selected one so it can always be undone.
   const stages = PIPELINE_SUMMARY_STAGES.filter(({ tab }) => counts.stages[tab] > 0 || filters.stage === tab);
   const decisions = DECISIONS.filter(({ value }) => counts.decisions[value] > 0 || filters.decision === value);
@@ -39,6 +42,10 @@ export function DashboardFilters({ base, filters, counts, showDecision }: {
           const active = filters.stage === tab;
           return <Link key={tab} href={href({ stage: tab })} aria-current={active ? "true" : undefined} className={`${buttonClass} ${active ? style.tabActive : style.tabInactive}`}>{label} ({counts.stages[tab]})</Link>;
         })}
+        {counts.all > 0 ? <a href={reportHref} download className={`${buttonClass} inline-flex items-center gap-1.5 border-emerald-700 bg-emerald-700 text-white hover:bg-emerald-800`} title="Download the submissions listed below as an Excel file">
+          <svg aria-hidden="true" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4"><path d="M10 2a1 1 0 0 1 1 1v8.586l2.293-2.293a1 1 0 1 1 1.414 1.414l-4 4a1 1 0 0 1-1.414 0l-4-4a1 1 0 1 1 1.414-1.414L9 11.586V3a1 1 0 0 1 1-1ZM4 15a1 1 0 0 1 1 1v1h10v-1a1 1 0 1 1 2 0v1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-1a1 1 0 0 1 1-1Z" /></svg>
+          Download Report
+        </a> : null}
       </div>
       {showDecision ? (
         <div role="group" aria-label="Filter by decision" className="flex flex-wrap items-center gap-2 text-sm">
@@ -50,10 +57,19 @@ export function DashboardFilters({ base, filters, counts, showDecision }: {
           })}
         </div>
       ) : null}
+      <div role="group" aria-label="Sort submissions" className="flex flex-wrap items-center gap-2 text-sm">
+        <span className="text-gray-600">Sort:</span>
+        <Link href={href({ sort: undefined })} aria-current={!filters.sort ? "true" : undefined} className={`${buttonClass} ${!filters.sort ? neutralActive : neutralInactive}`}>Default</Link>
+        {SORTS.map(({ value, label }) => {
+          const active = filters.sort === value;
+          return <Link key={value} href={href({ sort: value })} aria-current={active ? "true" : undefined} className={`${buttonClass} ${active ? neutralActive : neutralInactive}`}>{label}</Link>;
+        })}
+      </div>
       <form method="get" action="/authority" className="flex flex-wrap items-end gap-3 rounded-md border border-gray-200 p-3">
         {Object.entries(base).map(([name, value]) => <input key={name} type="hidden" name={name} value={value} />)}
         {filters.stage ? <input type="hidden" name="stage" value={filters.stage} /> : null}
         {filters.decision ? <input type="hidden" name="decision" value={filters.decision} /> : null}
+        {filters.sort ? <input type="hidden" name="sort" value={filters.sort} /> : null}
         <label className="flex min-w-0 flex-1 basis-56 flex-col gap-1 text-xs font-medium text-gray-600">
           Search
           <input type="search" name="q" defaultValue={filters.q ?? ""} maxLength={100} placeholder="Reference, payee or particulars" className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900" />
@@ -75,7 +91,7 @@ export function DashboardFilters({ base, filters, counts, showDecision }: {
   );
 }
 
-/** The tab with no filters: "All", no search, no dates. */
+/** The tab with no filters: "All", no search, no dates (and the default order). */
 export function clearFiltersHref(base: Record<string, string>) {
   return `/authority?${new URLSearchParams(base).toString()}`;
 }
