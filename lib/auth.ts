@@ -11,6 +11,9 @@ import { SignJWT, jwtVerify } from "jose";
  */
 
 export const ADMIN_SESSION_COOKIE = "mccia_admin_session";
+// Upper limit on a session token's life. The cookie itself is a browser-
+// session cookie (no maxAge, set by every login route): closing the browser
+// signs the person out, so the next visit starts at the sign-in page.
 export const ADMIN_SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 7; // 7 days
 
 export const ADMIN_ROLES = ["PAYMENT_ADVICE", "CASH_VOUCHER", "ALL", "AUTHORITY", "BRANCH", "DEPARTMENT", "SELF", "CASH_RECEIPT"] as const;
