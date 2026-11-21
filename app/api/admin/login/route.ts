@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   ADMIN_SESSION_COOKIE,
-  ADMIN_SESSION_MAX_AGE_SECONDS,
   FINANCE_ROLES,
   createAdminSessionToken,
 } from "@/lib/auth";
@@ -111,7 +110,6 @@ export async function POST(req: NextRequest) {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
-    maxAge: ADMIN_SESSION_MAX_AGE_SECONDS,
     path: "/",
   });
   return res;

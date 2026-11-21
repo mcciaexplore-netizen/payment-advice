@@ -12,6 +12,7 @@ export function DashboardLoginForm({
   endpoint,
   fieldPrefix,
   footerLink,
+  redirectTo = "/authority",
 }: {
   title: string;
   description: string;
@@ -21,6 +22,9 @@ export function DashboardLoginForm({
    * points here to Cash Receipt login, since one account can now use
    * either door. Omitted on Authority login, which has no such pair. */
   footerLink?: { href: string; label: string; lead: string };
+  /** Where a successful sign-in lands. Every dashboard login keeps the
+   * original /authority; the Payment Desk login returns to the desk. */
+  redirectTo?: string;
 }) {
   const router = useRouter();
   const [email, setEmail] = useState("");
@@ -41,7 +45,7 @@ export function DashboardLoginForm({
       });
       const data = await response.json();
       if (!response.ok) return setError(data.error ?? "Could not sign in.");
-      router.push("/authority");
+      router.push(redirectTo);
       router.refresh();
     } catch {
       setError("Could not reach the server. Please try again.");

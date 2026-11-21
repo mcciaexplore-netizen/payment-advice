@@ -49,7 +49,16 @@ Design system: Navy `#0B1F3A`, Forest green `#2E8B57`, Amber `#E8A33D`. Headings
 
 ## 3. Current State (update this every session)
 
-**Last updated:** 18 November 2026, by Claude Opus 5.5 (dashboard Excel report and sort; branch `feature/my-submissions-report`, pushed, PR to open, not merged; see entry below)
+**Last updated:** 21 November 2026, by Claude Opus 5.5 (Payment Desk sign-in first; branch `feature/login-first`, pushed, PR to open, not merged; ACCESS CHANGE, needs owner approval; see entry below)
+
+### In review: Payment Desk sign-in first, one sign-in for every dashboard (Claude Opus 5.5, 2026-11-21, branch `feature/login-first`, cut from `origin/main` `8cb4a30`, not merged). No migration. ACCESS CHANGE: needs owner approval before merge.
+- What changes for users: `/` and the submission forms (`/payment-advice`, `/cash-voucher`, `/advance`, `/refund`, `/forwarding-memo`) now open only after signing in at the new `/login` ("Payment Desk"). Signed out, `proxy.ts` redirects there with `?next=` (only a desk page is ever accepted as `next`, `lib/desk-login.ts`). After sign-in the person lands on the desk or the form they asked for.
+- Who can sign in: any active `admin_users` account with at least one role (`app/api/login/route.ts`, same dummy-hash timing and generic error as the other logins, plus a per-IP limiter). Staff without an account can no longer submit forms. This is the main decision for the owner.
+- One sign-in for the dashboards: the session carries every role (plus the authority link and the Cash Receipt branch, as Team login does), so Finance Admin, Authority and Team dashboards open without a second login. On the desk the Login menu becomes "Dashboards" once signed in (via the new `GET /api/session`, which returns only the caller's own name and dashboards) and lists only the dashboards the account's roles allow (`lib/desk-dashboards.ts`), plus Log out (`POST /api/logout`). Signed out, it shows the three login pages as before. `/team/login` now also skips straight to the dashboard for SELF and CASH_RECEIPT sessions (it already did for BRANCH and DEPARTMENT). What each dashboard shows is unchanged.
+- Sessions end when the browser closes: every login route (Payment Desk, Finance, Authority, Team, Cash Receipt) now sets the session cookie with no maxAge. The token itself still expires after 7 days.
+- Unchanged and still public: emailed authority-approval and sent-back edit links, confirmation pages, the dashboard login pages, Cash Receipt login, all `/api/submit`-type endpoints.
+- Tests: `lib/desk-login.test.ts` (proxy gate per page and role, safe `next`, login route, logout, dashboard links per role, team-login skip, cookie has no maxAge), `lib/desk-session-route.test.ts`. Full suite (950), tsc, lint, `next build` pass. Not verified: a real signed-in session in a browser (no test account available to the agent).
+
 
 ### In review: Download Report (Excel) and Sort on the Authority and Team dashboards (Claude Opus 5.5, 2026-11-18, branch `feature/my-submissions-report`, cut from `origin/main` `0b788b4`, not merged). No migration, no access change.
 - Where: the same tabs that have the stage filter (History, My Submissions, Team Submissions). Pending My Recommendation and Cash Receipts are unchanged.
