@@ -49,7 +49,14 @@ Design system: Navy `#0B1F3A`, Forest green `#2E8B57`, Amber `#E8A33D`. Headings
 
 ## 3. Current State (update this every session)
 
-**Last updated:** 24 November 2026, by Claude Sonnet 5.5 (My Refunds tab; branch `feature/my-refunds-tab`, pushed, PR to open, not merged; no migration, no access change; see entry below)
+**Last updated:** 24 November 2026, by Claude Sonnet 5.5 (SUBMITTED stamp on the Refund request PDF; branch `feature/refund-pdf-stamp`, pushed, PR to open, not merged; no migration, no access change; see entry below)
+
+### In review: SUBMITTED stamp on the Refund request PDF (Claude Sonnet 5.5, 2026-11-24, branch `feature/refund-pdf-stamp`, cut from `origin/main` `1da43f0`, not merged). No migration, no access change.
+- Problem: the Refund request PDF (`lib/pdf/RefundRequestDocument.tsx`) was the only submitted-document PDF with no stamp: its three signature boxes (Submitted by, Recommended by, Accounts Department) were bare lines. The Cash Payment Voucher and Forwarding Memo PDFs stamp the Submitted by box.
+- Now the Submitted by box carries the same shared `Stamp` (`lib/pdf/Stamp.tsx`, navy, slightly tilted): SUBMITTED, the submitter's name, and the request date (`requestDate`, the server-set IST submission date, dd/mm/yyyy). It applies to every refund PDF, old and new, since the PDF is rendered from the saved row each time.
+- Deliberately not stamped: Recommended by (a refund has no authority approval step in the app; `recommending_authority` is only text chosen on the form, so a RECOMMENDED stamp would claim an approval that never happened) and Accounts Department (signed by hand, as on the Cash Voucher). Adding a Recommended stamp needs a refund approval flow first: a separate, owner-level decision.
+- Layout: the stamp is positioned in the space above the signature line (as in the Cash Voucher), so it adds no height and does not change the page count (checked by rendering: a typical refund is 1 page before and after; a refund with every optional section filled in already put the signature row alone on page 2 before this change and still does).
+- Tests: `lib/pdf/refund-request-render.test.tsx` (stamp text, exactly one SUBMITTED, no RECOMMENDED, one page for a typical refund; the stamp test fails without the change). Full suite (962), tsc, lint and `next build` pass. Rendered to PNG with PyMuPDF and looked at.
 
 ### In review: "My Refunds" tab on the Authority and Team dashboards (Claude Sonnet 5.5, 2026-11-24, branch `feature/my-refunds-tab`, cut from `origin/main` `e33ebcc`, not merged). No migration, no access change.
 - Problem: a person who submitted a Refund could only see it on the confirmation page right after submitting. Refunds are their own table (`refund_requests`), which My Submissions never reads, so a submitter could not find them again (reported for Sandhya Acharya, `REF/MCCIA/2026-27/0007`, 17 Nov 2026). The only list was Finance Admin's Refund Requests tab.

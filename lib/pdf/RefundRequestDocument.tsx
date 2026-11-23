@@ -1,5 +1,6 @@
 import { Document, Image, Page, StyleSheet, Text, View } from "@react-pdf/renderer";
 import { formatDateOnly } from "@/lib/date-time";
+import { Stamp } from "@/lib/pdf/Stamp";
 
 const NAVY = "#0B1F3A";
 const GREEN = "#2E8B57";
@@ -24,6 +25,8 @@ const styles = StyleSheet.create({
   total: { fontFamily: "Helvetica-Bold", color: NAVY },
   signatures: { flexDirection: "row", marginTop: 30, gap: 24 },
   signature: { flex: 1 },
+  // The SUBMITTED stamp sits in the space above this line, like the Cash
+  // Payment Voucher's, so it adds no height: the form keeps its page count.
   signatureLine: { borderBottom: BORDER, height: 30 },
   signatureLabel: { marginTop: 5, fontSize: 8.5, color: NAVY, fontFamily: "Helvetica-Bold" },
   signatureName: { marginTop: 2, fontSize: 8.5 },
@@ -140,7 +143,7 @@ export function RefundRequestDocument({ data, logoDataUrl }: { data: RefundReque
         </> : null}
 
         <View style={styles.signatures} wrap={false}>
-          <View style={styles.signature}><View style={styles.signatureLine} /><Text style={styles.signatureLabel}>Submitted by</Text><Text style={styles.signatureName}>{data.submittedByName}</Text></View>
+          <View style={styles.signature}><View style={styles.signatureLine}><Stamp label="SUBMITTED" name={data.submittedByName} date={formatDateOnly(data.requestDate)} color="navy" /></View><Text style={styles.signatureLabel}>Submitted by</Text><Text style={styles.signatureName}>{data.submittedByName}</Text></View>
           <View style={styles.signature}><View style={styles.signatureLine} /><Text style={styles.signatureLabel}>Recommended by</Text><Text style={styles.signatureName}>{data.recommendingAuthority}</Text></View>
           <View style={styles.signature}><View style={styles.signatureLine} /><Text style={styles.signatureLabel}>Accounts Department</Text></View>
         </View>
