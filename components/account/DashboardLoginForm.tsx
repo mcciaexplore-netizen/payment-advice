@@ -13,6 +13,8 @@ export function DashboardLoginForm({
   fieldPrefix,
   footerLink,
   redirectTo = "/authority",
+  embedded = false,
+  initialEmail = "",
 }: {
   title: string;
   description: string;
@@ -25,9 +27,13 @@ export function DashboardLoginForm({
   /** Where a successful sign-in lands. Every dashboard login keeps the
    * original /authority; the Payment Desk login returns to the desk. */
   redirectTo?: string;
+  /** Opened inside the MCCIA App Hub: the sign-in is remembered there. */
+  embedded?: boolean;
+  /** The App Hub passes the person's email (same in both apps). */
+  initialEmail?: string;
 }) {
   const router = useRouter();
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(initialEmail);
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -41,7 +47,7 @@ export function DashboardLoginForm({
       const response = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify(embedded ? { email, password, embedded: true } : { email, password }),
       });
       const data = await response.json();
       if (!response.ok) return setError(data.error ?? "Could not sign in.");
@@ -65,11 +71,11 @@ export function DashboardLoginForm({
         {error ? <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{error}</div> : null}
         <div className="flex flex-col gap-1.5">
           <label htmlFor={`${fieldPrefix}-email`} className="text-sm font-medium text-[#0b1f3a]">Email</label>
-          <Input id={`${fieldPrefix}-email`} type="email" required autoFocus autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} />
+          <Input id={`${fieldPrefix}-email`} type="email" required autoFocus={!initialEmail} autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} />
         </div>
         <div className="flex flex-col gap-1.5">
           <label htmlFor={`${fieldPrefix}-password`} className="text-sm font-medium text-[#0b1f3a]">Password</label>
-          <Input id={`${fieldPrefix}-password`} type={showPassword ? "text" : "password"} required autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
+          <Input id={`${fieldPrefix}-password`} type={showPassword ? "text" : "password"} required autoFocus={Boolean(initialEmail)} autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
           <label className="mt-1 flex cursor-pointer items-center gap-2 text-xs font-normal text-gray-600">
             <input type="checkbox" checked={showPassword} onChange={(e) => setShowPassword(e.target.checked)} className="h-4 w-4 accent-[#0b1f3a]" />
             Show password

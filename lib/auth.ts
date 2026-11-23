@@ -15,6 +15,12 @@ export const ADMIN_SESSION_COOKIE = "mccia_admin_session";
 // session cookie (no maxAge, set by every login route): closing the browser
 // signs the person out, so the next visit starts at the sign-in page.
 export const ADMIN_SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 7; // 7 days
+/** A sign-in made inside the MCCIA App Hub is kept as long as a browser
+ * allows (Chrome caps cookies at 400 days), so people sign in to the
+ * Payment Desk there once. Such sessions are re-checked against the
+ * database on every use (lib/app-hub-session.ts), so switching an account
+ * off, or changing its roles, applies straight away. */
+export const APP_HUB_SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 400;
 
 export const ADMIN_ROLES = ["PAYMENT_ADVICE", "CASH_VOUCHER", "ALL", "AUTHORITY", "BRANCH", "DEPARTMENT", "SELF", "CASH_RECEIPT"] as const;
 export type AdminRole = (typeof ADMIN_ROLES)[number];
@@ -50,6 +56,8 @@ export type AdminSessionPayload = {
   recommendingAuthorityId: string | null;
   /** Present on Cash Receipt sessions to bind the login to its assigned branch. */
   branchScope?: string;
+  /** Signed in inside the MCCIA App Hub: long-lived, re-checked on every use. */
+  appHub?: true;
 };
 
 /** True if the session holds the given role — the replacement for every
@@ -102,7 +110,7 @@ export async function createAdminSessionToken(
   return new SignJWT({ ...session })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
-    .setExpirationTime(`${ADMIN_SESSION_MAX_AGE_SECONDS}s`)
+    .setExpirationTime(`${session.appHub ? APP_HUB_SESSION_MAX_AGE_SECONDS : ADMIN_SESSION_MAX_AGE_SECONDS}s`)
     .sign(getSecretKey());
 }
 
@@ -138,6 +146,7 @@ export async function decodeAdminSessionToken(
       roles: roles as AdminRole[],
       recommendingAuthorityId: payload.recommendingAuthorityId,
       ...(typeof branchScope === "string" ? { branchScope } : {}),
+      ...(payload.appHub === true ? { appHub: true as const } : {}),
     };
   } catch {
     return null;
