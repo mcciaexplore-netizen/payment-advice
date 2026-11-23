@@ -7,6 +7,7 @@ import { dashboardFilterCondition, dashboardOrderBy, parseDashboardFilters } fro
 import { dashboardScopeWhere, isDashboardRole, pickDashboardGrants, resolveDashboardView } from "@/lib/advice/dashboard-scope";
 import { buildDashboardReport } from "@/lib/advice/dashboard-report";
 import { todayInIst } from "@/lib/date-time";
+import { refundRequestsEnabled } from "@/lib/refund-requests";
 
 export const runtime = "nodejs";
 
@@ -36,10 +37,10 @@ export async function GET(req: NextRequest) {
   const params = Object.fromEntries(req.nextUrl.searchParams);
   const requestedRole = isDashboardRole(params.role) ? params.role : undefined;
   const activeGrant = grants.find((grant) => grant.role === requestedRole) ?? grants[0];
-  const { view, isAuthority } = resolveDashboardView(activeGrant, params.view, holdsCashReceiptGrant);
+  const { view, isAuthority } = resolveDashboardView(activeGrant, params.view, holdsCashReceiptGrant, refundRequestsEnabled());
   // Pending My Recommendation has no filters and no report; Cash Receipts has
   // its own report. Only the filterable submission tabs export here.
-  if (view === "pending" || view === "cash-receipts") {
+  if (view === "pending" || view === "cash-receipts" || view === "my-refunds") {
     return NextResponse.json({ error: "This tab has no report." }, { status: 400 });
   }
 

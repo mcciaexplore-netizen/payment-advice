@@ -8,7 +8,7 @@ import { paymentAdvices } from "@/lib/db/schema";
 
 export type DashboardRole = "AUTHORITY" | "BRANCH" | "DEPARTMENT" | "SELF" | "CASH_RECEIPT";
 export type DashboardGrant = { role: DashboardRole; recommendingAuthorityId: string | null; scopeValue: string | null };
-export type DashboardView = "pending" | "history" | "my-submissions" | "team-submissions" | "cash-receipts";
+export type DashboardView = "pending" | "history" | "my-submissions" | "team-submissions" | "cash-receipts" | "my-refunds";
 
 type RoleRow = { role: string; recommendingAuthorityId: string | null; scopeValue: string | null };
 
@@ -36,12 +36,14 @@ export function pickDashboardGrants(roleRows: RoleRow[]) {
 /** Which tab the request lands on, decided server-side so a restricted
  * grant (SELF / CASH_RECEIPT) can never reach Team Submissions whatever
  * ?view= asks for. */
-export function resolveDashboardView(activeGrant: DashboardGrant, requestedView: string | undefined, holdsCashReceiptGrant: boolean) {
+export function resolveDashboardView(activeGrant: DashboardGrant, requestedView: string | undefined, holdsCashReceiptGrant: boolean, refundsTabEnabled = false) {
   const isAuthority = activeGrant.role === "AUTHORITY";
   const isRestrictedGrant = activeGrant.role === "SELF" || activeGrant.role === "CASH_RECEIPT";
   const isBranchGrant = activeGrant.role === "BRANCH";
   const canSeeCashReceiptsTab = isBranchGrant || activeGrant.role === "CASH_RECEIPT" || (activeGrant.role === "SELF" && holdsCashReceiptGrant);
-  const view: DashboardView = isAuthority
+  // My Refunds: every dashboard account's own refund requests, beside My
+  // Submissions. Only once refunds are switched on (the table exists).
+  const view: DashboardView = requestedView === "my-refunds" && refundsTabEnabled ? "my-refunds" : isAuthority
     ? requestedView === "history" ? "history" : requestedView === "my-submissions" ? "my-submissions" : "pending"
     : requestedView === "cash-receipts" && canSeeCashReceiptsTab ? "cash-receipts"
     : isRestrictedGrant || requestedView === "my-submissions" ? "my-submissions"

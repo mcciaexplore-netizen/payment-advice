@@ -118,8 +118,11 @@ describe("GET /api/authority/report", () => {
     expect(orderSql()).toEqual(['"payment_advices"."submitted_at" desc']);
   });
 
-  it("has no report for Pending My Recommendation or Cash Receipts", async () => {
+  it("has no report for Pending My Recommendation, Cash Receipts or My Refunds", async () => {
     expect((await request("AUTHORITY", { view: "pending" })).status).toBe(400);
+    vi.stubEnv("REFUND_REQUESTS_ENABLED", "true");
+    expect((await request("SELF", { view: "my-refunds" })).status).toBe(400);
+    vi.unstubAllEnvs();
     expect((await request("AUTHORITY", {})).status).toBe(400);
     expect((await request("BRANCH", { view: "cash-receipts" })).status).toBe(400);
   });
