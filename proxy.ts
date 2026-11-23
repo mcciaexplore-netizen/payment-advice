@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ADMIN_SESSION_COOKIE, decodeAdminSessionToken, hasFinanceRole, hasTeamDashboardRole } from "@/lib/auth";
 import { DESK_PATHS, safeNextPath } from "@/lib/desk-login";
+import { refreshAppHubSession } from "@/lib/app-hub-session";
 
 const PUBLIC_ADMIN_PATHS = new Set(["/admin/login", "/api/admin/login"]);
 const PUBLIC_AUTHORITY_PATHS = new Set(["/authority/login", "/api/authority/login"]);
@@ -9,13 +10,21 @@ const PUBLIC_TEAM_PATHS = new Set(["/team/login", "/api/team/login"]);
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const token = req.cookies.get(ADMIN_SESSION_COOKIE)?.value;
-  const session = token ? await decodeAdminSessionToken(token) : null;
+  // An App Hub sign-in (up to 400 days) is re-checked against the account
+  // on every request: switched off means signed out, role changes apply now.
+  const session = token ? await refreshAppHubSession(await decodeAdminSessionToken(token)) : null;
   // Payment Desk sign-in: the home page and the submission forms open only
   // after signing in; the sign-in page itself sends a signed-in user on.
   if (DESK_PATHS.has(pathname)) {
     if (!session) {
       const loginUrl = new URL("/login", req.url);
       if (pathname !== "/") loginUrl.searchParams.set("next", pathname);
+      // Opened inside the App Hub: keep that (and the email it passes) for the sign-in page.
+      if (req.nextUrl.searchParams.get("embed") === "1") {
+        loginUrl.searchParams.set("embed", "1");
+        const email = req.nextUrl.searchParams.get("email");
+        if (email) loginUrl.searchParams.set("email", email);
+      }
       return NextResponse.redirect(loginUrl, 302);
     }
     return NextResponse.next();

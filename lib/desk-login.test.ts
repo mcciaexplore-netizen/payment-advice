@@ -129,7 +129,13 @@ describe("one sign-in opens the dashboards (no second login)", () => {
 });
 
 describe("every login ends when the browser closes", () => {
-  it.each(["app/api/login/route.ts", "app/api/admin/login/route.ts", "app/api/authority/login/route.ts", "app/api/team/login/route.ts", "app/api/cash-receipt/login/route.ts"])("%s sets the session cookie with no maxAge", async (file) => {
+  it("the Payment Desk login sets its cookie through setSessionCookie (browser-session unless inside the App Hub, tested in app-hub.test.ts)", async () => {
+    const source = (await import("node:fs")).readFileSync("app/api/login/route.ts", "utf8");
+    expect(source).toContain("setSessionCookie(response, token,");
+    expect(source).not.toMatch(/maxAge|expires/);
+  });
+
+  it.each(["app/api/admin/login/route.ts", "app/api/authority/login/route.ts", "app/api/team/login/route.ts", "app/api/cash-receipt/login/route.ts"])("%s sets the session cookie with no maxAge", async (file) => {
     const source = (await import("node:fs")).readFileSync(file, "utf8");
     expect(source).toContain("ADMIN_SESSION_COOKIE");
     expect(source).not.toMatch(/maxAge|expires/);
