@@ -49,7 +49,17 @@ Design system: Navy `#0B1F3A`, Forest green `#2E8B57`, Amber `#E8A33D`. Headings
 
 ## 3. Current State (update this every session)
 
-**Last updated:** 21 November 2026, by Claude Opus 5.5 (Payment Desk sign-in first; branch `feature/login-first`, pushed, PR to open, not merged; ACCESS CHANGE, needs owner approval; see entry below)
+**Last updated:** 24 November 2026, by Claude Sonnet 5.5 (My Refunds tab; branch `feature/my-refunds-tab`, pushed, PR to open, not merged; no migration, no access change; see entry below)
+
+### In review: "My Refunds" tab on the Authority and Team dashboards (Claude Sonnet 5.5, 2026-11-24, branch `feature/my-refunds-tab`, cut from `origin/main` `e33ebcc`, not merged). No migration, no access change.
+- Problem: a person who submitted a Refund could only see it on the confirmation page right after submitting. Refunds are their own table (`refund_requests`), which My Submissions never reads, so a submitter could not find them again (reported for Sandhya Acharya, `REF/MCCIA/2026-27/0007`, 17 Nov 2026). The only list was Finance Admin's Refund Requests tab.
+- New tab "My Refunds" beside My Submissions for every dashboard role (AUTHORITY, BRANCH, DEPARTMENT, SELF, CASH_RECEIPT): `/authority?role=<ROLE>&view=my-refunds`. It lists the refunds whose submitter email equals the signed-in login email (case-insensitive, `myRefundsWhere` in `lib/advice/my-refunds.ts`): reference, payee, reason, amount, date, and View / Download links to the existing `/api/refund/[id]/pdf` route. Every earlier refund appears automatically (read-only check on 2026-11-24: all 7 saved refunds match an active login email).
+- Only shown and reachable while `REFUND_REQUESTS_ENABLED=true` (`resolveDashboardView` got an optional 4th argument; the page and the report route pass `refundRequestsEnabled()`); with it off, `?view=my-refunds` falls back to the normal view and no refund query runs. `GET /api/authority/report` answers 400 for this tab (no Excel report for refunds).
+- The refund confirmation page (`/refund/submitted/[id]`) shows a "View my refunds" button to signed-in people with a dashboard role.
+- Shared files touched: `app/authority/page.tsx` (tab links, `loadMyRefundsTab`), `lib/advice/dashboard-scope.ts` (new `my-refunds` view, flag-gated). Scope logic for the other tabs is unchanged.
+- Known limit: a refund shows only under the email typed in "Your Email" on its form. One typed with a personal email will not match the login email until it is corrected (same rule as My Submissions).
+- Not done: no email is sent to the submitter or anyone else when a refund is saved (the refund flow has never sent email); Finance still finds refunds in Finance Admin, Refund Requests.
+- Tests: `lib/my-refunds-tab.test.ts` (renders the real page per role against a query-recording fake DB: scope is the login email only, tab beside My Submissions, flag off hides it and skips the query, empty state), plus `lib/authority-report-route.test.ts`. Full suite (959), tsc, lint and `next build` pass. Not verified in a signed-in browser.
 
 ### In review: Payment Desk sign-in first, one sign-in for every dashboard (Claude Opus 5.5, 2026-11-21, branch `feature/login-first`, cut from `origin/main` `8cb4a30`, not merged). No migration. ACCESS CHANGE: needs owner approval before merge.
 - What changes for users: `/` and the submission forms (`/payment-advice`, `/cash-voucher`, `/advance`, `/refund`, `/forwarding-memo`) now open only after signing in at the new `/login` ("Payment Desk"). Signed out, `proxy.ts` redirects there with `?next=` (only a desk page is ever accepted as `next`, `lib/desk-login.ts`). After sign-in the person lands on the desk or the form they asked for.

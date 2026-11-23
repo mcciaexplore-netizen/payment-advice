@@ -4,6 +4,8 @@ import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { refundRequests } from "@/lib/db/schema";
 import { refundRequestsEnabled } from "@/lib/refund-requests";
+import { getAdminSession } from "@/lib/admin-session";
+import { hasTeamDashboardRole } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +22,11 @@ export default async function RefundSubmittedPage({ params }: { params: Promise<
     .where(eq(refundRequests.id, id))
     .limit(1);
   if (!refund) notFound();
+  // Signed-in people with a dashboard can open this and every earlier refund
+  // under My Refunds (the sign-in is required before the form since the Payment
+  // Desk sign-in change, so this is the usual case).
+  const session = await getAdminSession();
+  const canSeeMyRefunds = hasTeamDashboardRole(session);
 
   return (
     <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-8 px-6 py-16">
@@ -31,6 +38,7 @@ export default async function RefundSubmittedPage({ params }: { params: Promise<
       <div className="flex flex-wrap justify-center gap-3">
         <a href={`/api/refund/${id}/pdf`} target="_blank" rel="noreferrer" className="rounded-md bg-[#0b1f3a] px-6 py-3 text-base font-medium text-white shadow-sm transition hover:bg-[#0b1f3a]/90">Open printable request</a>
         <a href={`/api/refund/${id}/pdf?download=1`} download className="rounded-md border border-[#0b1f3a] px-6 py-3 text-base font-medium text-[#0b1f3a] hover:bg-[#0b1f3a]/5">Download PDF</a>
+        {canSeeMyRefunds ? <Link href="/authority?view=my-refunds" className="rounded-md border border-[#0b1f3a] px-6 py-3 text-base font-medium text-[#0b1f3a] hover:bg-[#0b1f3a]/5">View my refunds</Link> : null}
         <Link href="/refund" className="rounded-md border border-[#0b1f3a] px-6 py-3 text-base font-medium text-[#0b1f3a] hover:bg-[#0b1f3a]/5">Submit another refund</Link>
       </div>
     </main>
