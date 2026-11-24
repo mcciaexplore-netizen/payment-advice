@@ -4,7 +4,8 @@ import { auditLog, refundRequests } from "@/lib/db/schema";
 import { allocateRefundNumber, financialYearFor } from "@/lib/serial";
 import { todayInIst } from "@/lib/date-time";
 import { verifyUploadedAttachments } from "@/lib/attachments/verify-uploaded";
-import { refundEntryVisible, refundRequestsEnabled } from "@/lib/refund-requests";
+import { refundEntryVisible, refundRecommendationEnabled, refundRequestsEnabled } from "@/lib/refund-requests";
+import { notifyRefundSubmission } from "@/lib/advice/refund-review";
 import { refundAmounts, refundRequestSchema } from "@/lib/validation/refund-request";
 import { clientIpFrom, createRateLimiter } from "@/lib/rate-limit";
 
@@ -131,6 +132,17 @@ export async function POST(request: NextRequest) {
       });
       return row;
     });
+    // The refund goes to its recommending authority: they are emailed to review it
+    // and the submitter is sent a confirmation (only once that process is on).
+    if (refundRecommendationEnabled()) {
+      await notifyRefundSubmission({
+        id: created.id, serialNo: created.serialNo, requestDate,
+        submittedByName: values.submittedByName, submittedByEmail: values.submittedByEmail,
+        payeeName: values.payeeName, natureOfExpenditure: values.natureOfExpenditure,
+        totalAmount: refundAmounts(values).totalAmount, recommendingAuthority: values.recommendingAuthority,
+        origin: new URL(request.url).origin,
+      });
+    }
     return NextResponse.json({ previewOnly: false, id: created.id, serialNo: created.serialNo });
   } catch (error) {
     console.error("[Refund] database submission failed", error instanceof Error ? error.message : error);

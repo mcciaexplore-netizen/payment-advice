@@ -40,7 +40,7 @@ export async function GET(req: NextRequest) {
   const { view, isAuthority } = resolveDashboardView(activeGrant, params.view, holdsCashReceiptGrant, refundRequestsEnabled());
   // Pending My Recommendation has no filters and no report; Cash Receipts has
   // its own report. Only the filterable submission tabs export here.
-  if (view === "pending" || view === "cash-receipts" || view === "my-refunds") {
+  if (view === "pending" || view === "cash-receipts" || view === "my-refunds" || view === "refund-requests") {
     return NextResponse.json({ error: "This tab has no report." }, { status: 400 });
   }
 

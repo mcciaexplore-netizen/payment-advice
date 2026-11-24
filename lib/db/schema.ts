@@ -713,6 +713,28 @@ export const refundRequests = pgTable(
   ],
 );
 
+/** The recommending authority's decision on a Refund request: one row per
+ * refund, and only once it is decided. No row means the refund is still
+ * waiting for its authority's recommendation (so every refund submitted
+ * before this table existed starts out waiting). Kept in its own table so
+ * refund_requests itself never changes shape. SENT_BACK carries the
+ * authority's remarks; the submitter then files a new refund. */
+export const refundRequestReviews = pgTable(
+  "refund_request_reviews",
+  {
+    refundRequestId: uuid("refund_request_id").primaryKey().references(() => refundRequests.id),
+    decision: text("decision").notNull(), // 'RECOMMENDED' | 'SENT_BACK'
+    decidedByName: text("decided_by_name").notNull(),
+    decidedByAuthorityId: uuid("decided_by_authority_id").references(() => recommendingAuthorities.id),
+    decidedAt: timestamp("decided_at", { withTimezone: true }).defaultNow().notNull(),
+    remarks: text("remarks"),
+  },
+  (table) => [
+    check("refund_request_reviews_decision_check", sql`${table.decision} in ('RECOMMENDED', 'SENT_BACK')`),
+    check("refund_request_reviews_sent_back_remarks_check", sql`${table.decision} <> 'SENT_BACK' or (${table.remarks} is not null and length(btrim(${table.remarks})) > 0)`),
+  ],
+);
+
 export const auditLog = pgTable("audit_log", {
   id: uuid("id").primaryKey().defaultRandom(),
   paymentAdviceId: uuid("payment_advice_id").references(

@@ -1,7 +1,7 @@
 import Link from "next/link";
-import { and, count, desc, eq, gte, inArray, lte, sum } from "drizzle-orm";
+import { and, count, desc, eq, gte, inArray, isNull, lte, sql, sum } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { adminUserRoles, adminUsers, attachments, cashReceipts, paymentAdvices, paymentEntries, recommendingAuthorities, refundRequests } from "@/lib/db/schema";
+import { adminUserRoles, adminUsers, attachments, cashReceipts, paymentAdvices, paymentEntries, recommendingAuthorities, refundRequestReviews, refundRequests } from "@/lib/db/schema";
 import { getAdminSession } from "@/lib/admin-session";
 import { displayNoFor } from "@/lib/advice/document-identity";
 import { pipelineStageFor } from "@/lib/advice/pipeline-stage";
@@ -25,7 +25,9 @@ import { SubmitterEditAction } from "@/components/admin/SubmitterEditAction";
 import { DashboardFilters, FilteredEmptyState } from "@/components/dashboard/DashboardFilters";
 import { dashboardCountFields, dashboardFilterCondition, dashboardOrderBy, hasActiveFilters, parseDashboardFilters, readDashboardCounts } from "@/lib/advice/dashboard-filters";
 import { myRefundsWhere } from "@/lib/advice/my-refunds";
-import { refundRequestsEnabled } from "@/lib/refund-requests";
+import { refundsForAuthorityWhere } from "@/lib/advice/refund-authority";
+import { refundRecommendationEnabled, refundRequestsEnabled } from "@/lib/refund-requests";
+import { refundStatusLabel } from "@/lib/advice/refund-review";
 import { dashboardScopeWhere, isDashboardRole, pickDashboardGrants, resolveDashboardView, type DashboardGrant } from "@/lib/advice/dashboard-scope";
 
 export const dynamic = "force-dynamic";
@@ -71,6 +73,9 @@ export default async function TeamDashboard({ searchParams }: { searchParams: Pr
 
   if (view === "cash-receipts") {
     return loadCashReceiptsTab(activeGrant, grants, session.adminUserId, isRestrictedGrant, params);
+  }
+  if (view === "refund-requests") {
+    return loadAuthorityRefundsTab({ activeGrant, grants, isDg });
   }
   if (view === "my-refunds") {
     return loadMyRefundsTab({ activeGrant, grants, accountEmail: account.email, isAuthority, isDg, isRestrictedGrant, isBranchGrant, canSeeCashReceiptsTab });
@@ -143,6 +148,16 @@ export default async function TeamDashboard({ searchParams }: { searchParams: Pr
     rows.sort(compareByCurrentStageAge);
   }
 
+  // Refunds waiting for this authority's recommendation (once refunds go through
+  // the authority). They have their own tab; this only points to it.
+  let pendingRefunds = 0;
+  if (isAuthority && view === "pending" && refundRecommendationEnabled() && authorityRows[0]) {
+    const [waiting] = await db.select({ count: count() }).from(refundRequests)
+      .leftJoin(refundRequestReviews, eq(refundRequestReviews.refundRequestId, refundRequests.id))
+      .where(and(refundsForAuthorityWhere(authorityRows[0].authorityName), isNull(refundRequestReviews.refundRequestId)));
+    pendingRefunds = waiting?.count ?? 0;
+  }
+
   const subtitle = isAuthority
     ? view === "history" ? "Your previous recommendation decisions"
       : view === "my-submissions" ? `${scopeTotal} submission${scopeTotal === 1 ? "" : "s"} made using ${account.email}`
@@ -161,6 +176,7 @@ export default async function TeamDashboard({ searchParams }: { searchParams: Pr
         <Tab href="/authority?role=AUTHORITY&view=history" active={view === "history"}>History</Tab>
         <Tab href="/authority?role=AUTHORITY&view=my-submissions" active={view === "my-submissions"}>My Submissions</Tab>
         {refundsTab ? <Tab href="/authority?role=AUTHORITY&view=my-refunds" active={false}>My Refunds</Tab> : null}
+        {refundsTab ? <Tab href="/authority?role=AUTHORITY&view=refund-requests" active={false}>Refund Requests</Tab> : null}
       </> : isRestrictedGrant ? (
         // No Team Submissions tab - SELF/CASH_RECEIPT have no broader team
         // to show, only their own submissions and their own Cash Receipts.
@@ -177,6 +193,7 @@ export default async function TeamDashboard({ searchParams }: { searchParams: Pr
       </>}
       <div className="ml-auto mb-1.5"><StageLegend /></div>
     </nav>
+    {pendingRefunds > 0 ? <Link href="/authority?role=AUTHORITY&view=refund-requests" className="flex items-center justify-between rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 hover:bg-amber-100"><span><strong>{pendingRefunds} refund request{pendingRefunds === 1 ? "" : "s"}</strong> waiting for your recommendation</span><span className="font-medium">Review →</span></Link> : null}
     {filtersEnabled && (scopeTotal > 0 || hasActiveFilters(filters)) ? <DashboardFilters base={filterBase} filters={filters} counts={counts} showDecision={showDecision} /> : null}
     {rows.length === 0 && hasActiveFilters(filters) ? <FilteredEmptyState base={filterBase} filters={filters} /> : rows.length === 0 ? <div className="rounded-lg border border-gray-200 p-10 text-center text-sm text-gray-500">
       {isAuthority && view === "history" ? "No decisions recorded yet." : view === "my-submissions" ? "No submissions found for your login email." : isAuthority ? "Nothing is waiting for your recommendation." : "No submissions found for this team scope."}
@@ -298,10 +315,17 @@ async function loadMyRefundsTab({ activeGrant, grants, accountEmail, isAuthority
   isBranchGrant: boolean;
   canSeeCashReceiptsTab: boolean;
 }) {
-  const rows = await db.select({
+  const recommendation = refundRecommendationEnabled();
+  const mineColumns = {
     id: refundRequests.id, serialNo: refundRequests.serialNo, requestDate: refundRequests.requestDate,
     payeeName: refundRequests.payeeName, nature: refundRequests.natureOfExpenditure, totalAmount: refundRequests.totalAmount,
-  }).from(refundRequests).where(myRefundsWhere(accountEmail)).orderBy(desc(refundRequests.createdAt));
+  };
+  const noReview = { decision: null, decidedAt: null, decidedByName: null, remarks: null } as const;
+  const rows: Array<typeof mineColumns extends infer C ? { [K in keyof C]: string } & { decision: string | null; decidedAt: Date | null; decidedByName: string | null; remarks: string | null } : never> = recommendation
+    ? await db.select({ ...mineColumns, decision: refundRequestReviews.decision, decidedAt: refundRequestReviews.decidedAt, decidedByName: refundRequestReviews.decidedByName, remarks: refundRequestReviews.remarks })
+        .from(refundRequests).leftJoin(refundRequestReviews, eq(refundRequestReviews.refundRequestId, refundRequests.id))
+        .where(myRefundsWhere(accountEmail)).orderBy(desc(refundRequests.createdAt))
+    : (await db.select(mineColumns).from(refundRequests).where(myRefundsWhere(accountEmail)).orderBy(desc(refundRequests.createdAt))).map((row) => ({ ...row, ...noReview }));
   const total = rows.reduce((sum, row) => sum + Math.round(Number(row.totalAmount) * 100), 0) / 100;
 
   return <div className="flex flex-col gap-6">
@@ -314,23 +338,92 @@ async function loadMyRefundsTab({ activeGrant, grants, accountEmail, isAuthority
         <Tab href={`/authority?role=AUTHORITY${isDg ? "&view=pending" : ""}`} active={false}>Pending My Recommendation</Tab>
         <Tab href="/authority?role=AUTHORITY&view=history" active={false}>History</Tab>
         <Tab href="/authority?role=AUTHORITY&view=my-submissions" active={false}>My Submissions</Tab>
+        <Tab href="/authority?role=AUTHORITY&view=my-refunds" active>My Refunds</Tab>
+        <Tab href="/authority?role=AUTHORITY&view=refund-requests" active={false}>Refund Requests</Tab>
       </> : isRestrictedGrant ? <Tab href={`/authority?role=${activeGrant.role}`} active={false}>My Submissions</Tab> : <>
         <Tab href={`/authority?role=${activeGrant.role}`} active={false}>Team Submissions</Tab>
         <Tab href={`/authority?role=${activeGrant.role}&view=my-submissions`} active={false}>My Submissions</Tab>
       </>}
-      <Tab href={`/authority?role=${activeGrant.role}&view=my-refunds`} active>My Refunds</Tab>
+      {isAuthority ? null : <Tab href={`/authority?role=${activeGrant.role}&view=my-refunds`} active>My Refunds</Tab>}
       {canSeeCashReceiptsTab && (isBranchGrant || isRestrictedGrant) ? <Tab href={`/authority?role=${activeGrant.role}&view=cash-receipts`} active={false}>{isRestrictedGrant ? "My Cash Receipts" : "Cash Receipts"}</Tab> : null}
     </nav>
     {rows.length === 0 ? <div className="rounded-lg border border-gray-200 p-10 text-center text-sm text-gray-500">
       No refund requests found for your login email. A refund shows here when the &quot;Your Email&quot; on its form is {accountEmail}.
     </div> : <div className="overflow-x-auto rounded-lg border border-gray-200"><table className="w-full text-left text-sm">
-      <thead className="bg-gray-50/80 text-xs uppercase text-gray-500"><tr><th className="p-3">Reference</th><th className="p-3">Payee / Reason</th><th className="p-3">Amount</th><th className="p-3">Submitted</th><th className="p-3">Request</th></tr></thead>
+      <thead className="bg-gray-50/80 text-xs uppercase text-gray-500"><tr><th className="p-3">Reference</th><th className="p-3">Payee / Reason</th><th className="p-3">Amount</th><th className="p-3">Submitted</th>{recommendation ? <th className="p-3">Status</th> : null}<th className="p-3">Request</th></tr></thead>
       <tbody className="divide-y divide-gray-100">{rows.map((row) => <tr key={row.id} className="align-top">
         <td className="p-3 font-medium text-[#0b1f3a]">{row.serialNo}</td>
         <td className="max-w-xs p-3"><div className="font-medium">{row.payeeName}</div><div className="mt-1 text-xs text-gray-600">{row.nature}</div></td>
         <td className="whitespace-nowrap p-3">{formatAmount(row.totalAmount)}</td>
         <td className="whitespace-nowrap p-3">{formatDateOnly(row.requestDate)}</td>
+        {recommendation ? <td className="p-3 text-xs"><span className={`rounded-full px-2 py-0.5 font-medium ${row.decision === "RECOMMENDED" ? "bg-green-50 text-green-800" : row.decision === "SENT_BACK" ? "bg-amber-50 text-amber-800" : "bg-gray-100 text-gray-700"}`}>{refundStatusLabel(row)}</span>{row.decision === "SENT_BACK" && row.remarks ? <div className="mt-1 max-w-[14rem] text-gray-600">Remarks: {row.remarks}</div> : null}</td> : null}
         <td className="p-3"><div className="flex items-center gap-2">
+          <a href={`/api/refund/${row.id}/pdf`} target="_blank" rel="noreferrer" className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50">View</a>
+          <a href={`/api/refund/${row.id}/pdf?download=1`} className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50">Download</a>
+        </div></td>
+      </tr>)}</tbody>
+    </table></div>}
+  </div>;
+}
+
+/** The Refund Requests tab for a recommending authority (read only): every
+ * refund request whose "Recommending Authority" names this authority,
+ * including ones submitted before this tab existed. Refunds are a separate
+ * table from Payment Advices, so they never appear in Pending My
+ * Recommendation; there is no approve step for refunds, this is the
+ * authority's view of what has been raised under their name. The authority is
+ * the signed-in account's own (never taken from the URL). */
+async function loadAuthorityRefundsTab({ activeGrant, grants, isDg }: {
+  activeGrant: DashboardGrant;
+  grants: DashboardGrant[];
+  isDg: boolean;
+}) {
+  const [authority] = await db.select({ authorityName: recommendingAuthorities.authorityName }).from(recommendingAuthorities)
+    .where(eq(recommendingAuthorities.id, activeGrant.recommendingAuthorityId!)).limit(1);
+  const recommendation = refundRecommendationEnabled();
+  const columns = {
+    id: refundRequests.id, serialNo: refundRequests.serialNo, requestDate: refundRequests.requestDate,
+    submittedByName: refundRequests.submittedByName, submittedByEmail: refundRequests.submittedByEmail,
+    department: refundRequests.submittedByDepartment, branch: refundRequests.branch,
+    payeeName: refundRequests.payeeName, nature: refundRequests.natureOfExpenditure, totalAmount: refundRequests.totalAmount,
+  };
+  const noDecision = { decision: null, decidedAt: null, decidedByName: null } as const;
+  type Row = { [K in keyof typeof columns]: string } & { decision: string | null; decidedAt: Date | null; decidedByName: string | null };
+  // With the recommendation process on, waiting refunds come first.
+  const rows: Row[] = !authority ? [] : recommendation
+    ? await db.select({ ...columns, decision: refundRequestReviews.decision, decidedAt: refundRequestReviews.decidedAt, decidedByName: refundRequestReviews.decidedByName })
+        .from(refundRequests).leftJoin(refundRequestReviews, eq(refundRequestReviews.refundRequestId, refundRequests.id))
+        .where(refundsForAuthorityWhere(authority.authorityName))
+        .orderBy(sql`(${refundRequestReviews.refundRequestId} is null) desc`, desc(refundRequests.createdAt))
+    : (await db.select(columns).from(refundRequests).where(refundsForAuthorityWhere(authority.authorityName)).orderBy(desc(refundRequests.createdAt))).map((row) => ({ ...row, ...noDecision }));
+  const waiting = rows.filter((row) => !row.decision).length;
+  const total = rows.reduce((sum, row) => sum + Math.round(Number(row.totalAmount) * 100), 0) / 100;
+
+  return <div className="flex flex-col gap-6">
+    <header><h1 className="font-heading text-3xl text-[#0b1f3a]">Authority Recommendations</h1><p className="mt-1 text-sm text-gray-600">{rows.length} refund request{rows.length === 1 ? "" : "s"} naming you as the recommending authority{rows.length ? `, total ${formatAmount(total.toFixed(2))}` : ""}{recommendation && rows.length ? `. ${waiting} waiting for your recommendation.` : ""}</p></header>
+    {grants.length > 1 ? <nav aria-label="Dashboard role" className="flex flex-wrap gap-2 rounded-lg bg-gray-100 p-1.5">
+      {grants.map((grant) => <Link key={grant.role} href={`/authority?role=${grant.role}`} className={`rounded-md px-3 py-2 text-sm font-medium ${grant.role === activeGrant.role ? "bg-white text-[#0b1f3a] shadow-sm" : "text-gray-600 hover:text-[#0b1f3a]"}`}>{roleLabel(grant)}</Link>)}
+    </nav> : null}
+    <nav className="flex flex-wrap items-center gap-2 border-b border-gray-200 pb-0">
+      <Tab href={`/authority?role=AUTHORITY${isDg ? "&view=pending" : ""}`} active={false}>Pending My Recommendation</Tab>
+      <Tab href="/authority?role=AUTHORITY&view=history" active={false}>History</Tab>
+      <Tab href="/authority?role=AUTHORITY&view=my-submissions" active={false}>My Submissions</Tab>
+      <Tab href="/authority?role=AUTHORITY&view=my-refunds" active={false}>My Refunds</Tab>
+      <Tab href="/authority?role=AUTHORITY&view=refund-requests" active>Refund Requests</Tab>
+    </nav>
+    {rows.length === 0 ? <div className="rounded-lg border border-gray-200 p-10 text-center text-sm text-gray-500">
+      No refund requests name you as the recommending authority.
+    </div> : <div className="overflow-x-auto rounded-lg border border-gray-200"><table className="w-full text-left text-sm">
+      <thead className="bg-gray-50/80 text-xs uppercase text-gray-500"><tr><th className="p-3">Reference</th><th className="p-3">Submitted By</th><th className="p-3">Payee / Reason</th><th className="p-3">Amount</th><th className="p-3">Date</th>{recommendation ? <th className="p-3">Status</th> : null}<th className="p-3">Request</th></tr></thead>
+      <tbody className="divide-y divide-gray-100">{rows.map((row) => <tr key={row.id} className="align-top">
+        <td className="p-3 font-medium text-[#0b1f3a]">{row.serialNo}</td>
+        <td className="p-3"><div className="font-medium">{row.submittedByName}</div><div className="text-xs text-gray-500">{row.submittedByEmail}</div><div className="text-xs text-gray-500">{row.department}, {row.branch}</div></td>
+        <td className="max-w-xs p-3"><div className="font-medium">{row.payeeName}</div><div className="mt-1 text-xs text-gray-600">{row.nature}</div></td>
+        <td className="whitespace-nowrap p-3">{formatAmount(row.totalAmount)}</td>
+        <td className="whitespace-nowrap p-3">{formatDateOnly(row.requestDate)}</td>
+        {recommendation ? <td className="p-3 text-xs"><span className={`rounded-full px-2 py-0.5 font-medium ${row.decision === "RECOMMENDED" ? "bg-green-50 text-green-800" : row.decision === "SENT_BACK" ? "bg-amber-50 text-amber-800" : "bg-gray-100 text-gray-700"}`}>{refundStatusLabel(row)}</span></td> : null}
+        <td className="p-3"><div className="flex items-center gap-2">
+          {recommendation ? <Link href={`/authority/refund/${row.id}`} className={`rounded-md px-3 py-1.5 text-xs font-medium ${row.decision ? "border border-gray-300 text-gray-700 hover:bg-gray-50" : "bg-[#0b1f3a] text-white hover:bg-[#0b1f3a]/90"}`}>{row.decision ? "Details" : "Review"}</Link> : null}
           <a href={`/api/refund/${row.id}/pdf`} target="_blank" rel="noreferrer" className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50">View</a>
           <a href={`/api/refund/${row.id}/pdf?download=1`} className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50">Download</a>
         </div></td>

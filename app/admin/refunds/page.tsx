@@ -1,6 +1,9 @@
 import Link from "next/link";
+import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { refundRequests } from "@/lib/db/schema";
+import { refundRequestReviews, refundRequests } from "@/lib/db/schema";
+import { refundRecommendationEnabled } from "@/lib/refund-requests";
+import { refundStatusLabel } from "@/lib/advice/refund-review";
 import { formatDateOnly } from "@/lib/date-time";
 import { BRANCH_OPTIONS } from "@/lib/validation/payment-advice";
 import { AttachmentPreview } from "@/components/ui/AttachmentPreview";
@@ -24,7 +27,10 @@ function toSearchParams(record: Record<string, string | string[] | undefined>): 
  * never a raw Blob URL; the printable request is the existing PDF route. */
 export default async function RefundRequestsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const params = parseRefundFilterParams(toSearchParams(await searchParams));
-  const rows = await db.select({
+  // With the recommendation process on, each refund also shows where it stands.
+  // Off: the original query, which never touches the reviews table.
+  const recommendation = refundRecommendationEnabled();
+  const columns = {
     id: refundRequests.id,
     serialNo: refundRequests.serialNo,
     requestDate: refundRequests.requestDate,
@@ -37,7 +43,13 @@ export default async function RefundRequestsPage({ searchParams }: { searchParam
     natureOfExpenditure: refundRequests.natureOfExpenditure,
     totalAmount: refundRequests.totalAmount,
     documents: refundRequests.documents,
-  }).from(refundRequests).where(buildRefundWhere(params)).orderBy(REFUND_LIST_ORDER);
+  };
+  const noReview = { decision: null, decidedAt: null, decidedByName: null } as const;
+  const rows = recommendation
+    ? await db.select({ ...columns, decision: refundRequestReviews.decision, decidedAt: refundRequestReviews.decidedAt, decidedByName: refundRequestReviews.decidedByName })
+        .from(refundRequests).leftJoin(refundRequestReviews, eq(refundRequestReviews.refundRequestId, refundRequests.id))
+        .where(buildRefundWhere(params)).orderBy(REFUND_LIST_ORDER)
+    : (await db.select(columns).from(refundRequests).where(buildRefundWhere(params)).orderBy(REFUND_LIST_ORDER)).map((row) => ({ ...row, ...noReview }));
   const total = rows.reduce((sum, row) => sum + Math.round(Number(row.totalAmount) * 100), 0) / 100;
   const filtered = Boolean(params.branch || params.dateFrom || params.dateTo);
 
@@ -77,13 +89,14 @@ export default async function RefundRequestsPage({ searchParams }: { searchParam
               <th className="px-4 py-3 text-right">Total</th>
               <th className="px-4 py-3">Date</th>
               <th className="px-4 py-3">Submitted By</th>
+              {recommendation ? <th className="px-4 py-3">Recommendation</th> : null}
               <th className="px-4 py-3">Documents</th>
               <th className="px-4 py-3">Request</th>
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 ? (
-              <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-500">No Refund requests found.</td></tr>
+              <tr><td colSpan={recommendation ? 8 : 7} className="px-4 py-8 text-center text-gray-500">No Refund requests found.</td></tr>
             ) : rows.map((row) => (
               <tr key={row.id} className="border-b border-gray-100 align-top last:border-0 hover:bg-gray-50">
                 <td className="whitespace-nowrap px-4 py-3"><div className="font-medium text-[#0b1f3a]">{row.serialNo}</div><div className="text-xs text-gray-500">{row.branch}</div></td>
@@ -91,6 +104,7 @@ export default async function RefundRequestsPage({ searchParams }: { searchParam
                 <td className="whitespace-nowrap px-4 py-3 text-right">{formatAmount(row.totalAmount)}</td>
                 <td className="whitespace-nowrap px-4 py-3">{formatDateOnly(row.requestDate)}</td>
                 <td className="px-4 py-3"><div>{row.submittedByName}</div><div className="text-xs text-gray-500">{row.submittedByEmail}</div><div className="text-xs text-gray-500">{row.submittedByDepartment}. Recommending: {row.recommendingAuthority}</div></td>
+                {recommendation ? <td className="px-4 py-3 text-xs"><span className={`rounded-full px-2 py-0.5 font-medium ${row.decision === "RECOMMENDED" ? "bg-green-50 text-green-800" : row.decision === "SENT_BACK" ? "bg-amber-50 text-amber-800" : "bg-gray-100 text-gray-700"}`}>{refundStatusLabel(row)}</span></td> : null}
                 <td className="px-4 py-3">
                   {row.documents.length === 0 ? <span className="text-xs text-gray-400">None</span> : (
                     <ul className="flex flex-col gap-1">

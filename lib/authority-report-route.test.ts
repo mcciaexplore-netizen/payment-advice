@@ -122,6 +122,7 @@ describe("GET /api/authority/report", () => {
     expect((await request("AUTHORITY", { view: "pending" })).status).toBe(400);
     vi.stubEnv("REFUND_REQUESTS_ENABLED", "true");
     expect((await request("SELF", { view: "my-refunds" })).status).toBe(400);
+    expect((await request("AUTHORITY", { view: "refund-requests" })).status).toBe(400);
     vi.unstubAllEnvs();
     expect((await request("AUTHORITY", {})).status).toBe(400);
     expect((await request("BRANCH", { view: "cash-receipts" })).status).toBe(400);
