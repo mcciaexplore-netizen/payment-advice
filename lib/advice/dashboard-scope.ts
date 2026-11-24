@@ -8,7 +8,7 @@ import { paymentAdvices } from "@/lib/db/schema";
 
 export type DashboardRole = "AUTHORITY" | "BRANCH" | "DEPARTMENT" | "SELF" | "CASH_RECEIPT";
 export type DashboardGrant = { role: DashboardRole; recommendingAuthorityId: string | null; scopeValue: string | null };
-export type DashboardView = "pending" | "history" | "my-submissions" | "team-submissions" | "cash-receipts" | "my-refunds";
+export type DashboardView = "pending" | "history" | "my-submissions" | "team-submissions" | "cash-receipts" | "my-refunds" | "refund-requests";
 
 type RoleRow = { role: string; recommendingAuthorityId: string | null; scopeValue: string | null };
 
@@ -43,7 +43,10 @@ export function resolveDashboardView(activeGrant: DashboardGrant, requestedView:
   const canSeeCashReceiptsTab = isBranchGrant || activeGrant.role === "CASH_RECEIPT" || (activeGrant.role === "SELF" && holdsCashReceiptGrant);
   // My Refunds: every dashboard account's own refund requests, beside My
   // Submissions. Only once refunds are switched on (the table exists).
-  const view: DashboardView = requestedView === "my-refunds" && refundsTabEnabled ? "my-refunds" : isAuthority
+  // Refund Requests: a recommending authority's read-only list of the refunds that
+  // name them. Authority accounts only; for anyone else it falls through.
+  const view: DashboardView = requestedView === "my-refunds" && refundsTabEnabled ? "my-refunds"
+    : requestedView === "refund-requests" && refundsTabEnabled && isAuthority ? "refund-requests" : isAuthority
     ? requestedView === "history" ? "history" : requestedView === "my-submissions" ? "my-submissions" : "pending"
     : requestedView === "cash-receipts" && canSeeCashReceiptsTab ? "cash-receipts"
     : isRestrictedGrant || requestedView === "my-submissions" ? "my-submissions"
