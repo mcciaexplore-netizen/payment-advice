@@ -66,3 +66,25 @@ describe("Refund request PDF stamp", () => {
     expect(pageTexts(await renderRefundRequestPdf(typical))).toHaveLength(1);
   }, 20000);
 });
+
+describe("Refund request PDF: Recommended by stamp", () => {
+  it("stamps Recommended by (name and date, in the authority's own box) once the authority has recommended it", async () => {
+    const text = pageTexts(await renderRefundRequestPdf({ ...typical, recommendedBy: "Aniruddha Brahma", recommendedAt: new Date("2026-11-24T10:00:00Z") })).join(" ");
+    expect(text).toContain("RECOMMENDED Aniruddha Brahma 24/11/2026");
+    expect(text).toContain("SUBMITTED Sandhya Acharya 17/11/2026");
+    expect(text.match(/RECOMMENDED/g)).toHaveLength(1);
+    expect(text.match(/SUBMITTED/g)).toHaveLength(1);
+  }, 20000);
+
+  it("falls back to the authority's name on the form when the recommender's name is not given", async () => {
+    const text = pageTexts(await renderRefundRequestPdf({ ...typical, recommendedAt: "2026-11-24T10:00:00Z" })).join(" ");
+    expect(text).toContain("RECOMMENDED ANIRUDDHA BRAHMA 24/11/2026");
+  }, 20000);
+
+  it("a refund that is not yet recommended (or was sent back) has no Recommended stamp, and the stamps add no height", async () => {
+    const pages = pageTexts(await renderRefundRequestPdf({ ...typical, recommendedBy: null, recommendedAt: null }));
+    expect(pages.join(" ")).not.toContain("RECOMMENDED");
+    expect(pages).toHaveLength(1);
+    expect(pageTexts(await renderRefundRequestPdf({ ...typical, recommendedBy: "A", recommendedAt: new Date() }))).toHaveLength(1);
+  }, 20000);
+});

@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { refundRequests } from "@/lib/db/schema";
-import { refundRequestsEnabled } from "@/lib/refund-requests";
+import { refundRecommendationEnabled, refundRequestsEnabled } from "@/lib/refund-requests";
 import { getAdminSession } from "@/lib/admin-session";
 import { hasTeamDashboardRole } from "@/lib/auth";
 
@@ -17,7 +17,7 @@ export default async function RefundSubmittedPage({ params }: { params: Promise<
   if (!UUID.test(id)) notFound();
 
   const [refund] = await db
-    .select({ serialNo: refundRequests.serialNo, totalAmount: refundRequests.totalAmount })
+    .select({ serialNo: refundRequests.serialNo, totalAmount: refundRequests.totalAmount, recommendingAuthority: refundRequests.recommendingAuthority })
     .from(refundRequests)
     .where(eq(refundRequests.id, id))
     .limit(1);
@@ -34,6 +34,7 @@ export default async function RefundSubmittedPage({ params }: { params: Promise<
         <p className="text-sm font-medium text-[#2e8b57]">Refund request submitted</p>
         <h1 className="font-heading text-4xl text-[#0b1f3a]">{refund.serialNo}</h1>
         <p className="text-gray-600">Your refund request for ₹ {Number(refund.totalAmount).toLocaleString("en-IN", { minimumFractionDigits: 2 })} was saved. Keep this reference for any follow-up.</p>
+        {refundRecommendationEnabled() ? <p className="text-sm text-gray-600">It has gone to <strong>{refund.recommendingAuthority}</strong> for recommendation. You will be emailed their decision, and you can follow it under My Refunds.</p> : null}
       </section>
       <div className="flex flex-wrap justify-center gap-3">
         <a href={`/api/refund/${id}/pdf`} target="_blank" rel="noreferrer" className="rounded-md bg-[#0b1f3a] px-6 py-3 text-base font-medium text-white shadow-sm transition hover:bg-[#0b1f3a]/90">Open printable request</a>

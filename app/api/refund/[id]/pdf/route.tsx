@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { auditLog, refundRequests } from "@/lib/db/schema";
-import { refundRequestsEnabled } from "@/lib/refund-requests";
+import { auditLog, refundRequestReviews, refundRequests } from "@/lib/db/schema";
+import { refundRecommendationEnabled, refundRequestsEnabled } from "@/lib/refund-requests";
 import { renderRefundRequestPdf } from "@/lib/pdf/render-refund-request";
 
 export const runtime = "nodejs";
@@ -23,7 +23,17 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const [row] = await db.select().from(refundRequests).where(eq(refundRequests.id, id)).limit(1);
   if (!row) return notFound();
 
-  const buffer = await renderRefundRequestPdf({ ...row, documents: row.documents.map(({ type, fileName }) => ({ type, fileName })) });
+  // The Recommended by stamp, once the authority has recommended it. Only looked
+  // up when the recommendation process is on (it needs the reviews table).
+  let recommendedBy: string | null = null;
+  let recommendedAt: Date | null = null;
+  if (refundRecommendationEnabled()) {
+    const [review] = await db.select({ decision: refundRequestReviews.decision, decidedByName: refundRequestReviews.decidedByName, decidedAt: refundRequestReviews.decidedAt })
+      .from(refundRequestReviews).where(eq(refundRequestReviews.refundRequestId, row.id)).limit(1);
+    if (review?.decision === "RECOMMENDED") { recommendedBy = review.decidedByName; recommendedAt = review.decidedAt; }
+  }
+
+  const buffer = await renderRefundRequestPdf({ ...row, recommendedBy, recommendedAt, documents: row.documents.map(({ type, fileName }) => ({ type, fileName })) });
 
   await db.insert(auditLog).values({
     refundRequestId: row.id,

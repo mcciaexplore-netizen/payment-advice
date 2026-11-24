@@ -1,5 +1,5 @@
 import { sql, type SQL } from "drizzle-orm";
-import { refundRequests } from "@/lib/db/schema";
+import { recommendingAuthorities, refundRequests } from "@/lib/db/schema";
 
 /** The refund requests that name a given recommending authority, for that
  * authority's own dashboard (read only).
@@ -13,4 +13,10 @@ import { refundRequests } from "@/lib/db/schema";
  * refunds. */
 export function refundsForAuthorityWhere(authorityName: string): SQL {
   return sql`lower(regexp_replace(btrim(${refundRequests.recommendingAuthority}), '\\s+', ' ', 'g')) = lower(regexp_replace(btrim(${authorityName}), '\\s+', ' ', 'g'))`;
+}
+
+/** The other direction: the authority record a refund's typed authority name
+ * refers to (same case and extra-space tolerance), to find where to email. */
+export function authorityNamedWhere(refundAuthorityText: string): SQL {
+  return sql`lower(regexp_replace(btrim(${recommendingAuthorities.authorityName}), '\\s+', ' ', 'g')) = lower(regexp_replace(btrim(${refundAuthorityText}), '\\s+', ' ', 'g'))`;
 }

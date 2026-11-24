@@ -5,6 +5,14 @@ import nodemailer from "nodemailer";
 import { db } from "@/lib/db";
 import { auditLog } from "@/lib/db/schema";
 import {
+  type RefundAuthorityEmailData,
+  type RefundRecommendedEmailData,
+  type RefundSentBackEmailData,
+  type RefundSubmittedEmailData,
+  renderRefundAuthorityEmail,
+  renderRefundRecommendedEmail,
+  renderRefundSentBackEmail,
+  renderRefundSubmittedEmail,
   type AuthorityApprovalEmailData,
   type CashReceiptReceivedEmailData,
   type PaymentDoneEmailData,
@@ -189,8 +197,8 @@ async function dispatch(
 export type SendOutcome = "sent" | "preview" | "failed";
 
 /** Where an EMAIL_SEND_FAILED audit row is linked: an advice id (the
- * original, unchanged form) or a Cash Receipt. */
-type AuditLink = string | { cashReceiptId: string };
+ * original, unchanged form), a Cash Receipt or a Refund request. */
+type AuditLink = string | { cashReceiptId: string } | { refundRequestId: string };
 
 async function send(
   kind: string,
@@ -219,7 +227,7 @@ async function send(
     if (auditLink) {
       try {
         await db.insert(auditLog).values({
-          ...(typeof auditLink === "string" ? { paymentAdviceId: auditLink } : { cashReceiptId: auditLink.cashReceiptId }),
+          ...(typeof auditLink === "string" ? { paymentAdviceId: auditLink } : "cashReceiptId" in auditLink ? { cashReceiptId: auditLink.cashReceiptId } : { refundRequestId: auditLink.refundRequestId }),
           action: "EMAIL_SEND_FAILED",
           actor: "System",
           details: {
@@ -307,6 +315,39 @@ export async function notifySubmissionConfirmation(
 ) {
   const message = renderSubmissionConfirmationEmail(data);
   await send("submission confirmation", to, message, adviceId);
+  return message;
+}
+
+/** Refund requests: the recommending authority is asked to review. */
+export async function notifyRefundAuthority(data: RefundAuthorityEmailData, to: string | null, refundRequestId: string) {
+  const message = renderRefundAuthorityEmail(data);
+  if (!to) {
+    console.warn(`[Email] No email on file for ${data.authorityName}; refund ${data.displayNo} authority email not sent.`);
+    preview("refund authority", message);
+    return message;
+  }
+  await send("refund authority", to, message, { refundRequestId });
+  return message;
+}
+
+/** Refund requests: confirmation to the submitter. */
+export async function notifyRefundSubmitted(data: RefundSubmittedEmailData, to: string, refundRequestId: string) {
+  const message = renderRefundSubmittedEmail(data);
+  await send("refund submitted", to, message, { refundRequestId });
+  return message;
+}
+
+/** Refund requests: the authority recommended it. */
+export async function notifyRefundRecommended(data: RefundRecommendedEmailData, to: string, refundRequestId: string) {
+  const message = renderRefundRecommendedEmail(data);
+  await send("refund recommended", to, message, { refundRequestId });
+  return message;
+}
+
+/** Refund requests: the authority sent it back with remarks. */
+export async function notifyRefundSentBack(data: RefundSentBackEmailData, to: string, refundRequestId: string) {
+  const message = renderRefundSentBackEmail(data);
+  await send("refund sent back", to, message, { refundRequestId });
   return message;
 }
 
