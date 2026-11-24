@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { ADMIN_SESSION_COOKIE, createAdminSessionToken } from "@/lib/auth";
+import { createAdminSessionToken } from "@/lib/auth";
+import { appHubOrigins, setSessionCookie } from "@/lib/app-hub";
+import { sessionPayloadFor } from "@/lib/app-hub-session";
 import { findActiveAdminUserByEmail, getRolesForAdminUser, recordAdminLogin, verifyPassword } from "@/lib/admin-users";
 import { clientIpFrom, createRateLimiter } from "@/lib/rate-limit";
 
@@ -38,21 +40,11 @@ export async function POST(req: NextRequest) {
   }
 
   await recordAdminLogin(user.id);
-  const authorityGrant = roleGrants.find((grant) => grant.role === "AUTHORITY");
-  const cashReceiptGrant = roleGrants.find((grant) => grant.role === "CASH_RECEIPT" && grant.scopeValue);
-  const token = await createAdminSessionToken({
-    adminUserId: user.id,
-    fullName: user.fullName,
-    roles: roleGrants.map((grant) => grant.role),
-    recommendingAuthorityId: authorityGrant?.recommendingAuthorityId ?? null,
-    ...(cashReceiptGrant ? { branchScope: cashReceiptGrant.scopeValue! } : {}),
-  });
+  // Signed in from inside the App Hub (and an App Hub is configured): a
+  // long-lived session, remembered there (see lib/app-hub.ts).
+  const embedded = body.embedded === true && appHubOrigins().length > 0;
+  const token = await createAdminSessionToken(sessionPayloadFor(user, roleGrants, embedded));
   const response = NextResponse.json({ ok: true });
-  response.cookies.set(ADMIN_SESSION_COOKIE, token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/",
-  });
+  setSessionCookie(response, token, embedded);
   return response;
 }
