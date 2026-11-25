@@ -70,7 +70,7 @@ export function RefundForm({ authorityOptions, persist }: { authorityOptions: st
       data.set("documents", JSON.stringify(documents));
       const response = await fetch("/api/refund/submit", { method: "POST", body: data });
       const payload = await response.json().catch(() => null);
-      if (!response.ok) throw new Error(payload?.error ?? "Could not submit the refund request.");
+      if (!response.ok) throw new Error(payload?.error ?? "Could not submit the third party refund request.");
       if (payload?.previewOnly || !payload?.id) {
         setPreviewDone(true);
         window.scrollTo({ top: 0, behavior: "smooth" });
@@ -78,7 +78,7 @@ export function RefundForm({ authorityOptions, persist }: { authorityOptions: st
       }
       router.push(`/refund/submitted/${payload.id}`);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not submit the refund request.");
+      setError(cause instanceof Error ? cause.message : "Could not submit the third party refund request.");
     } finally {
       setSubmitting(false);
     }
@@ -87,7 +87,7 @@ export function RefundForm({ authorityOptions, persist }: { authorityOptions: st
   if (previewDone) {
     return (
       <section className="rounded-xl border border-amber-300 bg-amber-50 p-6 text-[#0b1f3a]">
-        <h2 className="font-heading text-2xl font-semibold">Refund form preview complete</h2>
+        <h2 className="font-heading text-2xl font-semibold">Third Party Refund form preview complete</h2>
         <p className="mt-3 text-sm text-amber-900">Local preview only. This request was not saved or sent, and no files were uploaded.</p>
         <button type="button" className="mt-5 rounded-md bg-[#0b1f3a] px-4 py-2 text-sm font-medium text-white" onClick={() => { setPreviewDone(false); setEmailFiles([]); setChequeFiles([]); setOtherFiles([]); }}>
           Try again
@@ -150,7 +150,7 @@ export function RefundForm({ authorityOptions, persist }: { authorityOptions: st
       </section>
 
       <section className="space-y-5 border-t border-gray-200 pt-6">
-        <h2 className="font-heading text-2xl text-[#0b1f3a]">3. Refund details</h2>
+        <h2 className="font-heading text-2xl text-[#0b1f3a]">3. Third Party Refund details</h2>
         <div className="grid gap-5 sm:grid-cols-2">
           <Field label="Basic Amount (Rs.)" required><Input name="basicAmount" type="number" min="0" step="0.01" value={basicAmount} onChange={(event) => setBasicAmount(event.target.value)} required /></Field>
           <Field label="GST Amount (Rs.)" required><Input name="gstAmount" type="number" min="0" step="0.01" value={gstAmount} onChange={(event) => setGstAmount(event.target.value)} required /></Field>
@@ -189,7 +189,7 @@ export function RefundForm({ authorityOptions, persist }: { authorityOptions: st
 
       <div className="flex justify-end border-t border-gray-200 pt-6">
         <button type="submit" disabled={submitting} className="rounded-md bg-[#0b1f3a] px-6 py-3 font-medium text-white hover:bg-[#17375f] disabled:opacity-60">
-          {submitting ? "Submitting..." : persist ? "Submit Refund Request" : "Preview Refund Request"}
+          {submitting ? "Submitting..." : persist ? "Submit Third Party Refund Request" : "Preview Third Party Refund Request"}
         </button>
       </div>
     </form>

@@ -14,7 +14,7 @@ export const refundDecisionSchema = z
     remarks: z.string().trim().max(1000).optional(),
   })
   .refine((value) => value.decision === "RECOMMEND" || Boolean(value.remarks), {
-    message: "Remarks are required to send a refund back.",
+    message: "Remarks are required to send a third party refund back.",
     path: ["remarks"],
   });
 
@@ -74,7 +74,7 @@ export async function decideRefund(input: {
     });
     return true;
   });
-  if (!recorded) return { ok: false, status: 409, error: "This refund request has already been decided." };
+  if (!recorded) return { ok: false, status: 409, error: "This third party refund request has already been decided." };
 
   const amount = Number(refund.totalAmount).toLocaleString("en-IN", { minimumFractionDigits: 2 });
   try {

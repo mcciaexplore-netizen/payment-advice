@@ -83,7 +83,7 @@ describe("authority's Refund Requests tab with the recommendation process on", (
   it("shows each refund's status and a Review button for the waiting one, Details for the decided ones", async () => {
     const html = await render(AUTHORITY, { view: "refund-requests" });
     const page = text(html);
-    expect(page).toContain("3 refund requests naming you as the recommending authority");
+    expect(page).toContain("3 third party refund requests naming you as the recommending authority");
     expect(page).toContain("1 waiting for your recommendation.");
     expect(page).toContain("Waiting for recommendation");
     expect(page).toContain("Recommended on 20/11/2026");
@@ -98,7 +98,7 @@ describe("Pending My Recommendation", () => {
   it("points the authority to refunds waiting for them", async () => {
     state.waiting = 2;
     const html = await render(AUTHORITY, { view: "pending" });
-    expect(text(html)).toContain("2 refund requests waiting for your recommendation Review →");
+    expect(text(html)).toContain("2 third party refund requests waiting for your recommendation Review →");
     expect(html).toContain('href="/authority?role=AUTHORITY&amp;view=refund-requests"');
   });
 
@@ -109,11 +109,11 @@ describe("Pending My Recommendation", () => {
 
   it("singular wording for one", async () => {
     state.waiting = 1;
-    expect(text(await render(AUTHORITY, { view: "pending" }))).toContain("1 refund request waiting for your recommendation");
+    expect(text(await render(AUTHORITY, { view: "pending" }))).toContain("1 third party refund request waiting for your recommendation");
   });
 });
 
-describe("My Refunds (the submitter) shows where each refund stands", () => {
+describe("My Third Party Refunds (the submitter) shows where each refund stands", () => {
   it("status for each, and the authority's remarks when sent back", async () => {
     const page = text(await render(SELF, { view: "my-refunds" }));
     expect(page).toContain("Waiting for recommendation");
@@ -136,7 +136,7 @@ describe("with the recommendation process OFF the reviews table is never touched
     expect(touchedReviews()).toBe(false);
   });
 
-  it("pending notice and My Refunds status are absent, again with no join", async () => {
+  it("pending notice and My Third Party Refunds status are absent, again with no join", async () => {
     state.waiting = 5;
     expect(text(await render(AUTHORITY, { view: "pending" }))).not.toMatch(/refund requests? waiting for your recommendation/);
     expect(touchedReviews()).toBe(false);

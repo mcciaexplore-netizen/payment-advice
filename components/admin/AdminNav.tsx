@@ -27,7 +27,7 @@ const NAV_ITEMS: NavItem[] = [
   },
   {
     href: "/admin/refunds",
-    label: "Refunds",
+    label: "Third Party Refunds",
     match: (p) => p.startsWith("/admin/refunds"),
   },
 ];

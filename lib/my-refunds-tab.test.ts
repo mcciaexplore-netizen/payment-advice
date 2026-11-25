@@ -3,7 +3,7 @@ import type { SQL } from "drizzle-orm";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-/** The My Refunds tab, rendered through the real dashboard page against a
+/** The My Third Party Refunds tab, rendered through the real dashboard page against a
  * fake DB that records every query: each role sees only refunds made with its
  * own login email, the tab exists only while refunds are switched on, and
  * nothing else on the page changes. */
@@ -68,7 +68,7 @@ const REFUND = (n: number) => ({ id: `${n}1111111-1111-4111-8111-111111111111`, 
 beforeEach(() => { state.refunds = [REFUND(7), REFUND(6)]; });
 afterEach(() => vi.unstubAllEnvs());
 
-describe("My Refunds tab", () => {
+describe("My Third Party Refunds tab", () => {
   beforeEach(() => vi.stubEnv("REFUND_REQUESTS_ENABLED", "true"));
 
   it.each(Object.keys(ROLES) as (keyof typeof ROLES)[])("%s: lists the refunds made with the login email, with a PDF link each, and only reads the refund table by that email", async (role) => {
@@ -77,7 +77,7 @@ describe("My Refunds tab", () => {
     expect(where.sql).toContain('lower("refund_requests"."submitted_by_email") = lower($');
     expect(where.params).toEqual(["me@mcciapune.com"]);
     const page = text(html);
-    expect(page).toContain("2 refund requests made using me@mcciapune.com, total ₹ 9,440.00");
+    expect(page).toContain("2 third party refund requests made using me@mcciapune.com, total ₹ 9,440.00");
     expect(page).toContain("REF/MCCIA/2026-27/0007");
     expect(page).toContain("Payee 7");
     expect(page).toContain("Reason 7");
@@ -97,28 +97,28 @@ describe("My Refunds tab", () => {
   it("shows a clear empty state naming the email to use", async () => {
     state.refunds = [];
     const page = text(await render("SELF", { view: "my-refunds" }));
-    expect(page).toContain("0 refund requests made using me@mcciapune.com");
-    expect(page).toContain('No refund requests found for your login email. A refund shows here when the "Your Email" on its form is me@mcciapune.com.');
+    expect(page).toContain("0 third party refund requests made using me@mcciapune.com");
+    expect(page).toContain('No third party refund requests found for your login email. A third party refund shows here when the "Your Email" on its form is me@mcciapune.com.');
   });
 
-  it("the My Refunds tab sits beside My Submissions for every role, and is the active tab on its own page", async () => {
+  it("the My Third Party Refunds tab sits beside My Submissions for every role, and is the active tab on its own page", async () => {
     for (const role of Object.keys(ROLES) as (keyof typeof ROLES)[]) {
       const submissions = await render(role, { view: "my-submissions" });
-      expect(submissions).toContain(">My Refunds<");
+      expect(submissions).toContain(">My Third Party Refunds<");
       expect(submissions).toContain("view=my-refunds");
       const refunds = await render(role, { view: "my-refunds" });
-      expect(refunds).toMatch(/border-b-2 border-\[#0b1f3a\][^>]*>My Refunds</);
+      expect(refunds).toMatch(/border-b-2 border-\[#0b1f3a\][^>]*>My Third Party Refunds</);
     }
   });
 });
 
 describe("while refunds are switched off", () => {
-  it("there is no My Refunds tab, and asking for it falls back to the normal view without reading refunds", async () => {
+  it("there is no My Third Party Refunds tab, and asking for it falls back to the normal view without reading refunds", async () => {
     vi.stubEnv("REFUND_REQUESTS_ENABLED", "");
     const submissions = await render("SELF", { view: "my-submissions" });
-    expect(submissions).not.toContain("My Refunds");
+    expect(submissions).not.toContain("My Third Party Refunds");
     const refunds = await render("SELF", { view: "my-refunds" });
-    expect(refunds).not.toContain("My Refunds");
+    expect(refunds).not.toContain("My Third Party Refunds");
     expect(refundQuery()).toBeUndefined();
   });
 
