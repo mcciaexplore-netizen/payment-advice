@@ -3,9 +3,10 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { todayInIst } from "@/lib/date-time";
-import { DIRECTORY_OPTIONS, directoryNeedsMemberId, directoryParticulars, directoryPrice } from "@/lib/cash-receipt-directories";
+import { directoryAmount, directoryItems, directoryProblem, toggleDirectory, updateDirectoryEntry, type DirectoryEntry, type DirectorySelection } from "@/lib/cash-receipt-directories";
+import { DirectoryChecklist, DirectoryRows } from "@/components/form/DirectoryPicker";
 
 const PARTICULARS = [
   "Sale of Directory",
@@ -22,8 +23,8 @@ type ReceiptLine = {
   particulars: string;
   detail: string;
   courseName: string;
-  directoryType: string;
-  memberNo: string;
+  /** The directories ticked on a Sale of Directory row; each becomes its own receipt line. */
+  directories: DirectorySelection;
   copies: string;
   price: string;
   billNo: string;
@@ -31,10 +32,11 @@ type ReceiptLine = {
 };
 
 const blankLine = (id: number): ReceiptLine => ({
-  id, particulars: "", detail: "", courseName: "", directoryType: "", memberNo: "", copies: "", price: "", billNo: "", billDate: "",
+  id, particulars: "", detail: "", courseName: "", directories: {}, copies: "", price: "", billNo: "", billDate: "",
 });
 
 function lineAmount(line: ReceiptLine) {
+  if (line.particulars === "Sale of Directory") return directoryAmount(line.directories);
   const price = Number(line.price) || 0;
   return line.particulars === "Hall Hiring Charges" ? price : (Number(line.copies) || 0) * price;
 }
@@ -54,20 +56,24 @@ export function CashReceiptForm({ branch, issuedBy }: { branch: string; issuedBy
     [lines],
   );
 
-  function updateLine(id: number, field: keyof Omit<ReceiptLine, "id">, value: string) {
+  function updateLine(id: number, field: keyof Omit<ReceiptLine, "id" | "directories">, value: string) {
     setLines((current) => current.map((line) => {
       if (line.id !== id) return line;
       let updated = { ...line, [field]: value };
+      // Changing the particulars starts the row afresh (no directories ticked).
       if (field === "particulars") {
-        updated = { ...updated, directoryType: "", memberNo: "", courseName: "", price: "" };
-      } else if (field === "directoryType") {
-        if (!directoryNeedsMemberId(value)) updated.memberNo = "";
-        if (updated.particulars === "Sale of Directory") {
-          updated.price = directoryPrice(updated.directoryType);
-        }
+        updated = { ...updated, directories: {}, courseName: "", price: "" };
       }
       return updated;
     }));
+  }
+
+  function toggleLineDirectory(id: number, label: string, ticked: boolean) {
+    setLines((current) => current.map((line) => (line.id === id ? { ...line, directories: toggleDirectory(line.directories, label, ticked) } : line)));
+  }
+
+  function changeLineDirectory(id: number, label: string, field: keyof DirectoryEntry, value: string) {
+    setLines((current) => current.map((line) => (line.id === id ? { ...line, directories: updateDirectoryEntry(line.directories, label, field, value) } : line)));
   }
 
   function addLine() {
@@ -79,21 +85,47 @@ export function CashReceiptForm({ branch, issuedBy }: { branch: string; issuedBy
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     setError("");
+    // A Sale of Directory row needs at least one ticked directory, with copies (and a
+    // Member ID for a member directory) for each.
+    const directoryError = lines.map((line) => (line.particulars === "Sale of Directory" ? directoryProblem(line.directories) : null)).find(Boolean);
+    if (directoryError) {
+      setError(directoryError);
+      return;
+    }
     const hasPartialLine = lines.some((line) => {
+      if (line.particulars === "Sale of Directory") return false; // checked above
       const hasAnyValue = line.particulars || line.copies || line.price || line.courseName.trim();
       const isHallHiring = line.particulars === "Hall Hiring Charges";
-      const directoryInfoMissing = line.particulars === "Sale of Directory" &&
-        (!line.directoryType || (directoryNeedsMemberId(line.directoryType) && !line.memberNo.trim()));
       const courseInfoMissing = line.particulars === "Course / Seminar Fee" && !line.courseName.trim();
-      return (hasAnyValue && (!line.particulars || (!isHallHiring && Number(line.copies) <= 0) || Number(line.price) <= 0)) || directoryInfoMissing || courseInfoMissing;
+      return (hasAnyValue && (!line.particulars || (!isHallHiring && Number(line.copies) <= 0) || Number(line.price) <= 0)) || courseInfoMissing;
     });
     if (hasPartialLine) {
       setError("Complete the particulars, required details, and price for each row, or leave the row empty.");
       return;
     }
-    const filledLines = lines.filter((line) => line.particulars && (line.particulars === "Hall Hiring Charges" || Number(line.copies) > 0) && Number(line.price) > 0);
-    if (!filledLines.length) {
+    // One receipt line per row, except Sale of Directory: one per ticked directory.
+    const items = lines.flatMap((line) => {
+      if (line.particulars === "Sale of Directory") return directoryItems(line.directories).map((item) => ({ ...item, billNo: "", billDate: "" }));
+      const filled = line.particulars && (line.particulars === "Hall Hiring Charges" || Number(line.copies) > 0) && Number(line.price) > 0;
+      if (!filled) return [];
+      return [{
+        particulars: line.particulars === "Others (Specify)" && line.detail.trim()
+          ? `${line.particulars}: ${line.detail.trim()}`
+          : line.particulars === "Course / Seminar Fee" && line.courseName.trim()
+            ? `${line.particulars}: ${line.courseName.trim()}`
+            : line.particulars,
+        copies: line.particulars === "Hall Hiring Charges" ? 1 : Number(line.copies),
+        price: Number(line.price),
+        billNo: line.billNo,
+        billDate: line.billDate,
+      }];
+    });
+    if (!items.length) {
       setError("Add at least one particulars row with a price.");
+      return;
+    }
+    if (items.length > 20) {
+      setError("A receipt can have at most 20 lines. Each ticked directory counts as one line; split this into two receipts.");
       return;
     }
 
@@ -105,19 +137,7 @@ export function CashReceiptForm({ branch, issuedBy }: { branch: string; issuedBy
         body: JSON.stringify({
           partyName,
           gstin,
-          items: filledLines.map((line) => ({
-            particulars: line.particulars === "Sale of Directory"
-              ? directoryParticulars(line.directoryType, line.memberNo)
-              : line.particulars === "Others (Specify)" && line.detail.trim()
-                ? `${line.particulars}: ${line.detail.trim()}`
-                : line.particulars === "Course / Seminar Fee" && line.courseName.trim()
-                  ? `${line.particulars}: ${line.courseName.trim()}`
-                : line.particulars,
-            copies: line.particulars === "Hall Hiring Charges" ? 1 : Number(line.copies),
-            price: Number(line.price),
-            billNo: line.billNo,
-            billDate: line.billDate,
-          })),
+          items,
         }),
       });
       const data = await response.json();
@@ -150,28 +170,25 @@ export function CashReceiptForm({ branch, issuedBy }: { branch: string; issuedBy
           <tbody>
             {lines.map((line) => {
               const isHallHiring = line.particulars === "Hall Hiring Charges";
+              const isDirectory = line.particulars === "Sale of Directory";
               const amount = lineAmount(line);
-              return <tr key={line.id}>
+              return <Fragment key={line.id}><tr>
                 <td className="border-b border-r border-gray-300 p-2">
                   <select aria-label="Particulars" value={line.particulars} onChange={(event) => updateLine(line.id, "particulars", event.target.value)} className={inputClass}>
                     <option value="">Select particulars</option>
                     {PARTICULARS.map((option) => <option key={option} value={option}>{option}</option>)}
                   </select>
-                  {line.particulars === "Sale of Directory" ? <div className="mt-2 grid gap-2">
-                    <select aria-label="Directory type" value={line.directoryType} onChange={(event) => updateLine(line.id, "directoryType", event.target.value)} className={inputClass}>
-                      <option value="">Select directory</option>
-                      {DIRECTORY_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
-                    </select>
-                    {directoryNeedsMemberId(line.directoryType) ? <input aria-label="Member ID" required maxLength={100} placeholder="Member ID" value={line.memberNo} onChange={(event) => updateLine(line.id, "memberNo", event.target.value)} className={inputClass} /> : null}
-                  </div> : null}
+                  {isDirectory ? <DirectoryChecklist selection={line.directories} onToggle={(label, ticked) => toggleLineDirectory(line.id, label, ticked)} /> : null}
                   {line.particulars === "Others (Specify)" ? <input aria-label="Specify other particulars" placeholder="Specify" value={line.detail} onChange={(event) => updateLine(line.id, "detail", event.target.value)} className="mt-2 w-full border-b border-gray-400 px-1 py-1 text-sm outline-none" /> : null}
                   {line.particulars === "Course / Seminar Fee" ? <input aria-label="Course or seminar name" required maxLength={200} placeholder="Course / seminar name" value={line.courseName} onChange={(event) => updateLine(line.id, "courseName", event.target.value)} className="mt-2 w-full border-b border-gray-400 px-1 py-1 text-sm outline-none" /> : null}
                   {line.particulars === "Hall Hiring Charges" ? <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs"><label>Bill No. <input value={line.billNo} onChange={(event) => updateLine(line.id, "billNo", event.target.value)} className="w-24 border-b border-gray-400 px-1 py-1 outline-none" /></label><label>Date <input type="date" value={line.billDate} onChange={(event) => updateLine(line.id, "billDate", event.target.value)} className="border-b border-gray-400 px-1 py-1 outline-none" /></label></div> : null}
                 </td>
+                {isDirectory ? <td colSpan={3} className="border-b border-gray-300 px-3 py-2 text-xs text-gray-500">Enter the copies for each ticked directory in the lines below.</td> : <>
                 <td className="border-b border-r border-gray-300 p-2">{isHallHiring ? <input aria-label="Copies" type="text" value="" disabled tabIndex={-1} className={`${inputClass} cursor-not-allowed bg-gray-100`} /> : <input aria-label="Copies" type="number" min="1" step="1" value={line.copies} onChange={(event) => updateLine(line.id, "copies", event.target.value)} className={inputClass} />}</td>
-                <td className="border-b border-r border-gray-300 p-2"><input aria-label="Price" type="number" min="0.01" step="0.01" value={line.price} readOnly={line.particulars === "Sale of Directory"} onChange={(event) => updateLine(line.id, "price", event.target.value)} className={`${inputClass} read-only:bg-gray-100`} /></td>
+                <td className="border-b border-r border-gray-300 p-2"><input aria-label="Price" type="number" min="0.01" step="0.01" value={line.price} onChange={(event) => updateLine(line.id, "price", event.target.value)} className={`${inputClass} read-only:bg-gray-100`} /></td>
                 <td className="border-b border-gray-300 px-3 py-2 text-right">{amount ? amount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : ""}</td>
-              </tr>;
+                </>}
+              </tr>{isDirectory ? <DirectoryRows selection={line.directories} onChange={(label, field, value) => changeLineDirectory(line.id, label, field, value)} /> : null}</Fragment>;
             })}
             <tr className="bg-gray-50 font-semibold"><td colSpan={3} className="border-r border-gray-300 px-3 py-3 text-right">Total</td><td className="px-3 py-3 text-right">{total.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td></tr>
           </tbody>
