@@ -399,7 +399,13 @@ export interface RefundRecommendedEmailData extends RefundEmailBase {
 export interface RefundSentBackEmailData extends RefundEmailBase {
   sentBackBy: string;
   remarks: string;
-  newRefundLink: string;
+  /** The submitter's edit page for this same refund (/refund/edit/[id]). */
+  editLink: string;
+}
+
+export interface RefundRejectedEmailData extends RefundEmailBase {
+  rejectedBy: string;
+  remarks: string;
 }
 
 const refundIntro = (kicker: string, displayNo: string, color: string) =>
@@ -437,6 +443,15 @@ export function renderRefundRecommendedEmail(data: RefundRecommendedEmailData) {
 export function renderRefundSentBackEmail(data: RefundSentBackEmailData) {
   return {
     subject: `Action Required: Third Party Refund Request ${data.displayNo} Sent Back`,
-    html: shell("#E8A33D", `${refundIntro("Action Required", data.displayNo, "#B45309")}${refundParagraph(`Dear ${escapeHtml(data.submittedByName)},<br><br>Your third party refund request has been sent back by <strong>${escapeHtml(data.sentBackBy)}</strong> and needs corrections. Please read the remarks below and submit a new third party refund request with the corrections.`)}${details([["Remarks", escapeHtml(data.remarks)], ["Payee", escapeHtml(data.payeeName)], ["Amount", refundMoney(data.amount)]])}${button(escapeHtml(data.newRefundLink), "Submit a New Third Party Refund Request")}${refundLinkNote(data.newRefundLink)}`),
+    html: shell("#E8A33D", `${refundIntro("Action Required", data.displayNo, "#B45309")}${refundParagraph(`Dear ${escapeHtml(data.submittedByName)},<br><br>Your third party refund request has been sent back by <strong>${escapeHtml(data.sentBackBy)}</strong> and needs corrections. Please read the remarks below, then edit and resubmit the same request. It keeps its reference number and goes back to the same recommending authority.`)}${details([["Remarks", escapeHtml(data.remarks)], ["Payee", escapeHtml(data.payeeName)], ["Amount", refundMoney(data.amount)]])}${button(escapeHtml(data.editLink), "Edit and Resubmit")}${refundLinkNote(data.editLink)}`),
+  };
+}
+
+/** To the submitter when the authority rejects the refund (final). */
+export function renderRefundRejectedEmail(data: RefundRejectedEmailData) {
+  return {
+    subject: `Third Party Refund Request ${data.displayNo} Rejected`,
+    // Same frame and colors as the Payment Advice "Rejected" email.
+    html: shell("#E8A33D", `${refundIntro("Rejected", data.displayNo, "#A21CAF")}${refundParagraph(`Dear ${escapeHtml(data.submittedByName)},<br><br>Your third party refund request has been rejected by <strong>${escapeHtml(data.rejectedBy)}</strong>. This is final: the request is closed and will not be processed or paid. The reason is below.`)}${details([["Reason", escapeHtml(data.remarks)], ["Payee", escapeHtml(data.payeeName)], ["Amount", refundMoney(data.amount)]])}<p style="margin:0;font-size:13px;line-height:1.6;color:#6B7280;">Reference number <strong>${escapeHtml(data.displayNo)}</strong> stays with this rejected request and will never be reused. If a refund is still needed, please submit a new third party refund request.</p></td></tr>`),
   };
 }

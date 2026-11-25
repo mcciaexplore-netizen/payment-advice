@@ -141,3 +141,13 @@ describe("every login ends when the browser closes", () => {
     expect(source).not.toMatch(/maxAge|expires/);
   });
 });
+
+describe("sign-in can return to a third party refund edit page (sent-back email link)", () => {
+  it("accepts exactly /refund/edit/<uuid> and nothing that merely looks like it", () => {
+    const id = "71111111-1111-4111-8111-111111111111";
+    expect(safeNextPath(`/refund/edit/${id}`)).toBe(`/refund/edit/${id}`);
+    for (const bad of [`/refund/edit/${id}/x`, `/refund/edit/${id}?a=1`, "/refund/edit/not-a-uuid", `//evil.example/refund/edit/${id}`, `https://evil.example/refund/edit/${id}`, "/refund/edit/", "/admin"]) {
+      expect(safeNextPath(bad)).toBe("/");
+    }
+  });
+});

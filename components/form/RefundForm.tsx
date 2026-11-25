@@ -19,18 +19,33 @@ type RefundDocument = {
   sizeBytes: number;
 };
 
+/** A refund being corrected after the authority sent it back: its stored
+ * values, its stored documents (kept unless unticked), and who submitted it
+ * (shown, not editable: it goes back to the same authority, same login). */
+export type RefundEditData = {
+  refundId: string;
+  submitter: { name: string; email: string; department: string; branch: string; recommendingAuthority: string };
+  values: Record<"payeeName" | "payeeAddress" | "payeeContactPerson" | "payeeContactPhone" | "payeeEmail" | "payeeGstin" | "payeeUdyamNumber" | "basicAmount" | "gstAmount" | "natureOfExpenditure" | "fromDate" | "bankName" | "beneficiaryName" | "bankAccountNo" | "bankIfsc" | "enclosures" | "specialRemarks", string>;
+  documents: Array<{ type: RefundDocumentType; fileName: string }>;
+};
+
+const DOCUMENT_LABELS: Record<RefundDocumentType, string> = { EMAIL_COPY: "Email copy", CANCELLED_CHEQUE: "Cancelled cheque", OTHER: "Other document" };
+
 /** `persist` comes from the server (REFUND_REQUESTS_ENABLED). Off: the form
  * is a database-free preview and uploads nothing. On: documents go to the
  * private Blob store, the server saves the request, and the browser moves to
- * the confirmation page with the real REF/MCCIA serial. */
-export function RefundForm({ authorityOptions, persist }: { authorityOptions: string[]; persist: boolean }) {
+ * the confirmation page with the real REF/MCCIA serial. With `edit`, the same
+ * form corrects a sent-back refund and resubmits it (same reference number). */
+export function RefundForm({ authorityOptions, persist, edit }: { authorityOptions: string[]; persist: boolean; edit?: RefundEditData }) {
   const router = useRouter();
+  const initial = (key: keyof RefundEditData["values"]) => edit?.values[key] ?? "";
+  const [keepDocuments, setKeepDocuments] = useState<boolean[]>(() => edit?.documents.map(() => true) ?? []);
   const [emailFiles, setEmailFiles] = useState<File[]>([]);
   const [chequeFiles, setChequeFiles] = useState<File[]>([]);
   const [otherFiles, setOtherFiles] = useState<File[]>([]);
   const [department, setDepartment] = useState("");
-  const [basicAmount, setBasicAmount] = useState("0");
-  const [gstAmount, setGstAmount] = useState("0");
+  const [basicAmount, setBasicAmount] = useState(edit?.values.basicAmount ?? "0");
+  const [gstAmount, setGstAmount] = useState(edit?.values.gstAmount ?? "0");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [previewDone, setPreviewDone] = useState(false);
@@ -51,7 +66,7 @@ export function RefundForm({ authorityOptions, persist }: { authorityOptions: st
     const form = event.currentTarget;
     if (!form.reportValidity()) return;
     const data = new FormData(form);
-    if (department === "OTHERS") data.set("submittedByDepartment", String(data.get("otherDepartment") ?? "").trim());
+    if (!edit && department === "OTHERS") data.set("submittedByDepartment", String(data.get("otherDepartment") ?? "").trim());
     const basic = Number(data.get("basicAmount")) || 0;
     const gst = Number(data.get("gstAmount")) || 0;
     if (basic + gst <= 0) {
@@ -62,13 +77,14 @@ export function RefundForm({ authorityOptions, persist }: { authorityOptions: st
     setSubmitting(true);
     try {
       const documents: RefundDocument[] = [];
-      if (persist) {
+      if (persist || edit) {
         if (emailFiles[0]) documents.push(await uploadDocument(emailFiles[0], "EMAIL_COPY"));
         if (chequeFiles[0]) documents.push(await uploadDocument(chequeFiles[0], "CANCELLED_CHEQUE"));
         for (const file of otherFiles) documents.push(await uploadDocument(file, "OTHER"));
       }
       data.set("documents", JSON.stringify(documents));
-      const response = await fetch("/api/refund/submit", { method: "POST", body: data });
+      if (edit) data.set("keepDocuments", JSON.stringify(keepDocuments.flatMap((keep, index) => (keep ? [index] : []))));
+      const response = await fetch(edit ? `/api/refund/${edit.refundId}/resubmit` : "/api/refund/submit", { method: "POST", body: data });
       const payload = await response.json().catch(() => null);
       if (!response.ok) throw new Error(payload?.error ?? "Could not submit the third party refund request.");
       if (payload?.previewOnly || !payload?.id) {
@@ -76,7 +92,7 @@ export function RefundForm({ authorityOptions, persist }: { authorityOptions: st
         window.scrollTo({ top: 0, behavior: "smooth" });
         return;
       }
-      router.push(`/refund/submitted/${payload.id}`);
+      router.push(edit ? `/refund/submitted/${payload.id}?resubmitted=1` : `/refund/submitted/${payload.id}`);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not submit the third party refund request.");
     } finally {
@@ -100,7 +116,18 @@ export function RefundForm({ authorityOptions, persist }: { authorityOptions: st
     <form onSubmit={submit} className="flex flex-col gap-8" noValidate>
       {error && <div role="alert" className="rounded-md border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800">{error}</div>}
 
-      <section className="space-y-5">
+      {edit ? (
+        <section className="space-y-3">
+          <h2 className="font-heading text-2xl text-[#0b1f3a]">1. Submitter details</h2>
+          <dl className="grid gap-3 rounded-md border border-gray-200 bg-gray-50 p-4 text-sm sm:grid-cols-2">
+            {([["Your Name", edit.submitter.name], ["Your Email", edit.submitter.email], ["Your Department", edit.submitter.department], ["Your Branch", edit.submitter.branch], ["Recommending Authority", edit.submitter.recommendingAuthority]] as const).map(([label, value]) => (
+              <div key={label}><dt className="text-xs text-gray-500">{label}</dt><dd className="font-medium text-[#0b1f3a]">{value}</dd></div>
+            ))}
+          </dl>
+          <p className="text-xs text-gray-500">These stay as submitted, so the request goes back to the same recommending authority.</p>
+        </section>
+      ) : (
+        <section className="space-y-5">
         <h2 className="font-heading text-2xl text-[#0b1f3a]">1. Submitter details</h2>
         <div className="grid gap-5 sm:grid-cols-2">
           <Field label="Your Name" required><Input name="submittedByName" required /></Field>
@@ -127,25 +154,26 @@ export function RefundForm({ authorityOptions, persist }: { authorityOptions: st
           </div>
         </div>
       </section>
+      )}
 
       <section className="space-y-5 border-t border-gray-200 pt-6">
         <h2 className="font-heading text-2xl text-[#0b1f3a]">2. Payee details</h2>
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
           <div className="sm:col-span-2">
             <Field label="Payee / Company Name" required>
-              <Input name="payeeName" required maxLength={2000} />
+              <Input name="payeeName" defaultValue={initial("payeeName")} required maxLength={2000} />
             </Field>
           </div>
           <div className="sm:col-span-2">
             <Field label="Address">
-              <Textarea name="payeeAddress" rows={2} maxLength={2000} />
+              <Textarea name="payeeAddress" defaultValue={initial("payeeAddress")} rows={2} maxLength={2000} />
             </Field>
           </div>
-          <Field label="Contact Person"><Input name="payeeContactPerson" maxLength={200} /></Field>
-          <Field label="Contact Phone"><Input name="payeeContactPhone" type="tel" maxLength={30} /></Field>
-          <Field label="E-mail ID"><Input name="payeeEmail" type="email" maxLength={320} /></Field>
-          <Field label="GSTIN"><Input name="payeeGstin" maxLength={15} pattern="[0-9A-Za-z]{15}" title="15-character GSTIN" /></Field>
-          <Field label="Udyam / MSME No."><Input name="payeeUdyamNumber" maxLength={50} /></Field>
+          <Field label="Contact Person"><Input name="payeeContactPerson" defaultValue={initial("payeeContactPerson")} maxLength={200} /></Field>
+          <Field label="Contact Phone"><Input name="payeeContactPhone" defaultValue={initial("payeeContactPhone")} type="tel" maxLength={30} /></Field>
+          <Field label="E-mail ID"><Input name="payeeEmail" defaultValue={initial("payeeEmail")} type="email" maxLength={320} /></Field>
+          <Field label="GSTIN"><Input name="payeeGstin" defaultValue={initial("payeeGstin")} maxLength={15} pattern="[0-9A-Za-z]{15}" title="15-character GSTIN" /></Field>
+          <Field label="Udyam / MSME No."><Input name="payeeUdyamNumber" defaultValue={initial("payeeUdyamNumber")} maxLength={50} /></Field>
         </div>
       </section>
 
@@ -154,8 +182,8 @@ export function RefundForm({ authorityOptions, persist }: { authorityOptions: st
         <div className="grid gap-5 sm:grid-cols-2">
           <Field label="Basic Amount (Rs.)" required><Input name="basicAmount" type="number" min="0" step="0.01" value={basicAmount} onChange={(event) => setBasicAmount(event.target.value)} required /></Field>
           <Field label="GST Amount (Rs.)" required><Input name="gstAmount" type="number" min="0" step="0.01" value={gstAmount} onChange={(event) => setGstAmount(event.target.value)} required /></Field>
-          <Field label="Nature of expenditure" required><Textarea name="natureOfExpenditure" rows={3} required maxLength={2000} /></Field>
-          <Field label="From Date" required><Input name="fromDate" type="date" max={todayInIst()} required /></Field>
+          <Field label="Nature of expenditure" required><Textarea name="natureOfExpenditure" defaultValue={initial("natureOfExpenditure")} rows={3} required maxLength={2000} /></Field>
+          <Field label="From Date" required><Input name="fromDate" defaultValue={initial("fromDate")} type="date" max={todayInIst()} required /></Field>
         </div>
         <p className="text-sm text-gray-700">Total refund: <strong>₹{(Number(basicAmount || 0) + Number(gstAmount || 0)).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></p>
       </section>
@@ -163,23 +191,39 @@ export function RefundForm({ authorityOptions, persist }: { authorityOptions: st
       <section className="space-y-5 border-t border-gray-200 pt-6">
         <h2 className="font-heading text-2xl text-[#0b1f3a]">4. Bank details <span className="text-base font-normal text-gray-500">(optional)</span></h2>
         <div className="grid gap-5 sm:grid-cols-2">
-          <Field label="Bank Name"><Input name="bankName" /></Field>
-          <Field label="Account Holder Name"><Input name="beneficiaryName" /></Field>
-          <Field label="Bank Account Number"><Input name="bankAccountNo" /></Field>
-          <Field label="IFSC Code"><Input name="bankIfsc" /></Field>
+          <Field label="Bank Name"><Input name="bankName" defaultValue={initial("bankName")} /></Field>
+          <Field label="Account Holder Name"><Input name="beneficiaryName" defaultValue={initial("beneficiaryName")} /></Field>
+          <Field label="Bank Account Number"><Input name="bankAccountNo" defaultValue={initial("bankAccountNo")} /></Field>
+          <Field label="IFSC Code"><Input name="bankIfsc" defaultValue={initial("bankIfsc")} /></Field>
         </div>
       </section>
 
       <section className="space-y-5 border-t border-gray-200 pt-6">
         <h2 className="font-heading text-2xl text-[#0b1f3a]">5. Enclosures and remarks <span className="text-base font-normal text-gray-500">(optional)</span></h2>
         <div className="grid gap-5 sm:grid-cols-2">
-          <Field label="Enclosures"><Textarea name="enclosures" rows={2} /></Field>
-          <Field label="Remarks"><Textarea name="specialRemarks" rows={2} /></Field>
+          <Field label="Enclosures"><Textarea name="enclosures" defaultValue={initial("enclosures")} rows={2} /></Field>
+          <Field label="Remarks"><Textarea name="specialRemarks" defaultValue={initial("specialRemarks")} rows={2} /></Field>
         </div>
       </section>
 
       <section className="space-y-5 border-t border-gray-200 pt-6">
         <h2 className="font-heading text-2xl text-[#0b1f3a]">6. Documents</h2>
+        {edit && edit.documents.length ? (
+          <fieldset className="rounded-md border border-gray-200 p-4">
+            <legend className="px-1 text-sm font-medium text-[#0b1f3a]">Attached now (untick to remove)</legend>
+            <ul className="flex flex-col gap-2 text-sm">
+              {edit.documents.map((document, index) => (
+                <li key={`${document.type}-${index}`}>
+                  <label className="flex items-center gap-2">
+                    <input type="checkbox" checked={keepDocuments[index] ?? true} onChange={(event) => setKeepDocuments((current) => current.map((keep, at) => (at === index ? event.target.checked : keep)))} />
+                    <span className="text-gray-500">{DOCUMENT_LABELS[document.type]}:</span> <span className="font-medium text-[#0b1f3a]">{document.fileName}</span>
+                  </label>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-2 text-xs text-gray-500">A new Email copy or Cancelled cheque below replaces the one attached now. New Other documents are added.</p>
+          </fieldset>
+        ) : null}
         <div className="grid gap-5 sm:grid-cols-2">
           <FileUploadSlot label="Email copy" allowImages files={emailFiles} onChange={setEmailFiles} />
           <FileUploadSlot label="Cancelled cheque" allowImages files={chequeFiles} onChange={setChequeFiles} />
@@ -189,7 +233,7 @@ export function RefundForm({ authorityOptions, persist }: { authorityOptions: st
 
       <div className="flex justify-end border-t border-gray-200 pt-6">
         <button type="submit" disabled={submitting} className="rounded-md bg-[#0b1f3a] px-6 py-3 font-medium text-white hover:bg-[#17375f] disabled:opacity-60">
-          {submitting ? "Submitting..." : persist ? "Submit Third Party Refund Request" : "Preview Third Party Refund Request"}
+          {submitting ? "Submitting..." : edit ? "Resubmit Third Party Refund Request" : persist ? "Submit Third Party Refund Request" : "Preview Third Party Refund Request"}
         </button>
       </div>
     </form>

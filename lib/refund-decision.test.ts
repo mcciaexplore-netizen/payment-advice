@@ -22,6 +22,7 @@ vi.mock("@/lib/admin-session", () => ({ getAdminSession: async () => state.sessi
 vi.mock("@/lib/email/notify", () => ({
   notifyRefundRecommended: async (data: Record<string, unknown>, to: string, id: string) => { if (state.emailError) throw state.emailError; state.emails.push({ kind: "recommended", data, to, id }); },
   notifyRefundSentBack: async (data: Record<string, unknown>, to: string, id: string) => { if (state.emailError) throw state.emailError; state.emails.push({ kind: "sentBack", data, to, id }); },
+  notifyRefundRejected: async (data: Record<string, unknown>, to: string, id: string) => { if (state.emailError) throw state.emailError; state.emails.push({ kind: "rejected", data, to, id }); },
   notifyRefundAuthority: async () => undefined,
   notifyRefundSubmitted: async () => undefined,
 }));
@@ -78,10 +79,10 @@ describe("POST /api/authority/refund/[id]/decision", () => {
     expect(state.reviewInserts).toHaveLength(0);
   });
 
-  it("refuses anyone who is not an authority account (401), and does nothing", async () => {
+  it("anyone who is not an authority account gets a 404, and nothing happens", async () => {
     for (const session of [null, { adminUserId: "u", fullName: "S", roles: ["SELF"], recommendingAuthorityId: null }, { adminUserId: "u", fullName: "F", roles: ["ALL"], recommendingAuthorityId: null }]) {
       state.session = session;
-      expect((await call({ decision: "RECOMMEND" })).status).toBe(401);
+      for (const body of [{ decision: "RECOMMEND" }, { decision: "SEND_BACK", remarks: "x" }, { decision: "REJECT", remarks: "x" }]) expect((await call(body)).status).toBe(404);
     }
     expect(state.reviewInserts).toHaveLength(0);
     expect(state.emails).toHaveLength(0);
@@ -97,19 +98,47 @@ describe("POST /api/authority/refund/[id]/decision", () => {
     expect(state.emails[0].data).toMatchObject({ displayNo: REFUND.serialNo, recommendedBy: "Aniruddha  Brahma", amount: "4,720.00" });
   });
 
-  it("sends back with remarks and tells the submitter to file a new refund", async () => {
+  it("sends back with remarks; the email links to the edit page for the same refund", async () => {
     const response = await call({ decision: "SEND_BACK", remarks: "  Amount does not match  " });
     expect(response.status).toBe(200);
     expect(state.reviewInserts[0]).toMatchObject({ decision: "SENT_BACK", remarks: "Amount does not match" });
     expect(state.auditInserts[0]).toMatchObject({ action: "REFUND_REQUEST_SENT_BACK" });
     expect(state.emails[0]).toMatchObject({ kind: "sentBack", to: "sandhyaa@mcciapune.com" });
-    expect(state.emails[0].data).toMatchObject({ remarks: "Amount does not match", newRefundLink: "http://localhost/refund" });
+    expect(state.emails[0].data).toMatchObject({ remarks: "Amount does not match", editLink: `http://localhost/refund/edit/${ID}` });
   });
 
-  it("will not send back without remarks (400), and writes nothing", async () => {
-    for (const body of [{ decision: "SEND_BACK" }, { decision: "SEND_BACK", remarks: "   " }, { decision: "REJECT" }, {}]) {
+  it("rejects with a reason: records REJECTED against the signed-in authority, audits REFUND_REQUEST_REJECTED and emails the submitter", async () => {
+    const response = await call({ decision: "REJECT", remarks: "  Not a refundable item  " });
+    expect(response.status).toBe(200);
+    expect(state.reviewInserts).toEqual([{ refundRequestId: ID, decision: "REJECTED", decidedByName: "Aniruddha  Brahma", decidedByAuthorityId: "auth-1", remarks: "Not a refundable item" }]);
+    expect(state.auditInserts).toEqual([{ refundRequestId: ID, action: "REFUND_REQUEST_REJECTED", actor: "Aniruddha  Brahma", ipAddress: "10.0.0.5", details: { serialNo: REFUND.serialNo, remarks: "Not a refundable item" } }]);
+    expect(state.emails).toEqual([{ kind: "rejected", to: "sandhyaa@mcciapune.com", id: ID, data: expect.objectContaining({ displayNo: REFUND.serialNo, rejectedBy: "Aniruddha  Brahma", remarks: "Not a refundable item", amount: "4,720.00" }) }]);
+  });
+
+  it("a rejected (or already decided) refund cannot be recommended or decided again: 409, nothing written, no email", async () => {
+    state.insertedReview = false; // the review row (REJECTED) already exists: the primary key refuses a second one
+    for (const body of [{ decision: "RECOMMEND" }, { decision: "SEND_BACK", remarks: "x" }, { decision: "REJECT", remarks: "x" }]) {
+      const response = await call(body);
+      expect(response.status).toBe(409);
+      expect((await response.json()).error).toBe("This third party refund request is not waiting for your decision.");
+    }
+    expect(state.auditInserts).toHaveLength(0);
+    expect(state.emails).toHaveLength(0);
+  });
+
+  it("a double click: the first decision is recorded, the second fails cleanly (409) with no second audit entry or email", async () => {
+    expect((await call({ decision: "REJECT", remarks: "Duplicate" })).status).toBe(200);
+    state.insertedReview = false;
+    expect((await call({ decision: "REJECT", remarks: "Duplicate" })).status).toBe(409);
+    expect(state.auditInserts).toHaveLength(1);
+    expect(state.emails).toHaveLength(1);
+  });
+
+  it("will not send back or reject without a reason (400), and writes nothing", async () => {
+    for (const body of [{ decision: "SEND_BACK" }, { decision: "SEND_BACK", remarks: "   " }, { decision: "REJECT" }, { decision: "REJECT", remarks: "  " }, { decision: "APPROVE" }, {}]) {
       expect((await call(body)).status).toBe(400);
     }
+    expect((await (await call({ decision: "REJECT" })).json()).error).toBe("A reason is required to reject a third party refund.");
     expect(state.reviewInserts).toHaveLength(0);
   });
 
@@ -129,7 +158,7 @@ describe("POST /api/authority/refund/[id]/decision", () => {
     state.insertedReview = false;
     const response = await call({ decision: "RECOMMEND" });
     expect(response.status).toBe(409);
-    expect((await response.json()).error).toBe("This third party refund request has already been decided.");
+    expect((await response.json()).error).toBe("This third party refund request is not waiting for your decision.");
     expect(state.auditInserts).toHaveLength(0);
     expect(state.emails).toHaveLength(0);
   });
@@ -147,11 +176,13 @@ describe("POST /api/authority/refund/[id]/decision", () => {
 });
 
 describe("decision helpers", () => {
-  it("the schema needs remarks only for a send back", () => {
+  it("the schema needs a reason for a send back and a reject, never for a recommend", () => {
     expect(refundDecisionSchema.safeParse({ decision: "RECOMMEND" }).success).toBe(true);
     expect(refundDecisionSchema.safeParse({ decision: "SEND_BACK", remarks: "x" }).success).toBe(true);
     expect(refundDecisionSchema.safeParse({ decision: "SEND_BACK" }).success).toBe(false);
     expect(refundDecisionSchema.safeParse({ decision: "SEND_BACK", remarks: "x".repeat(1001) }).success).toBe(false);
+    expect(refundDecisionSchema.safeParse({ decision: "REJECT", remarks: "x" }).success).toBe(true);
+    expect(refundDecisionSchema.safeParse({ decision: "REJECT" }).success).toBe(false);
   });
 
   it("labels where a refund stands (no review = still waiting, which is how every earlier refund starts)", () => {
@@ -159,5 +190,6 @@ describe("decision helpers", () => {
     expect(refundStatusLabel({ decision: null, decidedAt: null, decidedByName: null })).toBe("Waiting for recommendation");
     expect(refundStatusLabel({ decision: "RECOMMENDED", decidedAt: new Date("2026-11-24T10:00:00Z"), decidedByName: "A" })).toBe("Recommended on 24/11/2026");
     expect(refundStatusLabel({ decision: "SENT_BACK", decidedAt: new Date("2026-11-24T10:00:00Z"), decidedByName: "A" })).toBe("Sent back on 24/11/2026");
+    expect(refundStatusLabel({ decision: "REJECTED", decidedAt: new Date("2026-11-24T10:00:00Z"), decidedByName: "A" })).toBe("Rejected on 24/11/2026");
   });
 });

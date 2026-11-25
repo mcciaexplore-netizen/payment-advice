@@ -30,7 +30,9 @@ describe("refund request reviews migration (0032)", () => {
   it("is registered in the migration journal right after 0031", () => {
     const journal = JSON.parse(fs.readFileSync(path.join(process.cwd(), "lib/db/migrations/meta/_journal.json"), "utf8"));
     const tags = journal.entries.map((entry: { tag: string }) => entry.tag);
-    expect(tags.at(-1)).toBe("0032_refund_request_reviews");
-    expect(tags.at(-2)).toBe("0031_cash_receipt_received");
+    // 0033 (Reject, reason rule) follows it; 0032 itself is never edited.
+    const at = tags.indexOf("0032_refund_request_reviews");
+    expect(at).toBeGreaterThan(0);
+    expect(tags[at - 1]).toBe("0031_cash_receipt_received");
   });
 });

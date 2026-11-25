@@ -723,15 +723,16 @@ export const refundRequestReviews = pgTable(
   "refund_request_reviews",
   {
     refundRequestId: uuid("refund_request_id").primaryKey().references(() => refundRequests.id),
-    decision: text("decision").notNull(), // 'RECOMMENDED' | 'SENT_BACK'
+    decision: text("decision").notNull(), // 'RECOMMENDED' | 'SENT_BACK' | 'REJECTED'
     decidedByName: text("decided_by_name").notNull(),
     decidedByAuthorityId: uuid("decided_by_authority_id").references(() => recommendingAuthorities.id),
     decidedAt: timestamp("decided_at", { withTimezone: true }).defaultNow().notNull(),
     remarks: text("remarks"),
   },
   (table) => [
-    check("refund_request_reviews_decision_check", sql`${table.decision} in ('RECOMMENDED', 'SENT_BACK')`),
-    check("refund_request_reviews_sent_back_remarks_check", sql`${table.decision} <> 'SENT_BACK' or (${table.remarks} is not null and length(btrim(${table.remarks})) > 0)`),
+    check("refund_request_reviews_decision_check", sql`${table.decision} in ('RECOMMENDED', 'SENT_BACK', 'REJECTED')`),
+    // A reason is required to send a refund back or reject it (0033).
+    check("refund_request_reviews_reason_check", sql`${table.decision} = 'RECOMMENDED' or (${table.remarks} is not null and length(btrim(${table.remarks})) > 0)`),
   ],
 );
 

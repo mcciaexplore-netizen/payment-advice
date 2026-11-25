@@ -7,10 +7,12 @@ import { auditLog } from "@/lib/db/schema";
 import {
   type RefundAuthorityEmailData,
   type RefundRecommendedEmailData,
+  type RefundRejectedEmailData,
   type RefundSentBackEmailData,
   type RefundSubmittedEmailData,
   renderRefundAuthorityEmail,
   renderRefundRecommendedEmail,
+  renderRefundRejectedEmail,
   renderRefundSentBackEmail,
   renderRefundSubmittedEmail,
   type AuthorityApprovalEmailData,
@@ -348,6 +350,13 @@ export async function notifyRefundRecommended(data: RefundRecommendedEmailData, 
 export async function notifyRefundSentBack(data: RefundSentBackEmailData, to: string, refundRequestId: string) {
   const message = renderRefundSentBackEmail(data);
   await send("refund sent back", to, message, { refundRequestId });
+  return message;
+}
+
+/** Refund requests: the authority rejected it (final), with the reason. */
+export async function notifyRefundRejected(data: RefundRejectedEmailData, to: string, refundRequestId: string) {
+  const message = renderRefundRejectedEmail(data);
+  await send("refund rejected", to, message, { refundRequestId });
   return message;
 }
 
