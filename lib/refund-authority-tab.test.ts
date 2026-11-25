@@ -80,7 +80,7 @@ describe("Refund Requests tab for a recommending authority", () => {
   it("lists the refunds that name the authority, with who submitted them and a PDF link each", async () => {
     const html = await render("AUTHORITY", { view: "refund-requests" });
     const page = text(html);
-    expect(page).toContain("2 refund requests naming you as the recommending authority, total ₹ 9,440.00");
+    expect(page).toContain("2 third party refund requests naming you as the recommending authority, total ₹ 9,440.00");
     expect(page).toContain("REF/MCCIA/2026-27/0007");
     expect(page).toContain("Submitter 7");
     expect(page).toContain("submitter7@mcciapune.com");
@@ -110,8 +110,8 @@ describe("Refund Requests tab for a recommending authority", () => {
   it("shows a clear empty state when no refund names the authority", async () => {
     state.refunds = [];
     const page = text(await render("AUTHORITY", { view: "refund-requests" }));
-    expect(page).toContain("0 refund requests naming you as the recommending authority");
-    expect(page).toContain("No refund requests name you as the recommending authority.");
+    expect(page).toContain("0 third party refund requests naming you as the recommending authority");
+    expect(page).toContain("No third party refund requests name you as the recommending authority.");
   });
 
   it("the tab is offered in the authority's tab bar and is the active one on its own page", async () => {
@@ -122,7 +122,7 @@ describe("Refund Requests tab for a recommending authority", () => {
     expect(own).toMatch(/border-b-2 border-\[#0b1f3a\][^>]*>Refund Requests</);
     const mine = await render("AUTHORITY", { view: "my-refunds" });
     expect(mine).toContain(">Refund Requests<");
-    expect((mine.match(/>My Refunds</g) ?? []).length).toBe(1);
+    expect((mine.match(/>My Third Party Refunds</g) ?? []).length).toBe(1);
   });
 
   it.each(["BRANCH", "DEPARTMENT", "SELF"] as const)("%s can neither see the tab nor reach the view: it falls back to their normal page without reading refunds", async (role) => {

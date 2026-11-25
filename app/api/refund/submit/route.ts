@@ -34,16 +34,16 @@ const asString = (form: FormData, key: string) => {
  *   insert never consumes a number. request_date is the server's IST date. */
 export async function POST(request: NextRequest) {
   if (!refundEntryVisible()) {
-    return NextResponse.json({ error: "Refund requests are not enabled yet." }, { status: 404 });
+    return NextResponse.json({ error: "Third party refund requests are not enabled yet." }, { status: 404 });
   }
   if (isRateLimited(clientIpFrom(request.headers))) {
-    return NextResponse.json({ error: "Too many refund requests from this connection. Please wait a few minutes and try again." }, { status: 429 });
+    return NextResponse.json({ error: "Too many third party refund requests from this connection. Please wait a few minutes and try again." }, { status: 429 });
   }
   if (Number(request.headers.get("content-length") ?? 0) > MAX_BODY_BYTES) {
-    return NextResponse.json({ error: "The refund details are too large." }, { status: 413 });
+    return NextResponse.json({ error: "The third party refund details are too large." }, { status: 413 });
   }
   const form = await request.formData().catch(() => null);
-  if (!form) return NextResponse.json({ error: "Invalid refund details." }, { status: 400 });
+  if (!form) return NextResponse.json({ error: "Invalid third party refund details." }, { status: 400 });
 
   let documents: unknown;
   try {
@@ -80,7 +80,7 @@ export async function POST(request: NextRequest) {
     documents,
   });
   if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid refund details." }, { status: 400 });
+    return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid third party refund details." }, { status: 400 });
   }
 
   if (!refundRequestsEnabled()) {

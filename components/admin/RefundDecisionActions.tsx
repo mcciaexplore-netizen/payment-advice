@@ -49,7 +49,7 @@ export function RefundDecisionActions({ refundId }: { refundId: string }) {
             placeholder="What needs to be corrected?"
             className="rounded-md border border-gray-300 px-3 py-2 text-sm"
           />
-          <p className="text-xs text-gray-500">The submitter is emailed these remarks and files a new refund request with the corrections.</p>
+          <p className="text-xs text-gray-500">The submitter is emailed these remarks and files a new third party refund request with the corrections.</p>
           <div className="flex gap-2">
             <button type="button" disabled={busy || remarks.trim().length === 0} onClick={() => decide("SEND_BACK")} className="rounded-md bg-[#b3261e] px-5 py-2 text-sm font-medium text-white disabled:opacity-50">
               {busy ? "Saving…" : "Send back"}

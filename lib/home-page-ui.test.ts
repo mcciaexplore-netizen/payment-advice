@@ -32,7 +32,7 @@ describe("Payment Desk home page cards (compact, fits a laptop screen)", () => {
 
   it("flag on: owner order, two full rows of three on desktop, then the National Safety Week bar full width", () => {
     const { cards } = render(true);
-    expect(cards.map((card) => card.title)).toEqual(["Payment Advice", "Cash Payment Voucher", "Advance Payment Form", "Refund", "Cash Receipt", "Forwarding Memo", NSW]);
+    expect(cards.map((card) => card.title)).toEqual(["Payment Advice", "Cash Payment Voucher", "Advance Payment Form", "Third Party Refund", "Cash Receipt", "Forwarding Memo", NSW]);
     expect(cards.map(spans)).toEqual(["", "", "", "", "", "sm:col-span-1 lg:col-span-1", "sm:col-span-2 lg:col-span-3"]);
   });
 
@@ -62,7 +62,7 @@ describe("Payment Desk home page cards (compact, fits a laptop screen)", () => {
     const { cards } = render(true);
     const description = (title: string) => /<p[^>]*>([^<]+)<\/p>/.exec(cards.find((card) => card.title === title)!.markup)![1];
     expect(description("Forwarding Memo")).toBe("For forwarding cheques, demand drafts, and other instruments to Accounts.");
-    expect(description("Refund")).toBe("Request a refund with payee, amount, bank details, and documents.");
+    expect(description("Third Party Refund")).toBe("Request a third party refund with payee, amount, bank details, and documents.");
     expect(description("Payment Advice")).toBe("For payments made by NEFT to a vendor or beneficiary.");
     expect(description("Cash Payment Voucher")).toBe("For cash reimbursements paid directly to the submitter.");
     expect(description("Advance Payment Form")).toBe("For money needed before travel, events, or other planned expenses.");
@@ -86,13 +86,13 @@ describe("Payment Desk home page cards (compact, fits a laptop screen)", () => {
     expect(byTitle["Payment Advice"].href).toBe("/payment-advice");
     expect(byTitle["Cash Payment Voucher"].href).toBe("/cash-voucher");
     expect(byTitle["Advance Payment Form"].href).toBe("/advance");
-    expect(byTitle["Refund"].href).toBe("/refund");
+    expect(byTitle["Third Party Refund"].href).toBe("/refund");
     expect(byTitle["Cash Receipt"].href).toBe("/cash-receipt");
     expect(byTitle["Forwarding Memo"].href).toBe("/forwarding-memo");
     expect(byTitle["Payment Advice"].markup).toContain("bg-[#2e8b57]");
     expect(byTitle["Cash Payment Voucher"].markup).toContain("bg-[#e8a33d]");
     expect(byTitle["Advance Payment Form"].markup).toContain("bg-violet-600");
-    expect(byTitle["Refund"].markup).toContain("bg-teal-600");
+    expect(byTitle["Third Party Refund"].markup).toContain("bg-teal-600");
     expect(byTitle["Cash Receipt"].markup).toContain("bg-sky-600");
     expect(byTitle["Forwarding Memo"].markup).toContain("bg-[#2e8b57]");
   });

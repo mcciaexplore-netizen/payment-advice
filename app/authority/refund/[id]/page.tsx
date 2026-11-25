@@ -59,7 +59,7 @@ export default async function AuthorityRefundPage({ params }: { params: Promise<
       <Link href="/authority?role=AUTHORITY&view=refund-requests" className="w-fit text-sm font-medium text-gray-600 hover:text-[#0b1f3a]">← Back to Refund Requests</Link>
       <header>
         <h1 className="font-heading text-3xl text-[#0b1f3a]">{refund.serialNo}</h1>
-        <p className="mt-1 text-sm text-gray-600">Refund request dated {formatDateOnly(refund.requestDate)}. You are named as the Recommending Authority.</p>
+        <p className="mt-1 text-sm text-gray-600">Third party refund request dated {formatDateOnly(refund.requestDate)}. You are named as the Recommending Authority.</p>
       </header>
 
       <dl className="grid grid-cols-1 gap-x-6 gap-y-3 rounded-md border border-gray-200 p-6 text-sm sm:grid-cols-2">

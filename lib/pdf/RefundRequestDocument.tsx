@@ -83,7 +83,7 @@ function Cell({ label, value, wide, bold }: { label: string; value: string | nul
  * and lib/pdf/Stamp.tsx is not used. */
 export function RefundRequestDocument({ data, logoDataUrl }: { data: RefundRequestPdfData; logoDataUrl?: string }) {
   return (
-    <Document title={`Refund Request ${data.serialNo}`} author="MCCIA" language="en-IN">
+    <Document title={`Third Party Refund Request ${data.serialNo}`} author="MCCIA" language="en-IN">
       <Page size="A4" style={styles.page}>
         <View style={styles.masthead} wrap={false}>
           {logoDataUrl ? (
@@ -92,7 +92,7 @@ export function RefundRequestDocument({ data, logoDataUrl }: { data: RefundReque
           ) : null}
           <Text style={styles.chamber}>Mahratta Chamber of Commerce, Industries and Agriculture</Text>
         </View>
-        <Text style={styles.title}>Refund Request</Text>
+        <Text style={styles.title}>Third Party Refund Request</Text>
         <View style={styles.referenceRow}>
           <Text style={styles.referenceNo}>No. : {data.serialNo}</Text>
           <Text>Date : {formatDateOnly(data.requestDate)}</Text>
@@ -118,7 +118,7 @@ export function RefundRequestDocument({ data, logoDataUrl }: { data: RefundReque
           <Cell label="Udyam / MSME No." value={data.payeeUdyamNumber} />
         </View>
 
-        <Text style={styles.section}>REFUND</Text>
+        <Text style={styles.section}>THIRD PARTY REFUND</Text>
         <View style={styles.grid}>
           <Cell label="Nature of expenditure" wide value={data.natureOfExpenditure} />
           <Cell label="From Date" value={formatDateOnly(data.fromDate)} />

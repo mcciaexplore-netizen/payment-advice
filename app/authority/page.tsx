@@ -175,25 +175,25 @@ export default async function TeamDashboard({ searchParams }: { searchParams: Pr
         <Tab href={`/authority?role=AUTHORITY${isDg ? "&view=pending" : ""}`} active={view === "pending"}>Pending My Recommendation</Tab>
         <Tab href="/authority?role=AUTHORITY&view=history" active={view === "history"}>History</Tab>
         <Tab href="/authority?role=AUTHORITY&view=my-submissions" active={view === "my-submissions"}>My Submissions</Tab>
-        {refundsTab ? <Tab href="/authority?role=AUTHORITY&view=my-refunds" active={false}>My Refunds</Tab> : null}
+        {refundsTab ? <Tab href="/authority?role=AUTHORITY&view=my-refunds" active={false}>My Third Party Refunds</Tab> : null}
         {refundsTab ? <Tab href="/authority?role=AUTHORITY&view=refund-requests" active={false}>Refund Requests</Tab> : null}
       </> : isRestrictedGrant ? (
         // No Team Submissions tab - SELF/CASH_RECEIPT have no broader team
         // to show, only their own submissions and their own Cash Receipts.
         <>
           <Tab href={`/authority?role=${activeGrant.role}`} active>My Submissions</Tab>
-          {refundsTab ? <Tab href={`/authority?role=${activeGrant.role}&view=my-refunds`} active={false}>My Refunds</Tab> : null}
+          {refundsTab ? <Tab href={`/authority?role=${activeGrant.role}&view=my-refunds`} active={false}>My Third Party Refunds</Tab> : null}
           {canSeeCashReceiptsTab ? <Tab href={`/authority?role=${activeGrant.role}&view=cash-receipts`} active={false}>My Cash Receipts</Tab> : null}
         </>
       ) : <>
         <Tab href={`/authority?role=${activeGrant.role}`} active={view === "team-submissions"}>Team Submissions</Tab>
         <Tab href={`/authority?role=${activeGrant.role}&view=my-submissions`} active={view === "my-submissions"}>My Submissions</Tab>
-        {refundsTab ? <Tab href={`/authority?role=${activeGrant.role}&view=my-refunds`} active={false}>My Refunds</Tab> : null}
+        {refundsTab ? <Tab href={`/authority?role=${activeGrant.role}&view=my-refunds`} active={false}>My Third Party Refunds</Tab> : null}
         {isBranchGrant ? <Tab href={`/authority?role=${activeGrant.role}&view=cash-receipts`} active={false}>Cash Receipts</Tab> : null}
       </>}
       <div className="ml-auto mb-1.5"><StageLegend /></div>
     </nav>
-    {pendingRefunds > 0 ? <Link href="/authority?role=AUTHORITY&view=refund-requests" className="flex items-center justify-between rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 hover:bg-amber-100"><span><strong>{pendingRefunds} refund request{pendingRefunds === 1 ? "" : "s"}</strong> waiting for your recommendation</span><span className="font-medium">Review →</span></Link> : null}
+    {pendingRefunds > 0 ? <Link href="/authority?role=AUTHORITY&view=refund-requests" className="flex items-center justify-between rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 hover:bg-amber-100"><span><strong>{pendingRefunds} third party refund request{pendingRefunds === 1 ? "" : "s"}</strong> waiting for your recommendation</span><span className="font-medium">Review →</span></Link> : null}
     {filtersEnabled && (scopeTotal > 0 || hasActiveFilters(filters)) ? <DashboardFilters base={filterBase} filters={filters} counts={counts} showDecision={showDecision} /> : null}
     {rows.length === 0 && hasActiveFilters(filters) ? <FilteredEmptyState base={filterBase} filters={filters} /> : rows.length === 0 ? <div className="rounded-lg border border-gray-200 p-10 text-center text-sm text-gray-500">
       {isAuthority && view === "history" ? "No decisions recorded yet." : view === "my-submissions" ? "No submissions found for your login email." : isAuthority ? "Nothing is waiting for your recommendation." : "No submissions found for this team scope."}
@@ -268,7 +268,7 @@ async function loadCashReceiptsTab(
     <nav className="flex flex-wrap items-center gap-2 border-b border-gray-200 pb-0">
       {isRestrictedGrant ? null : <Tab href={`/authority?role=${activeGrant.role}`} active={false}>Team Submissions</Tab>}
       <Tab href={`/authority?role=${activeGrant.role}&view=my-submissions`} active={false}>My Submissions</Tab>
-      {refundRequestsEnabled() ? <Tab href={`/authority?role=${activeGrant.role}&view=my-refunds`} active={false}>My Refunds</Tab> : null}
+      {refundRequestsEnabled() ? <Tab href={`/authority?role=${activeGrant.role}&view=my-refunds`} active={false}>My Third Party Refunds</Tab> : null}
       <Tab href={`/authority?role=${activeGrant.role}&view=cash-receipts`} active>{isRestrictedGrant ? "My Cash Receipts" : "Cash Receipts"}</Tab>
     </nav>
     <CashReceiptReportBar
@@ -329,7 +329,7 @@ async function loadMyRefundsTab({ activeGrant, grants, accountEmail, isAuthority
   const total = rows.reduce((sum, row) => sum + Math.round(Number(row.totalAmount) * 100), 0) / 100;
 
   return <div className="flex flex-col gap-6">
-    <header><h1 className="font-heading text-3xl text-[#0b1f3a]">{isAuthority ? "Authority Recommendations" : isRestrictedGrant ? "My Submissions" : "Team Submissions"}</h1><p className="mt-1 text-sm text-gray-600">{rows.length} refund request{rows.length === 1 ? "" : "s"} made using {accountEmail}{rows.length ? `, total ${formatAmount(total.toFixed(2))}` : ""}</p></header>
+    <header><h1 className="font-heading text-3xl text-[#0b1f3a]">{isAuthority ? "Authority Recommendations" : isRestrictedGrant ? "My Submissions" : "Team Submissions"}</h1><p className="mt-1 text-sm text-gray-600">{rows.length} third party refund request{rows.length === 1 ? "" : "s"} made using {accountEmail}{rows.length ? `, total ${formatAmount(total.toFixed(2))}` : ""}</p></header>
     {grants.length > 1 ? <nav aria-label="Dashboard role" className="flex flex-wrap gap-2 rounded-lg bg-gray-100 p-1.5">
       {grants.map((grant) => <Link key={grant.role} href={`/authority?role=${grant.role}`} className={`rounded-md px-3 py-2 text-sm font-medium ${grant.role === activeGrant.role ? "bg-white text-[#0b1f3a] shadow-sm" : "text-gray-600 hover:text-[#0b1f3a]"}`}>{roleLabel(grant)}</Link>)}
     </nav> : null}
@@ -338,17 +338,17 @@ async function loadMyRefundsTab({ activeGrant, grants, accountEmail, isAuthority
         <Tab href={`/authority?role=AUTHORITY${isDg ? "&view=pending" : ""}`} active={false}>Pending My Recommendation</Tab>
         <Tab href="/authority?role=AUTHORITY&view=history" active={false}>History</Tab>
         <Tab href="/authority?role=AUTHORITY&view=my-submissions" active={false}>My Submissions</Tab>
-        <Tab href="/authority?role=AUTHORITY&view=my-refunds" active>My Refunds</Tab>
+        <Tab href="/authority?role=AUTHORITY&view=my-refunds" active>My Third Party Refunds</Tab>
         <Tab href="/authority?role=AUTHORITY&view=refund-requests" active={false}>Refund Requests</Tab>
       </> : isRestrictedGrant ? <Tab href={`/authority?role=${activeGrant.role}`} active={false}>My Submissions</Tab> : <>
         <Tab href={`/authority?role=${activeGrant.role}`} active={false}>Team Submissions</Tab>
         <Tab href={`/authority?role=${activeGrant.role}&view=my-submissions`} active={false}>My Submissions</Tab>
       </>}
-      {isAuthority ? null : <Tab href={`/authority?role=${activeGrant.role}&view=my-refunds`} active>My Refunds</Tab>}
+      {isAuthority ? null : <Tab href={`/authority?role=${activeGrant.role}&view=my-refunds`} active>My Third Party Refunds</Tab>}
       {canSeeCashReceiptsTab && (isBranchGrant || isRestrictedGrant) ? <Tab href={`/authority?role=${activeGrant.role}&view=cash-receipts`} active={false}>{isRestrictedGrant ? "My Cash Receipts" : "Cash Receipts"}</Tab> : null}
     </nav>
     {rows.length === 0 ? <div className="rounded-lg border border-gray-200 p-10 text-center text-sm text-gray-500">
-      No refund requests found for your login email. A refund shows here when the &quot;Your Email&quot; on its form is {accountEmail}.
+      No third party refund requests found for your login email. A third party refund shows here when the &quot;Your Email&quot; on its form is {accountEmail}.
     </div> : <div className="overflow-x-auto rounded-lg border border-gray-200"><table className="w-full text-left text-sm">
       <thead className="bg-gray-50/80 text-xs uppercase text-gray-500"><tr><th className="p-3">Reference</th><th className="p-3">Payee / Reason</th><th className="p-3">Amount</th><th className="p-3">Submitted</th>{recommendation ? <th className="p-3">Status</th> : null}<th className="p-3">Request</th></tr></thead>
       <tbody className="divide-y divide-gray-100">{rows.map((row) => <tr key={row.id} className="align-top">
@@ -400,7 +400,7 @@ async function loadAuthorityRefundsTab({ activeGrant, grants, isDg }: {
   const total = rows.reduce((sum, row) => sum + Math.round(Number(row.totalAmount) * 100), 0) / 100;
 
   return <div className="flex flex-col gap-6">
-    <header><h1 className="font-heading text-3xl text-[#0b1f3a]">Authority Recommendations</h1><p className="mt-1 text-sm text-gray-600">{rows.length} refund request{rows.length === 1 ? "" : "s"} naming you as the recommending authority{rows.length ? `, total ${formatAmount(total.toFixed(2))}` : ""}{recommendation && rows.length ? `. ${waiting} waiting for your recommendation.` : ""}</p></header>
+    <header><h1 className="font-heading text-3xl text-[#0b1f3a]">Authority Recommendations</h1><p className="mt-1 text-sm text-gray-600">{rows.length} third party refund request{rows.length === 1 ? "" : "s"} naming you as the recommending authority{rows.length ? `, total ${formatAmount(total.toFixed(2))}` : ""}{recommendation && rows.length ? `. ${waiting} waiting for your recommendation.` : ""}</p></header>
     {grants.length > 1 ? <nav aria-label="Dashboard role" className="flex flex-wrap gap-2 rounded-lg bg-gray-100 p-1.5">
       {grants.map((grant) => <Link key={grant.role} href={`/authority?role=${grant.role}`} className={`rounded-md px-3 py-2 text-sm font-medium ${grant.role === activeGrant.role ? "bg-white text-[#0b1f3a] shadow-sm" : "text-gray-600 hover:text-[#0b1f3a]"}`}>{roleLabel(grant)}</Link>)}
     </nav> : null}
@@ -408,11 +408,11 @@ async function loadAuthorityRefundsTab({ activeGrant, grants, isDg }: {
       <Tab href={`/authority?role=AUTHORITY${isDg ? "&view=pending" : ""}`} active={false}>Pending My Recommendation</Tab>
       <Tab href="/authority?role=AUTHORITY&view=history" active={false}>History</Tab>
       <Tab href="/authority?role=AUTHORITY&view=my-submissions" active={false}>My Submissions</Tab>
-      <Tab href="/authority?role=AUTHORITY&view=my-refunds" active={false}>My Refunds</Tab>
+      <Tab href="/authority?role=AUTHORITY&view=my-refunds" active={false}>My Third Party Refunds</Tab>
       <Tab href="/authority?role=AUTHORITY&view=refund-requests" active>Refund Requests</Tab>
     </nav>
     {rows.length === 0 ? <div className="rounded-lg border border-gray-200 p-10 text-center text-sm text-gray-500">
-      No refund requests name you as the recommending authority.
+      No third party refund requests name you as the recommending authority.
     </div> : <div className="overflow-x-auto rounded-lg border border-gray-200"><table className="w-full text-left text-sm">
       <thead className="bg-gray-50/80 text-xs uppercase text-gray-500"><tr><th className="p-3">Reference</th><th className="p-3">Submitted By</th><th className="p-3">Payee / Reason</th><th className="p-3">Amount</th><th className="p-3">Date</th>{recommendation ? <th className="p-3">Status</th> : null}<th className="p-3">Request</th></tr></thead>
       <tbody className="divide-y divide-gray-100">{rows.map((row) => <tr key={row.id} className="align-top">

@@ -31,16 +31,16 @@ export default async function RefundSubmittedPage({ params }: { params: Promise<
   return (
     <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-8 px-6 py-16">
       <section className="space-y-4 text-center">
-        <p className="text-sm font-medium text-[#2e8b57]">Refund request submitted</p>
+        <p className="text-sm font-medium text-[#2e8b57]">Third party refund request submitted</p>
         <h1 className="font-heading text-4xl text-[#0b1f3a]">{refund.serialNo}</h1>
-        <p className="text-gray-600">Your refund request for ₹ {Number(refund.totalAmount).toLocaleString("en-IN", { minimumFractionDigits: 2 })} was saved. Keep this reference for any follow-up.</p>
-        {refundRecommendationEnabled() ? <p className="text-sm text-gray-600">It has gone to <strong>{refund.recommendingAuthority}</strong> for recommendation. You will be emailed their decision, and you can follow it under My Refunds.</p> : null}
+        <p className="text-gray-600">Your third party refund request for ₹ {Number(refund.totalAmount).toLocaleString("en-IN", { minimumFractionDigits: 2 })} was saved. Keep this reference for any follow-up.</p>
+        {refundRecommendationEnabled() ? <p className="text-sm text-gray-600">It has gone to <strong>{refund.recommendingAuthority}</strong> for recommendation. You will be emailed their decision, and you can follow it under My Third Party Refunds.</p> : null}
       </section>
       <div className="flex flex-wrap justify-center gap-3">
         <a href={`/api/refund/${id}/pdf`} target="_blank" rel="noreferrer" className="rounded-md bg-[#0b1f3a] px-6 py-3 text-base font-medium text-white shadow-sm transition hover:bg-[#0b1f3a]/90">Open printable request</a>
         <a href={`/api/refund/${id}/pdf?download=1`} download className="rounded-md border border-[#0b1f3a] px-6 py-3 text-base font-medium text-[#0b1f3a] hover:bg-[#0b1f3a]/5">Download PDF</a>
-        {canSeeMyRefunds ? <Link href="/authority?view=my-refunds" className="rounded-md border border-[#0b1f3a] px-6 py-3 text-base font-medium text-[#0b1f3a] hover:bg-[#0b1f3a]/5">View my refunds</Link> : null}
-        <Link href="/refund" className="rounded-md border border-[#0b1f3a] px-6 py-3 text-base font-medium text-[#0b1f3a] hover:bg-[#0b1f3a]/5">Submit another refund</Link>
+        {canSeeMyRefunds ? <Link href="/authority?view=my-refunds" className="rounded-md border border-[#0b1f3a] px-6 py-3 text-base font-medium text-[#0b1f3a] hover:bg-[#0b1f3a]/5">View my third party refunds</Link> : null}
+        <Link href="/refund" className="rounded-md border border-[#0b1f3a] px-6 py-3 text-base font-medium text-[#0b1f3a] hover:bg-[#0b1f3a]/5">Submit another third party refund</Link>
       </div>
     </main>
   );

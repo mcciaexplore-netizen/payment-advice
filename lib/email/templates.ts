@@ -412,31 +412,31 @@ const refundLinkNote = (href: string) =>
 /** To the recommending authority when a refund names them. */
 export function renderRefundAuthorityEmail(data: RefundAuthorityEmailData) {
   return {
-    subject: `Recommendation Required: Refund Request ${data.displayNo}`,
-    html: shell("#E8A33D", `${refundIntro("Refund Request Recommendation", data.displayNo, "#6B7280")}${refundParagraph(`Dear ${escapeHtml(data.authorityName)},<br><br>You have been named as the Recommending Authority for this Refund Request, submitted by <strong>${escapeHtml(data.submittedByName)}</strong> on ${escapeHtml(formatDateOnly(data.requestDate))}. Please review the details and recommend it, or send it back with remarks.`)}${details([["Payee", escapeHtml(data.payeeName)], ["Amount", refundMoney(data.amount)], ["Reason", escapeHtml(data.natureOfExpenditure)]])}${button(escapeHtml(data.reviewLink), "Review &amp; Recommend")}${refundLinkNote(data.reviewLink)}`),
+    subject: `Recommendation Required: Third Party Refund Request ${data.displayNo}`,
+    html: shell("#E8A33D", `${refundIntro("Third Party Refund Request Recommendation", data.displayNo, "#6B7280")}${refundParagraph(`Dear ${escapeHtml(data.authorityName)},<br><br>You have been named as the Recommending Authority for this third party refund request, submitted by <strong>${escapeHtml(data.submittedByName)}</strong> on ${escapeHtml(formatDateOnly(data.requestDate))}. Please review the details and recommend it, or send it back with remarks.`)}${details([["Payee", escapeHtml(data.payeeName)], ["Amount", refundMoney(data.amount)], ["Reason", escapeHtml(data.natureOfExpenditure)]])}${button(escapeHtml(data.reviewLink), "Review &amp; Recommend")}${refundLinkNote(data.reviewLink)}`),
   };
 }
 
 /** To the submitter right after they submit. */
 export function renderRefundSubmittedEmail(data: RefundSubmittedEmailData) {
   return {
-    subject: `Refund Request ${data.displayNo} Submitted`,
-    html: shell("#2E8B57", `${refundIntro("Submission Confirmed", data.displayNo, "#2E8B57")}${refundParagraph(`Dear ${escapeHtml(data.submittedByName)},<br><br>Your Refund Request has been submitted. It has been routed to <strong>${escapeHtml(data.authorityName)}</strong> (Recommending Authority) for recommendation, and you will be emailed once they decide. You can find it at any time under <strong>My Refunds</strong> on your dashboard.`)}${details([["Payee", escapeHtml(data.payeeName)], ["Amount", refundMoney(data.amount)], ["Date", escapeHtml(formatDateOnly(data.requestDate))]])}${button(escapeHtml(data.myRefundsLink), "View My Refunds")}${refundLinkNote(data.myRefundsLink)}`),
+    subject: `Third Party Refund Request ${data.displayNo} Submitted`,
+    html: shell("#2E8B57", `${refundIntro("Submission Confirmed", data.displayNo, "#2E8B57")}${refundParagraph(`Dear ${escapeHtml(data.submittedByName)},<br><br>Your third party refund request has been submitted. It has been routed to <strong>${escapeHtml(data.authorityName)}</strong> (Recommending Authority) for recommendation, and you will be emailed once they decide. You can find it at any time under <strong>My Third Party Refunds</strong> on your dashboard.`)}${details([["Payee", escapeHtml(data.payeeName)], ["Amount", refundMoney(data.amount)], ["Date", escapeHtml(formatDateOnly(data.requestDate))]])}${button(escapeHtml(data.myRefundsLink), "View My Third Party Refunds")}${refundLinkNote(data.myRefundsLink)}`),
   };
 }
 
 /** To the submitter when the authority recommends the refund. */
 export function renderRefundRecommendedEmail(data: RefundRecommendedEmailData) {
   return {
-    subject: `Refund Request ${data.displayNo} Recommended - Forwarded to Finance`,
-    html: shell("#2E8B57", `${refundIntro("Recommended", data.displayNo, "#2E8B57")}${refundParagraph(`Dear ${escapeHtml(data.submittedByName)},<br><br>Your Refund Request has been recommended by <strong>${escapeHtml(data.recommendedBy)}</strong> and forwarded to the Finance &amp; Accounts team for review and processing.`)}${details([["Payee", escapeHtml(data.payeeName)], ["Amount", refundMoney(data.amount)], ["Date", escapeHtml(formatDateOnly(data.requestDate))], ["Current Stage", "Awaiting Finance Review"]])}<p style="margin:0;font-size:13px;line-height:1.6;color:#6B7280;">The Finance &amp; Accounts team will continue processing your request.</p></td></tr>`),
+    subject: `Third Party Refund Request ${data.displayNo} Recommended - Forwarded to Finance`,
+    html: shell("#2E8B57", `${refundIntro("Recommended", data.displayNo, "#2E8B57")}${refundParagraph(`Dear ${escapeHtml(data.submittedByName)},<br><br>Your third party refund request has been recommended by <strong>${escapeHtml(data.recommendedBy)}</strong> and forwarded to the Finance &amp; Accounts team for review and processing.`)}${details([["Payee", escapeHtml(data.payeeName)], ["Amount", refundMoney(data.amount)], ["Date", escapeHtml(formatDateOnly(data.requestDate))], ["Current Stage", "Awaiting Finance Review"]])}<p style="margin:0;font-size:13px;line-height:1.6;color:#6B7280;">The Finance &amp; Accounts team will continue processing your request.</p></td></tr>`),
   };
 }
 
 /** To the submitter when the authority sends the refund back. */
 export function renderRefundSentBackEmail(data: RefundSentBackEmailData) {
   return {
-    subject: `Action Required: Refund Request ${data.displayNo} Sent Back`,
-    html: shell("#E8A33D", `${refundIntro("Action Required", data.displayNo, "#B45309")}${refundParagraph(`Dear ${escapeHtml(data.submittedByName)},<br><br>Your Refund Request has been sent back by <strong>${escapeHtml(data.sentBackBy)}</strong> and needs corrections. Please read the remarks below and submit a new Refund Request with the corrections.`)}${details([["Remarks", escapeHtml(data.remarks)], ["Payee", escapeHtml(data.payeeName)], ["Amount", refundMoney(data.amount)]])}${button(escapeHtml(data.newRefundLink), "Submit a New Refund Request")}${refundLinkNote(data.newRefundLink)}`),
+    subject: `Action Required: Third Party Refund Request ${data.displayNo} Sent Back`,
+    html: shell("#E8A33D", `${refundIntro("Action Required", data.displayNo, "#B45309")}${refundParagraph(`Dear ${escapeHtml(data.submittedByName)},<br><br>Your third party refund request has been sent back by <strong>${escapeHtml(data.sentBackBy)}</strong> and needs corrections. Please read the remarks below and submit a new third party refund request with the corrections.`)}${details([["Remarks", escapeHtml(data.remarks)], ["Payee", escapeHtml(data.payeeName)], ["Amount", refundMoney(data.amount)]])}${button(escapeHtml(data.newRefundLink), "Submit a New Third Party Refund Request")}${refundLinkNote(data.newRefundLink)}`),
   };
 }

@@ -129,7 +129,7 @@ describe("POST /api/authority/refund/[id]/decision", () => {
     state.insertedReview = false;
     const response = await call({ decision: "RECOMMEND" });
     expect(response.status).toBe(409);
-    expect((await response.json()).error).toBe("This refund request has already been decided.");
+    expect((await response.json()).error).toBe("This third party refund request has already been decided.");
     expect(state.auditInserts).toHaveLength(0);
     expect(state.emails).toHaveLength(0);
   });

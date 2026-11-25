@@ -21,7 +21,7 @@ const cashVoucher: ChoiceCardProps = { href: "/cash-voucher", title: "Cash Payme
 const advance: ChoiceCardProps = { href: "/advance", title: "Advance Payment Form", description: "For money needed before travel, events, or other planned expenses.", accent: "violet" };
 const forwardingMemo: ChoiceCardProps = { href: "/forwarding-memo", title: "Forwarding Memo", description: "For forwarding cheques, demand drafts, and other instruments to Accounts.", accent: "green" };
 const cashReceipt: ChoiceCardProps = { href: "/cash-receipt", title: "Cash Receipt", description: "Create and print branch-numbered receipts for cash received.", accent: "blue" };
-const refund: ChoiceCardProps = { href: "/refund", title: "Refund", description: "Request a refund with payee, amount, bank details, and documents.", accent: "teal" };
+const refund: ChoiceCardProps = { href: "/refund", title: "Third Party Refund", description: "Request a third party refund with payee, amount, bank details, and documents.", accent: "teal" };
 
 // Literal class names so Tailwind generates them.
 const SM_SPAN: Record<number, string> = { 1: "sm:col-span-1", 2: "sm:col-span-2" };

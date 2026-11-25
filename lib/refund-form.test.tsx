@@ -36,8 +36,8 @@ describe("Refund form", () => {
   it("says Preview while saving is off and Submit once it is on, with no em dashes in the copy", () => {
     const preview = renderToStaticMarkup(createElement(RefundForm, { authorityOptions: [], persist: false }));
     const live = renderToStaticMarkup(createElement(RefundForm, { authorityOptions: ["Head Admin"], persist: true }));
-    expect(preview).toContain("Preview Refund Request");
-    expect(live).toContain("Submit Refund Request");
+    expect(preview).toContain("Preview Third Party Refund Request");
+    expect(live).toContain("Submit Third Party Refund Request");
     expect(live).toContain('<option value="Head Admin">');
     expect(preview + live).not.toContain("\u2014");
   });

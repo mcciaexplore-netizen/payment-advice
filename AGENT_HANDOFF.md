@@ -49,7 +49,17 @@ Design system: Navy `#0B1F3A`, Forest green `#2E8B57`, Amber `#E8A33D`. Headings
 
 ## 3. Current State (update this every session)
 
-**Last updated:** 25 November 2026, by Claude Opus 5.5 (one-row submitter email correction for MCCIA/2026-27/0735; docs-only branch `docs/neeraj-0735-submitter-email`, PR open, not merged; see entry below)
+**Last updated:** 25 November 2026, by Claude Opus 5.5 (wording: "Refunds" shown as "Third Party Refunds"; branch `feature/rename-third-party-refunds`, PR open, not merged; see entry below)
+
+### In review: "Refunds" renamed to "Third Party Refunds" in visible text (Claude Opus 5.5, 2026-11-25, branch `feature/rename-third-party-refunds`, not merged). Wording only: no migration, no route, table, column, enum, audit name, file name, identifier or serial number changed.
+- Tabs and nav: Finance Admin nav "Refunds" is now "Third Party Refunds" (still one line at 1280; collapses into the menu below that as before). Dashboard tab "My Refunds" is now "My Third Party Refunds" on every role.
+- Home card "Refund" is now "Third Party Refund", description "Request a third party refund with payee, amount, bank details, and documents." Title stays on one line; with the refund flag on, all 7 cards still show without scrolling at 1440x900, 1280x800 and 1024x768.
+- Form and confirmation: page title "Third Party Refund Request", buttons "Submit / Preview Third Party Refund Request", "3. Third Party Refund details", "Third party refund request submitted", "View my third party refunds", "Submit another third party refund". Mid-sentence uses lowercase "third party refund" (subtitles, empty states, API and form errors, the pending notice on Pending My Recommendation).
+- Emails (`lib/email/templates.ts`): all four refund subjects now say "Third Party Refund Request"; bodies use "third party refund request"; buttons "View My Third Party Refunds" and "Submit a New Third Party Refund Request".
+- PDF (`lib/pdf/RefundRequestDocument.tsx`): title "Third Party Refund Request", section "THIRD PARTY REFUND", document title metadata; still one page.
+- Kept as is, for the owner to decide: "Refund Requests" (Finance Admin page heading, its empty state "No Refund requests found.", the Authority dashboard tab, "Back to Refund Requests"), and the amount labels "Total refund" (form, authority detail) and "Total Refund" (PDF).
+- Found while checking: migration 0032 (`refund_request_reviews`) is NOT applied on the shared DB (only `refund_requests` exists; 32 migrations recorded), so `REFUND_RECOMMENDATION_ENABLED` must stay off in production. Turning it on makes the Refund Requests pages fail.
+
 
 ### Done: corrected the submitter email on MCCIA/2026-27/0735 so it shows in My Submissions (Claude Opus 5.5, 2026-11-25). Data only, owner-approved; no code change, no migration.
 - Symptom: the authority Neeraj Thakur submitted MCCIA/2026-27/0735 (Rs 4,999.88) and recommended it himself. It showed in his History tab but not in My Submissions ("7 submissions").
@@ -1693,6 +1703,8 @@ Status legend: 🔴 unverified / high risk · 🟡 unverified / lower risk · �
 - **`lib/email/templates.ts`'s `shell()` loads the MCCIA logo from `https://payment-advice.vercel.app/mccia-logo.png` (this app's own domain), not from `mcciapune.com` directly (2026-10-01, fixed a real broken-image bug affecting every email this app sends).** Don't revert to hotlinking the logo from `mcciapune.com` or any other third-party host — email clients need a stable, reliably-reachable image URL, and this app doesn't control that site's hotlinking/availability. The underlying asset is `public/mccia-logo.png`, the same file the Payment Advice/Cash Voucher/Forwarding Memo PDFs already embed — if that file is ever replaced with a different logo, no code change is needed here, but re-check the hardcoded `width="160" height="38"` in `shell()` still matches its aspect ratio (currently ~4.2:1, matching the real 1085x258 asset).
 
 ## 6. Session Log
+
+2026-11-25 - Claude Opus 5.5 - `feature/rename-third-party-refunds`: visible "Refund(s)" wording renamed to "Third Party Refund(s)" (nav, tabs, home card, form, confirmation, emails, PDF). No identifiers, routes or data changed. PR open, not merged.
 
 2026-11-25 - Claude Opus 5.5 - Owner-approved one-row data correction: MCCIA/2026-27/0735 submitter email `neerajt@mccia.com` to `neerajt@mcciapune.com`, so it shows in that authority's My Submissions (now 8). Audited as SUBMITTER_EMAIL_CORRECTED. No other authority affected. Docs-only PR, not merged.
 
