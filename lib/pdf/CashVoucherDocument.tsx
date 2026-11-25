@@ -34,46 +34,47 @@ const GREEN = "#2E8B57";
 const BORDER = "0.8pt solid #B6C0CC";
 
 const styles = StyleSheet.create({
-  page: { paddingTop: 38, paddingBottom: 40, paddingHorizontal: 42, fontFamily: "Helvetica", color: "#152235", fontSize: 9 },
+  page: { paddingTop: 38, paddingBottom: 40, paddingHorizontal: 42, fontFamily: "Helvetica", color: "#152235", fontSize: 12.5 },
   masthead: { flexDirection: "row", alignItems: "center", borderBottom: `2pt solid ${GREEN}`, paddingBottom: 12 },
   logo: { width: 68, height: 18, objectFit: "contain" },
   logoPlaceholder: { width: 68, height: 18 },
   heading: { flex: 1, textAlign: "center", paddingHorizontal: 12 },
-  chamber: { fontFamily: "Helvetica-Bold", fontSize: 9, color: NAVY },
-  address: { fontSize: 7.5, color: "#536275", marginTop: 3 },
-  title: { marginTop: 18, fontFamily: "Helvetica-Bold", fontSize: 18, color: NAVY, letterSpacing: 0.5, textAlign: "center" },
+  chamber: { fontFamily: "Helvetica-Bold", fontSize: 12, color: NAVY },
+  address: { fontSize: 10, color: "#536275", marginTop: 3 },
+  title: { marginTop: 18, fontFamily: "Helvetica-Bold", fontSize: 24, color: NAVY, letterSpacing: 0.5, textAlign: "center" },
   titleRule: { width: 82, height: 3, backgroundColor: GREEN, alignSelf: "center", marginTop: 7, marginBottom: 16 },
   metadata: { flexDirection: "row", justifyContent: "flex-end", gap: 22, marginBottom: 18 },
   metadataItem: { alignItems: "flex-end" },
-  metadataLabel: { fontSize: 7, color: "#607087", textTransform: "uppercase", letterSpacing: 0.5 },
+  metadataLabel: { fontSize: 9.5, color: "#607087", textTransform: "uppercase", letterSpacing: 0.5 },
   metadataValue: { fontFamily: "Helvetica-Bold", color: NAVY, marginTop: 2 },
   payee: { borderLeft: `3pt solid ${GREEN}`, backgroundColor: "#F3F7F5", padding: 11, marginBottom: 16 },
-  payeeLabel: { fontSize: 7.5, color: "#607087", textTransform: "uppercase", letterSpacing: 0.7 },
-  payeeValue: { fontFamily: "Helvetica-Bold", fontSize: 12, color: NAVY, marginTop: 4 },
+  payeeLabel: { fontSize: 10, color: "#607087", textTransform: "uppercase", letterSpacing: 0.7 },
+  payeeValue: { fontFamily: "Helvetica-Bold", fontSize: 16.5, color: NAVY, marginTop: 4 },
   table: { borderTop: BORDER, borderLeft: BORDER },
   row: { flexDirection: "row" },
-  headerCell: { backgroundColor: NAVY, color: "#FFFFFF", fontFamily: "Helvetica-Bold", fontSize: 8, padding: 8, borderRight: BORDER, borderBottom: BORDER },
+  headerCell: { backgroundColor: NAVY, color: "#FFFFFF", fontFamily: "Helvetica-Bold", fontSize: 11.5, padding: 8, borderRight: BORDER, borderBottom: BORDER },
   description: { width: "76%" },
   amount: { width: "24%", textAlign: "right" },
   billDate: { width: "16%" },
   billNo: { width: "18%" },
-  cashDescription: { width: "42%" },
-  cashCell: { padding: 5, fontSize: 7.5, lineHeight: 1.2 },
+  cashDescription: { width: "44%" },
+  cashAmount: { width: "22%", textAlign: "right" },
+  cashCell: { padding: 5, fontSize: 12, lineHeight: 1.2 },
   cell: { borderRight: BORDER, borderBottom: BORDER, padding: 8, lineHeight: 1.3 },
   totalLabel: { backgroundColor: "#EAF3ED", fontFamily: "Helvetica-Bold", color: NAVY },
   totalAmount: { backgroundColor: "#EAF3ED", fontFamily: "Helvetica-Bold", color: NAVY, textAlign: "right" },
   signatures: { flexDirection: "row", marginTop: 32, borderTop: BORDER, borderLeft: BORDER },
   signature: {
     width: "25%",
-    minHeight: 90,
+    minHeight: 120,
     borderRight: BORDER,
     borderBottom: BORDER,
     padding: 8,
     position: "relative",
   },
-  signatureLabel: { fontFamily: "Helvetica-Bold", fontSize: 7.5, color: NAVY },
-  signatureName: { fontSize: 8, marginTop: 5, minHeight: 19 },
-  date: { fontSize: 7.5, marginTop: 8 },
+  signatureLabel: { fontFamily: "Helvetica-Bold", fontSize: 11.5, color: NAVY },
+  signatureName: { fontSize: 12, marginTop: 5, minHeight: 28 },
+  date: { fontSize: 10.5, marginTop: 8 },
 });
 
 function resolveLogoPath(): string | null {
@@ -123,8 +124,8 @@ export function CashVoucherDocument({ data }: { data: CashVoucherPdfData }) {
         {data.isAdvance ? (
           <View style={styles.payee}>
             <Text style={styles.payeeLabel}>Purpose of Advance</Text>
-            <Text style={[styles.payeeValue, { fontSize: 9 }]}>{data.purposeOfAdvance ?? ""}</Text>
-            <Text style={{ fontSize: 8, color: "#536275", marginTop: 6 }}>
+            <Text style={[styles.payeeValue, { fontSize: 13.5 }]}>{data.purposeOfAdvance ?? ""}</Text>
+            <Text style={{ fontSize: 12, color: "#536275", marginTop: 6 }}>
               Previous Pending Advance :{" "}
               {data.previousPendingAdvanceAmount && Number(data.previousPendingAdvanceAmount) > 0
                 ? `Rs. ${formatAmount(data.previousPendingAdvanceAmount)} (since ${
@@ -142,19 +143,19 @@ export function CashVoucherDocument({ data }: { data: CashVoucherPdfData }) {
             <Text style={[styles.headerCell, data.isAdvance ? styles.description : styles.cashDescription]}>
               {data.isAdvance ? "PARTICULARS" : "NATURE OF EXPENDITURE"}
             </Text>
-            <Text style={[styles.headerCell, styles.amount]}>AMOUNT (RS.)</Text>
+            <Text style={[styles.headerCell, data.isAdvance ? styles.amount : styles.cashAmount]}>AMOUNT (RS.)</Text>
           </View>
           {data.items.map((item, index) => (
             <View style={styles.row} key={`${index}-${item.description}`} wrap={false}>
               {!data.isAdvance ? <Text style={[styles.cell, styles.cashCell, styles.billDate]}>{item.billDate ? formatDate(item.billDate) : "-"}</Text> : null}
               {!data.isAdvance ? <Text style={[styles.cell, styles.cashCell, styles.billNo]}>{item.billNo || "-"}</Text> : null}
               <Text style={[styles.cell, data.isAdvance ? {} : styles.cashCell, data.isAdvance ? styles.description : styles.cashDescription]}>{item.description}</Text>
-              <Text style={[styles.cell, data.isAdvance ? {} : styles.cashCell, styles.amount]}>{formatAmount(item.amount)}</Text>
+              <Text style={[styles.cell, data.isAdvance ? {} : styles.cashCell, data.isAdvance ? styles.amount : styles.cashAmount]}>{formatAmount(item.amount)}</Text>
             </View>
           ))}
           <View style={styles.row} wrap={false}>
-            <Text style={[styles.cell, data.isAdvance ? {} : styles.cashCell, data.isAdvance ? styles.description : { width: "76%" }, styles.totalLabel]}>TOTAL</Text>
-            <Text style={[styles.cell, data.isAdvance ? {} : styles.cashCell, styles.amount, styles.totalAmount]}>{formatAmount(total)}</Text>
+            <Text style={[styles.cell, data.isAdvance ? {} : styles.cashCell, data.isAdvance ? styles.description : { width: "78%" }, styles.totalLabel]}>TOTAL</Text>
+            <Text style={[styles.cell, data.isAdvance ? {} : styles.cashCell, data.isAdvance ? styles.amount : styles.cashAmount, styles.totalAmount]}>{formatAmount(total)}</Text>
           </View>
         </View>
 
