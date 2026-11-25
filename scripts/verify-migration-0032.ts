@@ -50,16 +50,27 @@ async function main() {
     for (const [name, isNullable] of expected) check(nullable.get(name) === isNullable, `column ${name} (${isNullable ? "nullable" : "not null"})`);
     check(columns.length === expected.length, "no extra columns", `${columns.length} columns`);
 
-    // 3. Its constraints.
+    // 3. Its constraints. The primary key and CHECKs by name. The foreign keys
+    // by what they do (column and referenced table), because PostgreSQL cuts
+    // names to 63 characters: drizzle's 77-character name for the authority
+    // key is stored as "refund_request_reviews_decided_by_authority_id_recommending_aut".
     const { rows: constraints } = await client.query("select conname from pg_constraint where conrelid = 'public.refund_request_reviews'::regclass");
     const names = new Set(constraints.map((row) => row.conname as string));
     for (const name of [
       "refund_request_reviews_pkey",
       "refund_request_reviews_decision_check",
       "refund_request_reviews_sent_back_remarks_check",
-      "refund_request_reviews_refund_request_id_refund_requests_id_fk",
-      "refund_request_reviews_decided_by_authority_id_recommending_authorities_id_fk",
     ]) check(names.has(name), `constraint ${name}`);
+    const { rows: foreignKeys } = await client.query(
+      `select c.conname, a.attname as column_name, c.confrelid::regclass::text as references_table, cardinality(c.conkey) as columns
+       from pg_constraint c join pg_attribute a on a.attrelid = c.conrelid and a.attnum = c.conkey[1]
+       where c.conrelid = 'public.refund_request_reviews'::regclass and c.contype = 'f'`,
+    );
+    for (const [column, table] of [["refund_request_id", "refund_requests"], ["decided_by_authority_id", "recommending_authorities"]]) {
+      const found = foreignKeys.find((row) => row.column_name === column && row.references_table === table && Number(row.columns) === 1);
+      check(Boolean(found), `foreign key ${column} -> ${table}(id)`, found ? `stored as ${found.conname}` : "missing");
+    }
+    check(foreignKeys.length === 2, "exactly two foreign keys", `${foreignKeys.length}`);
 
     // 4. Nothing written yet (the recommendation flag must still be off).
     const { rows: [{ n }] } = await client.query("select count(*)::int as n from refund_request_reviews");
