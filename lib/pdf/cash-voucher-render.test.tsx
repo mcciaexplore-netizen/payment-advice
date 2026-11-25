@@ -57,11 +57,11 @@ const render = (data: CashVoucherPdfData) => renderToBuffer(<CashVoucherDocument
 describe("Cash Payment Voucher PDF text size", () => {
   it("prints the table, headings and signature boxes at a larger size than before", async () => {
     const sizes = fontSizes(await render(typical));
-    // Table body 10.5, table headings and box labels 10, body 11, payee 15, title 22.
-    for (const size of [10, 10.5, 11, 15, 22]) expect(sizes.has(size)).toBe(true);
-    // The old sizes (7.5 table/labels, 18 title) are gone. The stamps keep their own small sizes.
-    expect(sizes.has(7.5)).toBe(false);
-    expect(sizes.has(18)).toBe(false);
+    // Table body 12, table headings and box labels 11.5, page text 12.5, payee 16.5, title 24.
+    for (const size of [11.5, 12, 12.5, 16.5, 24]) expect(sizes.has(size)).toBe(true);
+    // The old sizes (7.5 table/labels, 18 title) and the first enlargement's title (22) are gone.
+    // The stamps keep their own small sizes.
+    for (const old of [7.5, 18, 22]) expect(sizes.has(old)).toBe(false);
   }, 30000);
 
   it("a typical voucher still fits on one page, with all its content", async () => {
@@ -86,6 +86,7 @@ describe("Cash Payment Voucher PDF text size", () => {
     expect(pages[0]).toContain("Previous Pending Advance : Rs. 5,000.00 (since 01/10/2026)");
     expect(pages[0]).toContain("19,500.00");
     expect(fontSizes(buffer).has(7.5)).toBe(false);
+    expect(fontSizes(buffer).has(13.5)).toBe(true); // the purpose of the advance
   }, 30000);
 
   it("a very long voucher (10 long lines) runs onto a second page without losing a line, the total or the signature boxes", async () => {
