@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { todayInIst } from "@/lib/date-time";
+import { DIRECTORY_OPTIONS, directoryNeedsMemberId, directoryParticulars, directoryPrice } from "@/lib/cash-receipt-directories";
 
 const PARTICULARS = [
   "Sale of Directory",
@@ -14,12 +15,6 @@ const PARTICULARS = [
   "Hall Hiring Charges",
   "Course / Seminar Fee",
   "Others (Specify)",
-] as const;
-
-const DIRECTORY_OPTIONS = [
-  "Defence Directory - Member",
-  "Defence Directory - Non-member",
-  "Agriculture Directory",
 ] as const;
 
 type ReceiptLine = {
@@ -44,13 +39,6 @@ function lineAmount(line: ReceiptLine) {
   return line.particulars === "Hall Hiring Charges" ? price : (Number(line.copies) || 0) * price;
 }
 
-function directoryPrice(directoryType: string) {
-  if (directoryType === "Defence Directory - Member") return "900";
-  if (directoryType === "Defence Directory - Non-member") return "1500";
-  if (directoryType === "Agriculture Directory") return "500";
-  return "";
-}
-
 const inputClass = "w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-[#152235] focus:border-[#0b1f3a] focus:outline-none focus:ring-1 focus:ring-[#0b1f3a]";
 
 export function CashReceiptForm({ branch, issuedBy }: { branch: string; issuedBy: string }) {
@@ -73,7 +61,7 @@ export function CashReceiptForm({ branch, issuedBy }: { branch: string; issuedBy
       if (field === "particulars") {
         updated = { ...updated, directoryType: "", memberNo: "", courseName: "", price: "" };
       } else if (field === "directoryType") {
-        if (value !== "Defence Directory - Member") updated.memberNo = "";
+        if (!directoryNeedsMemberId(value)) updated.memberNo = "";
         if (updated.particulars === "Sale of Directory") {
           updated.price = directoryPrice(updated.directoryType);
         }
@@ -95,7 +83,7 @@ export function CashReceiptForm({ branch, issuedBy }: { branch: string; issuedBy
       const hasAnyValue = line.particulars || line.copies || line.price || line.courseName.trim();
       const isHallHiring = line.particulars === "Hall Hiring Charges";
       const directoryInfoMissing = line.particulars === "Sale of Directory" &&
-        (!line.directoryType || (line.directoryType === "Defence Directory - Member" && !line.memberNo.trim()));
+        (!line.directoryType || (directoryNeedsMemberId(line.directoryType) && !line.memberNo.trim()));
       const courseInfoMissing = line.particulars === "Course / Seminar Fee" && !line.courseName.trim();
       return (hasAnyValue && (!line.particulars || (!isHallHiring && Number(line.copies) <= 0) || Number(line.price) <= 0)) || directoryInfoMissing || courseInfoMissing;
     });
@@ -119,7 +107,7 @@ export function CashReceiptForm({ branch, issuedBy }: { branch: string; issuedBy
           gstin,
           items: filledLines.map((line) => ({
             particulars: line.particulars === "Sale of Directory"
-              ? `${line.particulars} - ${line.directoryType}${line.directoryType === "Defence Directory - Member" ? ` (Member ID: ${line.memberNo.trim()})` : ""}`
+              ? directoryParticulars(line.directoryType, line.memberNo)
               : line.particulars === "Others (Specify)" && line.detail.trim()
                 ? `${line.particulars}: ${line.detail.trim()}`
                 : line.particulars === "Course / Seminar Fee" && line.courseName.trim()
@@ -174,7 +162,7 @@ export function CashReceiptForm({ branch, issuedBy }: { branch: string; issuedBy
                       <option value="">Select directory</option>
                       {DIRECTORY_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
                     </select>
-                    {line.directoryType === "Defence Directory - Member" ? <input aria-label="Member ID" required maxLength={100} placeholder="Member ID" value={line.memberNo} onChange={(event) => updateLine(line.id, "memberNo", event.target.value)} className={inputClass} /> : null}
+                    {directoryNeedsMemberId(line.directoryType) ? <input aria-label="Member ID" required maxLength={100} placeholder="Member ID" value={line.memberNo} onChange={(event) => updateLine(line.id, "memberNo", event.target.value)} className={inputClass} /> : null}
                   </div> : null}
                   {line.particulars === "Others (Specify)" ? <input aria-label="Specify other particulars" placeholder="Specify" value={line.detail} onChange={(event) => updateLine(line.id, "detail", event.target.value)} className="mt-2 w-full border-b border-gray-400 px-1 py-1 text-sm outline-none" /> : null}
                   {line.particulars === "Course / Seminar Fee" ? <input aria-label="Course or seminar name" required maxLength={200} placeholder="Course / seminar name" value={line.courseName} onChange={(event) => updateLine(line.id, "courseName", event.target.value)} className="mt-2 w-full border-b border-gray-400 px-1 py-1 text-sm outline-none" /> : null}
