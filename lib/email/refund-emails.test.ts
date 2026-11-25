@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { renderRefundAuthorityEmail, renderRefundRecommendedEmail, renderRefundSentBackEmail, renderRefundSubmittedEmail } from "@/lib/email/templates";
+import { renderRefundAuthorityEmail, renderRefundRecommendedEmail, renderRefundRejectedEmail, renderRefundSentBackEmail, renderRefundSubmittedEmail } from "@/lib/email/templates";
 
 const text = (html: string) => html.replace(/<style[\s\S]*?<\/style>/g, "").replace(/<[^>]+>/g, " ").replace(/&amp;/g, "&").replace(/&nbsp;/g, " ").replace(/\s+/g, " ").trim();
 const base = { displayNo: "REF/MCCIA/2026-27/0008", submittedByName: "Sandhya Acharya", payeeName: "Deccan Mechanical", amount: "4,720.00" };
@@ -39,20 +39,33 @@ describe("Refund emails (their own wording, accurate for a refund)", () => {
     expect(text(html)).toContain("Current Stage Awaiting Finance Review");
   });
 
-  it("sends the remarks back and says to submit a NEW refund (there is no edit link for a refund)", () => {
-    const { subject, html } = renderRefundSentBackEmail({ ...base, sentBackBy: "Aniruddha Brahma", remarks: "Amount does not match the invoice", newRefundLink: "https://payment-advice.vercel.app/refund" });
+  it("sends the remarks back with a link to edit and resubmit the same request (same reference number)", () => {
+    const link = "https://payment-advice.vercel.app/refund/edit/71111111-1111-4111-8111-111111111111";
+    const { subject, html } = renderRefundSentBackEmail({ ...base, sentBackBy: "Aniruddha Brahma", remarks: "Amount does not match the invoice", editLink: link });
     expect(subject).toBe("Action Required: Third Party Refund Request REF/MCCIA/2026-27/0008 Sent Back");
     const body = text(html);
     expect(body).toContain("sent back by Aniruddha Brahma");
-    expect(body).toContain("submit a new third party refund request with the corrections");
+    expect(body).toContain("edit and resubmit the same request. It keeps its reference number and goes back to the same recommending authority.");
     expect(body).toContain("Remarks Amount does not match the invoice");
-    expect(body).toContain("Submit a New Third Party Refund Request");
+    expect(body).toContain("Edit and Resubmit");
+    expect(html).toContain(`href="${link}"`);
+    expect(body).not.toContain("submit a new third party refund request");
     expect(body).not.toContain("expires in 14 days");
-    expect(body).not.toContain("does not require a login");
+  });
+
+  it("tells the submitter it was rejected, that it is final, and why", () => {
+    const { subject, html } = renderRefundRejectedEmail({ ...base, rejectedBy: "Aniruddha Brahma", remarks: "Not a refundable item" });
+    expect(subject).toBe("Third Party Refund Request REF/MCCIA/2026-27/0008 Rejected");
+    const body = text(html);
+    expect(body).toContain("rejected by Aniruddha Brahma");
+    expect(body).toContain("This is final: the request is closed and will not be processed or paid.");
+    expect(body).toContain("Reason Not a refundable item");
+    expect(body).toContain("will never be reused");
+    expect(html).not.toContain("\u2014");
   });
 
   it("escapes anything typed by a person before it goes into the HTML", () => {
-    const { html } = renderRefundSentBackEmail({ ...base, submittedByName: "<b>Eve</b>", payeeName: "A & B <script>", sentBackBy: "X", remarks: '"><img src=x>', newRefundLink: "https://x/refund?a=1&b=2" });
+    const { html } = renderRefundSentBackEmail({ ...base, submittedByName: "<b>Eve</b>", payeeName: "A & B <script>", sentBackBy: "X", remarks: '"><img src=x>', editLink: "https://x/refund?a=1&b=2" });
     expect(html).not.toContain("<script>");
     expect(html).not.toContain("<img src=x>");
     expect(html).toContain("&lt;b&gt;Eve&lt;/b&gt;");

@@ -27,7 +27,8 @@ import { dashboardCountFields, dashboardFilterCondition, dashboardOrderBy, hasAc
 import { myRefundsWhere } from "@/lib/advice/my-refunds";
 import { refundsForAuthorityWhere } from "@/lib/advice/refund-authority";
 import { refundRecommendationEnabled, refundRequestsEnabled } from "@/lib/refund-requests";
-import { refundStatusLabel } from "@/lib/advice/refund-review";
+import { refundStatusChipClass, refundStatusLabel } from "@/lib/advice/refund-review";
+import { RefundDecisionActions } from "@/components/admin/RefundDecisionActions";
 import { dashboardScopeWhere, isDashboardRole, pickDashboardGrants, resolveDashboardView, type DashboardGrant } from "@/lib/advice/dashboard-scope";
 
 export const dynamic = "force-dynamic";
@@ -356,7 +357,7 @@ async function loadMyRefundsTab({ activeGrant, grants, accountEmail, isAuthority
         <td className="max-w-xs p-3"><div className="font-medium">{row.payeeName}</div><div className="mt-1 text-xs text-gray-600">{row.nature}</div></td>
         <td className="whitespace-nowrap p-3">{formatAmount(row.totalAmount)}</td>
         <td className="whitespace-nowrap p-3">{formatDateOnly(row.requestDate)}</td>
-        {recommendation ? <td className="p-3 text-xs"><span className={`rounded-full px-2 py-0.5 font-medium ${row.decision === "RECOMMENDED" ? "bg-green-50 text-green-800" : row.decision === "SENT_BACK" ? "bg-amber-50 text-amber-800" : "bg-gray-100 text-gray-700"}`}>{refundStatusLabel(row)}</span>{row.decision === "SENT_BACK" && row.remarks ? <div className="mt-1 max-w-[14rem] text-gray-600">Remarks: {row.remarks}</div> : null}</td> : null}
+        {recommendation ? <td className="p-3 text-xs"><span className={`rounded-full px-2 py-0.5 font-medium ${refundStatusChipClass(row.decision)}`}>{refundStatusLabel(row)}</span>{(row.decision === "SENT_BACK" || row.decision === "REJECTED") && row.remarks ? <div className="mt-1 max-w-[14rem] text-gray-600">{row.decision === "REJECTED" ? "Reason" : "Remarks"}: {row.remarks}</div> : null}{row.decision === "SENT_BACK" ? <Link href={`/refund/edit/${row.id}`} className="mt-2 inline-flex rounded-md bg-[#0b1f3a] px-3 py-1.5 font-medium text-white hover:bg-[#0b1f3a]/90">Edit and resubmit</Link> : null}</td> : null}
         <td className="p-3"><div className="flex items-center gap-2">
           <a href={`/api/refund/${row.id}/pdf`} target="_blank" rel="noreferrer" className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50">View</a>
           <a href={`/api/refund/${row.id}/pdf?download=1`} className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50">Download</a>
@@ -387,11 +388,11 @@ async function loadAuthorityRefundsTab({ activeGrant, grants, isDg }: {
     department: refundRequests.submittedByDepartment, branch: refundRequests.branch,
     payeeName: refundRequests.payeeName, nature: refundRequests.natureOfExpenditure, totalAmount: refundRequests.totalAmount,
   };
-  const noDecision = { decision: null, decidedAt: null, decidedByName: null } as const;
-  type Row = { [K in keyof typeof columns]: string } & { decision: string | null; decidedAt: Date | null; decidedByName: string | null };
+  const noDecision = { decision: null, decidedAt: null, decidedByName: null, remarks: null } as const;
+  type Row = { [K in keyof typeof columns]: string } & { decision: string | null; decidedAt: Date | null; decidedByName: string | null; remarks: string | null };
   // With the recommendation process on, waiting refunds come first.
   const rows: Row[] = !authority ? [] : recommendation
-    ? await db.select({ ...columns, decision: refundRequestReviews.decision, decidedAt: refundRequestReviews.decidedAt, decidedByName: refundRequestReviews.decidedByName })
+    ? await db.select({ ...columns, decision: refundRequestReviews.decision, decidedAt: refundRequestReviews.decidedAt, decidedByName: refundRequestReviews.decidedByName, remarks: refundRequestReviews.remarks })
         .from(refundRequests).leftJoin(refundRequestReviews, eq(refundRequestReviews.refundRequestId, refundRequests.id))
         .where(refundsForAuthorityWhere(authority.authorityName))
         .orderBy(sql`(${refundRequestReviews.refundRequestId} is null) desc`, desc(refundRequests.createdAt))
@@ -421,12 +422,12 @@ async function loadAuthorityRefundsTab({ activeGrant, grants, isDg }: {
         <td className="max-w-xs p-3"><div className="font-medium">{row.payeeName}</div><div className="mt-1 text-xs text-gray-600">{row.nature}</div></td>
         <td className="whitespace-nowrap p-3">{formatAmount(row.totalAmount)}</td>
         <td className="whitespace-nowrap p-3">{formatDateOnly(row.requestDate)}</td>
-        {recommendation ? <td className="p-3 text-xs"><span className={`rounded-full px-2 py-0.5 font-medium ${row.decision === "RECOMMENDED" ? "bg-green-50 text-green-800" : row.decision === "SENT_BACK" ? "bg-amber-50 text-amber-800" : "bg-gray-100 text-gray-700"}`}>{refundStatusLabel(row)}</span></td> : null}
-        <td className="p-3"><div className="flex items-center gap-2">
+        {recommendation ? <td className="p-3 text-xs"><span className={`rounded-full px-2 py-0.5 font-medium ${refundStatusChipClass(row.decision)}`}>{refundStatusLabel(row)}</span>{(row.decision === "SENT_BACK" || row.decision === "REJECTED") && row.remarks ? <div className="mt-1 max-w-[14rem] text-gray-600">{row.decision === "REJECTED" ? "Reason" : "Remarks"}: {row.remarks}</div> : null}</td> : null}
+        <td className="p-3"><div className="flex flex-wrap items-center gap-2">
           {recommendation ? <Link href={`/authority/refund/${row.id}`} className={`rounded-md px-3 py-1.5 text-xs font-medium ${row.decision ? "border border-gray-300 text-gray-700 hover:bg-gray-50" : "bg-[#0b1f3a] text-white hover:bg-[#0b1f3a]/90"}`}>{row.decision ? "Details" : "Review"}</Link> : null}
           <a href={`/api/refund/${row.id}/pdf`} target="_blank" rel="noreferrer" className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50">View</a>
           <a href={`/api/refund/${row.id}/pdf?download=1`} className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50">Download</a>
-        </div></td>
+        </div>{recommendation && !row.decision ? <div className="mt-2"><RefundDecisionActions refundId={row.id} compact /></div> : null}</td>
       </tr>)}</tbody>
     </table></div>}
   </div>;

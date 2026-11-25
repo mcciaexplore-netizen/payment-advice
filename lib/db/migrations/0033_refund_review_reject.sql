@@ -1,0 +1,4 @@
+ALTER TABLE "refund_request_reviews" DROP CONSTRAINT "refund_request_reviews_sent_back_remarks_check";--> statement-breakpoint
+ALTER TABLE "refund_request_reviews" DROP CONSTRAINT "refund_request_reviews_decision_check";--> statement-breakpoint
+ALTER TABLE "refund_request_reviews" ADD CONSTRAINT "refund_request_reviews_reason_check" CHECK ("refund_request_reviews"."decision" = 'RECOMMENDED' or ("refund_request_reviews"."remarks" is not null and length(btrim("refund_request_reviews"."remarks")) > 0));--> statement-breakpoint
+ALTER TABLE "refund_request_reviews" ADD CONSTRAINT "refund_request_reviews_decision_check" CHECK ("refund_request_reviews"."decision" in ('RECOMMENDED', 'SENT_BACK', 'REJECTED'));

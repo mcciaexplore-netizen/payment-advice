@@ -1,8 +1,8 @@
 import Link from "next/link";
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
-import { refundRequestReviews, refundRequests } from "@/lib/db/schema";
+import { auditLog, refundRequestReviews, refundRequests } from "@/lib/db/schema";
 import { formatDateOnly, formatIstDate } from "@/lib/date-time";
 import { refundRecommendationEnabled } from "@/lib/refund-requests";
 import { getRefundAuthority } from "@/lib/advice/refund-authority-session";
@@ -36,6 +36,14 @@ export default async function AuthorityRefundPage({ params }: { params: Promise<
     .limit(1);
   if (!found) notFound();
   const { refund, review } = found;
+  // Resubmission history comes from the audit log (no extra columns): how
+  // many times the submitter corrected it, and the remarks they answered.
+  const resubmissions = await db
+    .select({ details: auditLog.details, createdAt: auditLog.createdAt })
+    .from(auditLog)
+    .where(and(eq(auditLog.refundRequestId, refund.id), eq(auditLog.action, "REFUND_REQUEST_RESUBMITTED")))
+    .orderBy(desc(auditLog.createdAt));
+  const lastResubmission = resubmissions[0] as { details: { sentBackRemarks?: string | null } | null; createdAt: Date } | undefined;
 
   const rows: [string, string | null][] = [
     ["Submitted by", `${refund.submittedByName} (${refund.submittedByEmail})`],
@@ -95,11 +103,22 @@ export default async function AuthorityRefundPage({ params }: { params: Promise<
 
       <section className="flex flex-col gap-3 border-t border-gray-200 pt-6">
         <h2 className="font-heading text-xl text-[#0b1f3a]">Your decision</h2>
+        {!review && lastResubmission ? (
+          <div className="max-w-xl rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            <strong>Resubmitted after being sent back (revision {resubmissions.length})</strong> on {formatIstDate(lastResubmission.createdAt)}.
+            {lastResubmission.details?.sentBackRemarks ? <div className="mt-1">Previous remarks: {lastResubmission.details.sentBackRemarks}</div> : null}
+          </div>
+        ) : null}
         {!review ? <RefundDecisionActions refundId={refund.id} /> : review.decision === "RECOMMENDED" ? (
           <p className="rounded-md bg-green-50 px-4 py-3 text-sm text-green-800">Recommended by {review.decidedByName} on {formatIstDate(review.decidedAt)}. The request has gone to Finance.</p>
+        ) : review.decision === "REJECTED" ? (
+          <div className="rounded-md bg-red-50 px-4 py-3 text-sm text-red-900">
+            <p>Rejected by {review.decidedByName} on {formatIstDate(review.decidedAt)}. This is final.</p>
+            <p className="mt-1">Reason: {review.remarks}</p>
+          </div>
         ) : (
           <div className="rounded-md bg-amber-50 px-4 py-3 text-sm text-amber-900">
-            <p>Sent back by {review.decidedByName} on {formatIstDate(review.decidedAt)}.</p>
+            <p>Sent back by {review.decidedByName} on {formatIstDate(review.decidedAt)}. Waiting for the submitter to correct and resubmit it.</p>
             <p className="mt-1">Remarks: {review.remarks}</p>
           </div>
         )}

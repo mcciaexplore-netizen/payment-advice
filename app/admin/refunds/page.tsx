@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { refundRequestReviews, refundRequests } from "@/lib/db/schema";
 import { refundRecommendationEnabled } from "@/lib/refund-requests";
-import { refundStatusLabel } from "@/lib/advice/refund-review";
+import { refundStatusChipClass, refundStatusLabel } from "@/lib/advice/refund-review";
 import { formatDateOnly } from "@/lib/date-time";
 import { BRANCH_OPTIONS } from "@/lib/validation/payment-advice";
 import { AttachmentPreview } from "@/components/ui/AttachmentPreview";
@@ -104,7 +104,7 @@ export default async function RefundRequestsPage({ searchParams }: { searchParam
                 <td className="whitespace-nowrap px-4 py-3 text-right">{formatAmount(row.totalAmount)}</td>
                 <td className="whitespace-nowrap px-4 py-3">{formatDateOnly(row.requestDate)}</td>
                 <td className="px-4 py-3"><div>{row.submittedByName}</div><div className="text-xs text-gray-500">{row.submittedByEmail}</div><div className="text-xs text-gray-500">{row.submittedByDepartment}. Recommending: {row.recommendingAuthority}</div></td>
-                {recommendation ? <td className="px-4 py-3 text-xs"><span className={`rounded-full px-2 py-0.5 font-medium ${row.decision === "RECOMMENDED" ? "bg-green-50 text-green-800" : row.decision === "SENT_BACK" ? "bg-amber-50 text-amber-800" : "bg-gray-100 text-gray-700"}`}>{refundStatusLabel(row)}</span></td> : null}
+                {recommendation ? <td className="px-4 py-3 text-xs"><span className={`rounded-full px-2 py-0.5 font-medium ${refundStatusChipClass(row.decision)}`}>{refundStatusLabel(row)}</span></td> : null}
                 <td className="px-4 py-3">
                   {row.documents.length === 0 ? <span className="text-xs text-gray-400">None</span> : (
                     <ul className="flex flex-col gap-1">

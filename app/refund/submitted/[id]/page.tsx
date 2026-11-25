@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-export default async function RefundSubmittedPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function RefundSubmittedPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams?: Promise<{ resubmitted?: string }> }) {
   if (!refundRequestsEnabled()) notFound();
   const { id } = await params;
   if (!UUID.test(id)) notFound();
@@ -22,6 +22,8 @@ export default async function RefundSubmittedPage({ params }: { params: Promise<
     .where(eq(refundRequests.id, id))
     .limit(1);
   if (!refund) notFound();
+  // Shown after a sent-back refund is corrected and resubmitted (same reference).
+  const resubmitted = (await searchParams)?.resubmitted === "1";
   // Signed-in people with a dashboard can open this and every earlier refund
   // under My Refunds (the sign-in is required before the form since the Payment
   // Desk sign-in change, so this is the usual case).
@@ -31,7 +33,7 @@ export default async function RefundSubmittedPage({ params }: { params: Promise<
   return (
     <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-8 px-6 py-16">
       <section className="space-y-4 text-center">
-        <p className="text-sm font-medium text-[#2e8b57]">Third party refund request submitted</p>
+        <p className="text-sm font-medium text-[#2e8b57]">{resubmitted ? "Third party refund request resubmitted" : "Third party refund request submitted"}</p>
         <h1 className="font-heading text-4xl text-[#0b1f3a]">{refund.serialNo}</h1>
         <p className="text-gray-600">Your third party refund request for ₹ {Number(refund.totalAmount).toLocaleString("en-IN", { minimumFractionDigits: 2 })} was saved. Keep this reference for any follow-up.</p>
         {refundRecommendationEnabled() ? <p className="text-sm text-gray-600">It has gone to <strong>{refund.recommendingAuthority}</strong> for recommendation. You will be emailed their decision, and you can follow it under My Third Party Refunds.</p> : null}

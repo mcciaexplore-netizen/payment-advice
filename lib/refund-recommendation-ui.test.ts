@@ -12,12 +12,14 @@ const state = vi.hoisted(() => ({
   refunds: [] as unknown[],
   joined: [] as unknown[],
   waiting: 0,
+  audit: [] as unknown[],
   queries: [] as Array<{ table: unknown; joined: unknown[] }>,
 }));
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: () => undefined }),
   notFound: () => { throw new Error("NEXT_NOT_FOUND"); },
+  redirect: (url: string) => { throw new Error(`NEXT_REDIRECT ${url}`); },
 }));
 vi.mock("@/lib/admin-session", () => ({ getAdminSession: async () => state.session }));
 vi.mock("@/lib/db", async () => {
@@ -38,6 +40,7 @@ vi.mock("@/lib/db", async () => {
           : query.table === schema.refundRequests && query.joined.length > 0 && query.limited ? state.joined
           : query.table === schema.refundRequests ? state.refunds
           : query.table === schema.paymentAdvices && fields && "total" in fields ? [{}]
+          : query.table === schema.auditLog ? state.audit
           : [];
         node.limit = () => { query.limited = true; return node; };
         node.then = (resolve: (value: unknown) => unknown, reject: (reason: unknown) => unknown) => Promise.resolve(resultFor()).then(resolve, reject);
@@ -50,6 +53,7 @@ vi.mock("@/lib/db", async () => {
 import { refundRequestReviews } from "@/lib/db/schema";
 import TeamDashboard from "../app/authority/page";
 import AuthorityRefundPage from "../app/authority/refund/[id]/page";
+import RefundEditPage from "../app/refund/edit/[id]/page";
 
 const AUTHORITY = { session: { adminUserId: "u", fullName: "A", roles: ["AUTHORITY"], recommendingAuthorityId: "auth-1" }, roleRows: [{ role: "AUTHORITY", recommendingAuthorityId: "auth-1", scopeValue: null }] };
 const SELF = { session: { adminUserId: "u", fullName: "S", roles: ["SELF"], recommendingAuthorityId: null }, roleRows: [{ role: "SELF", recommendingAuthorityId: null, scopeValue: null }] };
@@ -75,7 +79,8 @@ beforeEach(() => {
   vi.stubEnv("REFUND_REQUESTS_ENABLED", "true");
   vi.stubEnv("REFUND_RECOMMENDATION_ENABLED", "true");
   state.waiting = 0;
-  state.refunds = [row(7), row(6, { decision: "RECOMMENDED", decidedAt: DECIDED, decidedByName: "Head Admin" }), row(5, { decision: "SENT_BACK", decidedAt: DECIDED, decidedByName: "Head Admin", remarks: "Fix amount" })];
+  state.audit = [];
+  state.refunds = [row(7), row(6, { decision: "RECOMMENDED", decidedAt: DECIDED, decidedByName: "Head Admin" }), row(5, { decision: "SENT_BACK", decidedAt: DECIDED, decidedByName: "Head Admin", remarks: "Fix amount" }), row(4, { decision: "REJECTED", decidedAt: DECIDED, decidedByName: "Head Admin", remarks: "Not refundable" })];
 });
 afterEach(() => vi.unstubAllEnvs());
 
@@ -83,7 +88,7 @@ describe("authority's Refund Requests tab with the recommendation process on", (
   it("shows each refund's status and a Review button for the waiting one, Details for the decided ones", async () => {
     const html = await render(AUTHORITY, { view: "refund-requests" });
     const page = text(html);
-    expect(page).toContain("3 third party refund requests naming you as the recommending authority");
+    expect(page).toContain("4 third party refund requests naming you as the recommending authority");
     expect(page).toContain("1 waiting for your recommendation.");
     expect(page).toContain("Waiting for recommendation");
     expect(page).toContain("Recommended on 20/11/2026");
@@ -91,6 +96,17 @@ describe("authority's Refund Requests tab with the recommendation process on", (
     expect(html).toMatch(/href="\/authority\/refund\/71111111-1111-4111-8111-111111111111"[^>]*>Review</);
     expect(html).toMatch(/href="\/authority\/refund\/61111111-1111-4111-8111-111111111111"[^>]*>Details</);
     expect(touchedReviews()).toBe(true);
+  });
+
+  it("rejected refunds get a red Rejected chip with the reason; only the waiting one has Recommend, Send back and Reject in the row", async () => {
+    const html = await render(AUTHORITY, { view: "refund-requests" });
+    const page = text(html);
+    expect(html).toMatch(/<span class="rounded-full px-2 py-0.5 font-medium bg-red-50 text-red-800">Rejected on 20\/11\/2026<\/span>/);
+    expect(page).toContain("Reason: Not refundable");
+    expect(page).toContain("Remarks: Fix amount");
+    expect(html.match(/>Reject<\/button>/g)).toHaveLength(1);
+    expect(html.match(/>Send back<\/button>/g)).toHaveLength(1);
+    expect(html.match(/>Recommend<\/button>/g)).toHaveLength(1);
   });
 });
 
@@ -120,6 +136,14 @@ describe("My Third Party Refunds (the submitter) shows where each refund stands"
     expect(page).toContain("Recommended on 20/11/2026");
     expect(page).toContain("Sent back on 20/11/2026");
     expect(page).toContain("Remarks: Fix amount");
+  });
+
+  it("a sent-back refund has an Edit and resubmit link to its edit page; a rejected one shows the reason and no link", async () => {
+    const html = await render(SELF, { view: "my-refunds" });
+    expect(html.match(/>Edit and resubmit</g)).toHaveLength(1);
+    expect(html).toMatch(/href="\/refund\/edit\/51111111-1111-4111-8111-111111111111"[^>]*>Edit and resubmit</);
+    expect(text(html)).toContain("Rejected on 20/11/2026");
+    expect(text(html)).toContain("Reason: Not refundable");
   });
 });
 
@@ -158,7 +182,7 @@ describe("the review page", () => {
 
   beforeEach(() => { state.session = AUTHORITY.session; });
 
-  it("a waiting refund shows the details, the documents through the authority route, and the Recommend and Send back buttons", async () => {
+  it("a waiting refund shows the details, the documents through the authority route, and the Recommend, Send back and Reject buttons", async () => {
     state.joined = [{ refund, review: null }];
     const html = await open();
     const page = text(html);
@@ -169,6 +193,25 @@ describe("the review page", () => {
     expect(html).toContain('/api/authority/refund/71111111-1111-4111-8111-111111111111/documents/0');
     expect(page).toContain("Recommend");
     expect(page).toContain("Send back");
+    expect(html).toMatch(/>Reject<\/button>/);
+  });
+
+  it("a resubmitted refund (waiting again) shows the revision and the remarks it answered, read from the audit log", async () => {
+    state.joined = [{ refund, review: null }];
+    state.audit = [{ details: { sentBackRemarks: "Fix amount" }, createdAt: DECIDED }];
+    const page = text(await open());
+    expect(page).toContain("Resubmitted after being sent back (revision 1)");
+    expect(page).toContain("Previous remarks: Fix amount");
+    expect(page).toContain("Recommend");
+  });
+
+  it("a rejected refund shows that it is final, the reason, and no buttons", async () => {
+    state.joined = [{ refund, review: { decision: "REJECTED", decidedByName: "Head Admin", decidedAt: DECIDED, remarks: "Not refundable" } }];
+    const html = await open();
+    const page = text(html);
+    expect(page).toContain("Rejected by Head Admin on 20/11/2026. This is final.");
+    expect(page).toContain("Reason: Not refundable");
+    expect(html).not.toMatch(/>(Recommend|Send back|Reject|Confirm Reject|Confirm Send back)<\/button>/);
   });
 
   it("a recommended refund shows who recommended it and no buttons", async () => {
@@ -192,6 +235,60 @@ describe("the review page", () => {
     state.session = SELF.session;
     await expect(open()).rejects.toThrow("NEXT_NOT_FOUND");
     state.session = AUTHORITY.session;
+    vi.stubEnv("REFUND_RECOMMENDATION_ENABLED", "");
+    await expect(open()).rejects.toThrow("NEXT_NOT_FOUND");
+  });
+});
+
+describe("the submitter's edit page (/refund/edit/[id])", () => {
+  const refund = {
+    id: "71111111-1111-4111-8111-111111111111", serialNo: "REF/MCCIA/2026-27/0007", requestDate: "2026-11-17", fromDate: "2026-11-01",
+    submittedByName: "Sandhya Acharya", submittedByEmail: "me@mcciapune.com", submittedByDepartment: "CBP", branch: "SB Road Office", recommendingAuthority: "Head Admin",
+    payeeName: "Deccan Mechanical", payeeAddress: "Pune", payeeContactPerson: null, payeeContactPhone: null, payeeEmail: null, payeeGstin: null, payeeUdyamNumber: null,
+    basicAmount: "4000.00", gstAmount: "720.00", totalAmount: "4720.00", natureOfExpenditure: "Refund of participation fee",
+    bankName: null, beneficiaryName: null, bankAccountNo: null, bankIfsc: null, enclosures: null, specialRemarks: null,
+    documents: [{ type: "CANCELLED_CHEQUE", fileName: "cheque.jpg", blobPathname: "x", blobUrl: "y", sizeBytes: 1 }],
+  };
+  const open = async () => renderToStaticMarkup(await RefundEditPage({ params: Promise.resolve({ id: refund.id }) }));
+  beforeEach(() => { state.session = SELF.session; });
+
+  it("for a sent-back refund: the remarks, the same reference number, submitter details read only, fields filled in, stored documents with Keep", async () => {
+    state.joined = [{ refund, review: { decision: "SENT_BACK", decidedByName: "Head Admin", decidedAt: DECIDED, remarks: "Fix amount" } }];
+    const html = await open();
+    const page = text(html);
+    expect(page).toContain("Edit Third Party Refund Request");
+    expect(page).toContain("REF/MCCIA/2026-27/0007, dated 17/11/2026");
+    expect(page).toContain("Sent back by Head Admin");
+    expect(page).toContain("Remarks: Fix amount");
+    expect(page).toContain("It keeps the reference number REF/MCCIA/2026-27/0007 and goes back to Head Admin.");
+    expect(html).not.toContain('name="recommendingAuthority"');
+    expect(html).not.toContain('name="submittedByEmail"');
+    expect(html).toContain('name="payeeName" value="Deccan Mechanical"');
+    expect(html.match(/<input[^>]*name="basicAmount"[^>]*>/)?.[0]).toContain('value="4000"');
+    expect(page).toContain("Cancelled cheque: cheque.jpg");
+    expect(html).toMatch(/type="checkbox" checked=""/);
+    expect(page).toContain("Resubmit Third Party Refund Request");
+  });
+
+  it("once it is not waiting for corrections (rejected, recommended or waiting), it says so and shows no form", async () => {
+    for (const [review, message] of [
+      [{ decision: "REJECTED", decidedByName: "Head Admin", decidedAt: DECIDED, remarks: "No" }, "This request was rejected, so it can no longer be edited."],
+      [{ decision: "RECOMMENDED", decidedByName: "Head Admin", decidedAt: DECIDED, remarks: null }, "This request has been recommended, so it can no longer be edited."],
+      [null, "This request is waiting for the recommending authority, so there is nothing to correct."],
+    ] as const) {
+      state.joined = [{ refund, review }];
+      const html = await open();
+      expect(text(html)).toContain(message);
+      expect(html).not.toContain("<form");
+    }
+  });
+
+  it("someone else's refund is a 404, signed out goes to sign-in and comes back, and it is a 404 while the process is off", async () => {
+    state.joined = [];
+    await expect(open()).rejects.toThrow("NEXT_NOT_FOUND");
+    state.session = null;
+    await expect(open()).rejects.toThrow(`NEXT_REDIRECT /login?next=${encodeURIComponent(`/refund/edit/${refund.id}`)}`);
+    state.session = SELF.session;
     vi.stubEnv("REFUND_RECOMMENDATION_ENABLED", "");
     await expect(open()).rejects.toThrow("NEXT_NOT_FOUND");
   });
